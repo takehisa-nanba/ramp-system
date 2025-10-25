@@ -1,0 +1,18 @@
+# .gitignore (内容を正確に記述)
+
+# --------------------------
+# 環境ファイルとキャッシュ
+# --------------------------
+.env                
+venv/              
+__pycache__/        
+*.pyc
+*.log
+
+# --------------------------
+# フロントエンド (Node.js)
+# --------------------------
+/frontend/node_modules/
+/frontend/dist/
+/frontend/.vite/
+/frontend/.vite-temp/
