@@ -28,18 +28,21 @@ def create_app():
     
     jwt = JWTManager(app) # ★ JWTManager の初期化 ★
 
-    # モデルのインポート
-    from . import models 
-
-    # Blueprint のインポートと登録
+    # ルートのインポート
+    from .api.auth_routes import auth_bp
     from .api.user_routes import user_bp
     from .api.daily_log_routes import daily_log_bp
-    from .api.auth_routes import auth_bp # ★ 認証ルートを追加 ★
     from .api.support_plan_routes import support_plan_bp
+    from .api.attendance_routes import attendance_bp 
     
+    # ★ 必須: 全てのモデルファイルをインポートする行を、手動で追加 ★
+    from .models import core, master, plan_audit 
+    
+    # Blueprint の登録（全て /api プレフィックスで統一）
+    app.register_blueprint(auth_bp, url_prefix='/api')
     app.register_blueprint(user_bp, url_prefix='/api')
     app.register_blueprint(daily_log_bp, url_prefix='/api')
-    app.register_blueprint(auth_bp, url_prefix='/api') # /api/login が使えるように登録
     app.register_blueprint(support_plan_bp, url_prefix='/api')
+    app.register_blueprint(attendance_bp, url_prefix='/api')
 
     return app

@@ -1,19 +1,25 @@
 # insert_initial_data.py
 import os
 from app.__init__ import create_app, db
-from app.models import (
+from app.models.master import (
     StatusMaster, ReferralSourceMaster, RoleMaster, 
     AttendanceStatusMaster, EmploymentTypeMaster, WorkStyleMaster,
     DisclosureTypeMaster, ContactCategoryMaster, MeetingTypeMaster,
-    Supporter, User
+    ServiceLocationMaster, PreparationActivityMaster, ServiceTemplate
 )
+from app.models.core import User, Supporter # コアデータ投入に必要
+from app.extensions import db # dbインスタンスを直接インポート
 from datetime import date
 from sqlalchemy.exc import IntegrityError
-
+from sqlalchemy.sql import text
 # Flaskアプリケーションのコンテキストを作成
 app = create_app()
 
 def insert_data():
+    """
+    システムの全マスターテーブルに初期設定データを投入する。
+    既にデータが存在する場合は IntegrityError でスキップし、安全を保つ。
+    """
     with app.app_context():
         try:
             print("--- データベースへの初期データ投入を開始します ---")
@@ -21,31 +27,36 @@ def insert_data():
             # --- 1. マスターデータの投入 ---
             print("1. マスターテーブルにデータを投入...")
 
-            # StatusMaster
+            # StatusMaster (計画、利用者、見込客の全ステータス)
             db.session.add_all([
+                print('   -> StatusMaster データ投入中...'),
+                # Plan ステータス (承認フロー用)
+                StatusMaster(category='plan', name='Draft'),
+                StatusMaster(category='plan', name='Pending_Approval'),
+                StatusMaster(category='plan', name='Approved_Active'),
                 # Prospect ステータス
+                print('   -> Prospect StatusMaster データ投入中...'),
                 StatusMaster(category='prospect', name='初回面談待ち'),
                 StatusMaster(category='prospect', name='体験利用中'),
-                StatusMaster(category='prospect', name='契約完了'),
                 # User ステータス
+                print('   -> User StatusMaster データ投入中...'),
                 StatusMaster(category='user', name='利用中'),
                 StatusMaster(category='user', name='休止'),
                 StatusMaster(category='user', name='就職決定'),
-                # SupportPlan ステータス (将来の承認フロー用)
-                StatusMaster(category='plan', name='Draft'),
-                StatusMaster(category='plan', name='Pending_Approval'),
-                StatusMaster(category='plan', name='Approved'),
             ])
 
             # RoleMaster (RBAC用)
             db.session.add_all([
+                print('   -> RoleMaster データ投入中...'),
                 RoleMaster(name='経営者'),
                 RoleMaster(name='管理者'),
                 RoleMaster(name='支援員'),
+                RoleMaster(name='サービス管理責任者'), # ★ SATO職員に割り当てられるロール ★
             ])
             
             # ReferralSourceMaster
             db.session.add_all([
+                print('   -> ReferralSourceMaster データ投入中...'),
                 ReferralSourceMaster(name='ハローワーク'),
                 ReferralSourceMaster(name='病院・医療機関'),
                 ReferralSourceMaster(name='家族・知人'),
@@ -53,50 +64,41 @@ def insert_data():
             
             # AttendanceStatusMaster (勤怠用)
             db.session.add_all([
+                print('   -> AttendanceStatusMaster データ投入中...'),
                 AttendanceStatusMaster(name='通所'),
                 AttendanceStatusMaster(name='午前休'),
                 AttendanceStatusMaster(name='欠席'),
             ])
-
-            # その他マスター (省略)
+            
+            # ServiceLocationMaster (施設外支援用)
             db.session.add_all([
-                EmploymentTypeMaster(name='正社員'), WorkStyleMaster(name='フルタイム'),
-                DisclosureTypeMaster(name='オープン'), ContactCategoryMaster(name='病院'),
+                print('   -> ServiceLocationMaster データ投入中...'),
+                ServiceLocationMaster(location_name='Onsite_Facility', is_offsite=False),
+                ServiceLocationMaster(location_name='Remote_Home', is_offsite=False),
+                ServiceLocationMaster(location_name='Offsite_Trial_wSup', is_offsite=True),
+                ServiceLocationMaster(location_name='Offsite_Employment', is_offsite=True),
+            ])
+            
+            # PreparationActivityMaster (就労準備加算用)
+            db.session.add_all([
+                print('   -> PreparationActivityMaster データ投入中...'),
+                PreparationActivityMaster(activity_name='職業適性検査', is_billable=True),
+                PreparationActivityMaster(activity_name='求人検索指導', is_billable=True),
+                PreparationActivityMaster(activity_name='PC基礎訓練', is_billable=False),
+            ])
+
+            # その他マスター
+            db.session.add_all([
+                print('   -> その他マスターデータ投入中...'),
+                EmploymentTypeMaster(name='正社員'), 
+                WorkStyleMaster(name='フルタイム'),
+                DisclosureTypeMaster(name='オープン'), 
+                ContactCategoryMaster(name='病院'),
                 MeetingTypeMaster(name='個別支援会議')
             ])
 
             db.session.commit()
             print("   -> マスターデータ投入完了。")
-
-            # --- 2. テスト用コアデータの投入 ---
-            print("2. テスト用コアデータ (職員, 利用者) を投入...")
-
-            # 職員ロールと勤怠ステータスIDを取得
-            supporter_role = RoleMaster.query.filter_by(name='支援員').first()
-            user_status = StatusMaster.query.filter_by(name='利用中').first()
-
-            if supporter_role and user_status:
-                # 職員データの作成 (ID: 1 の職員を作成)
-                supporter1 = Supporter(
-                    last_name='山田', 
-                    first_name='花子', 
-                    role_id=supporter_role.id, 
-                    hire_date=date(2023, 4, 1), 
-                    is_active=True
-                )
-                db.session.add(supporter1)
-                db.session.flush() # IDを取得するために一時的にDBに書き込む
-
-                # 利用者データの作成 (ID: 1 の利用者を作成)
-                db.session.add(User(
-                    last_name='田中', 
-                    first_name='太郎', 
-                    status_id=user_status.id, 
-                    primary_supporter_id=supporter1.id 
-                ))
-            
-            db.session.commit()
-            print("   -> コアデータ投入完了。")
             print("--- 初期データの投入が成功しました ---")
 
         except IntegrityError:

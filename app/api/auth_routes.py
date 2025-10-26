@@ -1,10 +1,10 @@
 # app/api/auth_routes.py
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt # JWT関連を統合
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt
 from functools import wraps
-from app.extensions import db # extensions のインポート
-from app.models import Supporter, RoleMaster, SystemLog # models のインポート
+from app.extensions import db 
+from app.models import Supporter, RoleMaster
 
 # 認証用の Blueprint を作成
 auth_bp = Blueprint('auth', __name__)

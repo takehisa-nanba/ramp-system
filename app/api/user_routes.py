@@ -1,13 +1,13 @@
 from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models import (
+    # 利用者関連に必要なモデルのみリストアップ
     Prospect, StatusMaster, ReferralSourceMaster, User, Supporter, 
-    DailyLog, AttendanceStatusMaster, ShortTermGoal, SpecificGoal, 
-    RoleMaster 
-    )
+    DailyLog, AttendanceStatusMaster, RoleMaster 
+)
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
-from app.api.auth_routes import role_required # ★ role_required のみインポート
+from app.api.auth_routes import role_required
 
 # Blueprintを作成
 user_bp = Blueprint('user', __name__)
