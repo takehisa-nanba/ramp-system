@@ -29,7 +29,8 @@ tree.txt
 insert_initial_data.py
 insert_core_data.py
 insert_plan_data.py
-insert_test_lpgin_data.py
+insert_test_lopgin_data.py
+db.rebuild.py
 
 # --------------------------
 # sql関連
