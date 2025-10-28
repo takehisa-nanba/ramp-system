@@ -1,15 +1,13 @@
-# app/models/plan_audit.py
+# app/models/plan.py
 
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from .core import User, Supporter # 例: 同じパッケージ内のcore.pyからインポート
-from .master import StatusMaster, MeetingTypeMaster # 例: master.pyからインポート
-
-# --- 個別支援計画、アセスメント、監査テーブル ---
+from .master import StatusMaster, MeetingTypeMaster
 
 class SupportPlan(db.Model):
     __tablename__ = 'support_plans'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
@@ -36,9 +34,9 @@ class SupportPlan(db.Model):
     monitorings = db.relationship('Monitoring', back_populates='plan')
     meeting_minutes = db.relationship('MeetingMinute', back_populates='support_plan') # MeetingMinuteとの連携
 
-
 class ShortTermGoal(db.Model):
     __tablename__ = 'short_term_goals'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     support_plan_id = db.Column(db.Integer, db.ForeignKey('support_plans.id'), nullable=False)
     short_goal = db.Column(db.String(500), nullable=False) # 短期目標のテキスト
@@ -51,9 +49,9 @@ class ShortTermGoal(db.Model):
     support_plan = db.relationship('SupportPlan', back_populates='short_term_goals')
     specific_goals = db.relationship('SpecificGoal', back_populates='short_term_goal')
 
-
 class SpecificGoal(db.Model):
     __tablename__ = 'specific_goals'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     short_term_goal_id = db.Column(db.Integer, db.ForeignKey('short_term_goals.id'), nullable=False)
     task_name = db.Column(db.String(500), nullable=False) # 具体的タスクのテキスト
@@ -77,25 +75,9 @@ class SpecificGoal(db.Model):
     # 関連する日報記録
     daily_logs = db.relationship('DailyLog', back_populates='specific_goal')
 
-
-class Assessment(db.Model):
-    __tablename__ = 'assessments'
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    # サビ管責任者
-    sabikan_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
-    assessment_date = db.Column(db.Date, nullable=False)
-    
-    assessment_detail = db.Column(db.Text) # アセスメント記録本体
-
-    # リレーションシップ（堅牢性対応）
-    user = db.relationship('User', back_populates='assessments')
-    sabikan = db.relationship('Supporter', back_populates='assessment_approvals', foreign_keys=[sabikan_id])
-
-
 class Monitoring(db.Model):
     __tablename__ = 'monitorings'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     plan_id = db.Column(db.Integer, db.ForeignKey('support_plans.id'), nullable=False)
     
@@ -110,9 +92,25 @@ class Monitoring(db.Model):
     plan = db.relationship('SupportPlan', back_populates='monitorings')
     sabikan = db.relationship('Supporter', back_populates='monitoring_approvals', foreign_keys=[sabikan_id])
 
+class Assessment(db.Model):
+    __tablename__ = 'assessments'
+    __table_args__ = ({"extend_existing": True},)
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    
+    # サビ管責任者
+    sabikan_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
+    assessment_date = db.Column(db.Date, nullable=False)
+    
+    assessment_detail = db.Column(db.Text) # アセスメント記録本体
+
+    # リレーションシップ（堅牢性対応）
+    user = db.relationship('User', back_populates='assessments')
+    sabikan = db.relationship('Supporter', back_populates='assessment_approvals', foreign_keys=[sabikan_id])
 
 class MeetingMinute(db.Model):
     __tablename__ = 'meeting_minutes'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
@@ -130,46 +128,3 @@ class MeetingMinute(db.Model):
     meeting_type = db.relationship('MeetingTypeMaster')
     support_plan = db.relationship('SupportPlan', back_populates='meeting_minutes')
 
-
-class SystemLog(db.Model):
-    __tablename__ = 'system_logs'
-    id = db.Column(db.Integer, primary_key=True)
-    
-    action = db.Column(db.String(100), nullable=False) # 例: 'plan_consent', 'user_login'
-    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
-    
-    # UserやSupportPlanへの参照をNullableで持つ
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id')) 
-    support_plan_id = db.Column(db.Integer, db.ForeignKey('support_plans.id'))
-    
-    timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-
-    # リレーションシップ
-    supporter = db.relationship('Supporter')
-    user = db.relationship('User', back_populates='system_logs')
-    support_plan = db.relationship('SupportPlan')
-# 本棚Z：関係機関連絡先 (Contact)
-class Contact(db.Model):
-    __tablename__ = 'contacts'
-    id = db.Column(db.Integer, primary_key=True)
-    
-    # 外部キー
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id')) # 特定の利用者に紐づく連絡先の場合 (任意)
-    contact_category_id = db.Column(db.Integer, db.ForeignKey('contact_category_master.id'), nullable=False)
-    government_office_id = db.Column(db.Integer, db.ForeignKey('government_offices.id')) # 行政機関との紐付け (任意)
-
-    # データカラム
-    organization_name = db.Column(db.String(150), nullable=False)
-    contact_person = db.Column(db.String(100))
-    phone_number = db.Column(db.String(20))
-    email = db.Column(db.String(120))
-    remarks = db.Column(db.Text)
-    
-    # 監査日時
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    # リレーションシップ
-    # 'User' 'ContactCategoryMaster' 'GovernmentOffice' は別ファイルにあるため、文字列で指定
-    user = relationship('User', back_populates='contacts') 
-    category = relationship('ContactCategoryMaster', back_populates='contacts') 
-    government_office = relationship('GovernmentOffice', back_populates='contacts')

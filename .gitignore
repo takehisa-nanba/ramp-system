@@ -16,3 +16,23 @@ __pycache__/
 /frontend/dist/
 /frontend/.vite/
 /frontend/.vite-temp/
+
+# --------------------------
+# TEXT関連
+# --------------------------
+tree.txt
+*.txt
+
+# --------------------------
+# 初期データ関連
+# --------------------------
+insert_initial_data.py
+insert_core_data.py
+insert_plan_data.py
+insert_test_lpgin_data.py
+
+# --------------------------
+# sql関連
+# --------------------------
+*.pgsql
+*.sql

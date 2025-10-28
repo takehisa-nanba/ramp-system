@@ -2,14 +2,14 @@
 
 from flask import Blueprint, request, jsonify
 from app.extensions import db
-from app.models import (
-    SupportPlan, User, Supporter, StatusMaster, ShortTermGoal, SpecificGoal, 
-    DailyLog, ServiceTemplate, AttendanceStatusMaster # 必要なモデルのみ
-)
-from app.api.auth_routes import role_required 
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import get_jwt_identity, jwt_required # JWT_REQUIREDは関数内でデコレーターが使うため維持
+from app.api.auth_routes import role_required
+from app.models.plan import SupportPlan, ShortTermGoal, SpecificGoal
+from app.models.core import User, Supporter, DailyLog
+from app.models.master import StatusMaster 
+from app.models.audit_log import ServiceTemplate, SystemLog # ServiceTemplateとSystemLogはaudit_log.pyからfrom app.api.auth_routes import role_required 
 
 # Blueprintを作成
 support_plan_bp = Blueprint('support_plan', __name__)

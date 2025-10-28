@@ -4,13 +4,16 @@ from app.extensions import db, bcrypt
 from datetime import datetime
 from sqlalchemy.orm import relationship
 from sqlalchemy import UniqueConstraint
-# ★ 修正: 他のモデルファイルからのインポートが必要な場合は、ここで絶対パスを使用 ★
-# from .master import RoleMaster, StatusMaster # 例: 同じパッケージ内のmaster.pyからインポート
+from .master import(
+    RoleMaster, StatusMaster, AttendanceStatusMaster, ServiceLocationMaster,
+    ReferralSourceMaster, ContactCategoryMaster
+)
 
 # --- コアユーザーおよび活動記録テーブル ---
 
 class Supporter(db.Model):
     __tablename__ = 'supporters'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     last_name = db.Column(db.String(50), nullable=False)
     first_name = db.Column(db.String(50), nullable=False)
@@ -44,24 +47,28 @@ class Supporter(db.Model):
         back_populates='sabikan',
         foreign_keys='SupportPlan.sabikan_id'
     )
-    primary_users = db.relationship('User', backref='primary_supporter', lazy=True)
-
+    
     # ★ 修正1: 自分が作成した日報一覧 (DailyLog.supporter_id を参照することを明示) ★
     daily_logs = db.relationship(
         'DailyLog', 
         backref='creator', 
         lazy=True, 
-        foreign_keys='[DailyLog.supporter_id]'
+        foreign_keys='[DailyLog.supporter_id]',
+        overlaps="creator"
     )
 
-    # ★ 修正2: 自分が承認した日報一覧 (DailyLog.approved_by_supporter_id を参照することを明示) ★
+    # ★ 修正2: 自分が承認した日報一覧 (DailyLog.approved_by_id を参照することを明示) ★
     approved_daily_logs = db.relationship(
         'DailyLog',
         backref='approver',
         lazy=True,
-        foreign_keys='[DailyLog.approved_by_supporter_id]'
+        foreign_keys='[DailyLog.approved_by_id]'
     )
-    onsite_daily_logs = db.relationship('DailyLog', back_populates='supporter_on_site')
+    onsite_daily_logs = db.relationship(
+        'DailyLog',
+        back_populates='supporter_on_site',
+        foreign_keys='[DailyLog.supporter_on_site_id]'
+    )
     # アセスメント承認一覧
     assessment_approvals = db.relationship('Assessment', back_populates='sabikan', foreign_keys='Assessment.sabikan_id')
     # モニタリング評価一覧
@@ -75,9 +82,9 @@ class Supporter(db.Model):
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password_hash, password)
 
-
 class User(db.Model):
     __tablename__ = 'users'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     last_name = db.Column(db.String(50), nullable=False)
     first_name = db.Column(db.String(50), nullable=False)
@@ -123,9 +130,9 @@ class User(db.Model):
     def check_pin(self, pin):
         return bcrypt.check_password_hash(self.pin_hash, pin)
 
-
 class Prospect(db.Model):
     __tablename__ = 'prospects'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     last_name = db.Column(db.String(50), nullable=False)
     first_name = db.Column(db.String(50), nullable=False)
@@ -145,9 +152,9 @@ class Prospect(db.Model):
     status = db.relationship('StatusMaster', foreign_keys=[status_id])
     referral_source = db.relationship('ReferralSourceMaster')
 
-
 class AttendancePlan(db.Model):
     __tablename__ = 'attendance_plans'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     planned_date = db.Column(db.Date, nullable=False)
@@ -164,9 +171,9 @@ class AttendancePlan(db.Model):
         UniqueConstraint('user_id', 'planned_date', name='uq_user_date'),
     )
 
-
 class DailyLog(db.Model):
     __tablename__ = 'daily_logs'
+    __table_args__ = ({"extend_existing": True},)
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'))
@@ -228,3 +235,29 @@ class DailyLog(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) # ★ この行が必須 ★
     remarks = db.Column(db.Text)
+
+class Contact(db.Model):
+    __tablename__ = 'contacts'
+    __table_args__ = ({"extend_existing": True},)
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # 外部キー
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id')) # 特定の利用者に紐づく連絡先の場合 (任意)
+    contact_category_id = db.Column(db.Integer, db.ForeignKey('contact_category_master.id'), nullable=False)
+    government_office_id = db.Column(db.Integer, db.ForeignKey('government_offices.id')) # 行政機関との紐付け (任意)
+
+    # データカラム
+    organization_name = db.Column(db.String(150), nullable=False)
+    contact_person = db.Column(db.String(100))
+    phone_number = db.Column(db.String(20))
+    email = db.Column(db.String(120))
+    remarks = db.Column(db.Text)
+    
+    # 監査日時
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # リレーションシップ
+    # 'User' 'ContactCategoryMaster' 'GovernmentOffice' は別ファイルにあるため、文字列で指定
+    user = relationship('User', back_populates='contacts') 
+    category = relationship('ContactCategoryMaster', back_populates='contacts') 
+    government_office = relationship('GovernmentOffice', back_populates='contacts')

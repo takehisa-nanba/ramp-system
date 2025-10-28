@@ -1,9 +1,14 @@
+# app/api/daily_log_routes.py
+
 from flask import Blueprint, request, jsonify
 from app.extensions import db
-from app.models import User, Supporter, DailyLog, AttendanceStatusMaster, SystemLog 
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from flask_jwt_extended import get_jwt_identity # 必要に応じて get_jwt_identity は残す
+from app.models.core import User, Supporter, DailyLog 
+from app.models.master import AttendanceStatusMaster
+from app.models.audit_log import SystemLog
+from app.models.plan import SpecificGoal
 from app.api.auth_routes import role_required # 必要に応じてインポート
 
 # Blueprintを作成

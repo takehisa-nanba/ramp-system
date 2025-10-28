@@ -1,7 +1,8 @@
 # insert_core_data.py
 import os
 from app.__init__ import create_app, db
-from app.models import User, Supporter, StatusMaster, RoleMaster, DailyLog
+from app.models.core import User, Supporter, DailyLog
+from app.models.master import StatusMaster, RoleMaster
 from datetime import date
 from sqlalchemy.sql import text
 from sqlalchemy.exc import NoResultFound, IntegrityError
@@ -87,8 +88,23 @@ def insert_core_data():
                 primary_supporter_id=supporter1.id,
                 email='tanaka@user.com' 
             )
-            db.session.add(user1)
 
+            # --- 5. 利用者データの作成 (User ID: 2) ---
+            print("5. 利用者データ (鈴木 次郎, ID: 2) を投入...")
+            user2 = User(
+                last_name='鈴木', 
+                first_name='次郎', 
+                status_id=user_status.id, 
+                primary_supporter_id=supporter1.id,
+                email='suzuki@user.com' 
+            )
+            db.session.add(user1)
+            db.session.add(user2)
+            print("   -> user1 and user2 added to session.")
+            db.session.flush() # ID=1,2を確定
+            print("   -> user1 ID flushed:", user1.id)
+            print("   -> user2 ID flushed:", user2.id)
+            
             # --- 6. 確定（コミット） ---
             db.session.commit()
             print("--- コアテストデータの投入が成功しました (User ID: 1, Supporter ID: 1, 2) ---")

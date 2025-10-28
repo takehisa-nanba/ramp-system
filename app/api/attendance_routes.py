@@ -2,7 +2,7 @@
 
 from flask import Blueprint, request, jsonify # ★ 必須のインポート ★
 from app.extensions import db
-from app.models import AttendancePlan, User, DailyLog
+from app.models.core import AttendancePlan, User, DailyLog
 from app.api.auth_routes import role_required # RBACデコレーター
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
@@ -66,12 +66,12 @@ def create_attendance_plan():
         db.session.rollback()
         return jsonify({"error": f"サーバーエラーが発生しました: {str(e)}"}), 500
 
-# ======================================================
-# 3. 利用者チェックイン API (POST /api/attendance/check_in)
-# ======================================================
+#======================================================
+#3. 利用者チェックイン API (POST /api/attendance/check_in)
+#======================================================
 @attendance_bp.route('attendance/check_in', methods=['POST'])
-# ※ 利用者専用認証が必要だが、ここでは職員トークンで user_id を渡す運用とする
-@role_required(['支援員', 'サービス管理責任者', '管理者']) 
+#※ 利用者専用認証が必要だが、ここでは職員トークンで user_id を渡す運用とする
+#@role_required(['支援員', 'サービス管理責任者', '管理者']) 
 def check_in():
     data = request.get_json()
     user_id = data.get('user_id')

@@ -1,14 +1,15 @@
 Folder PATH listing for volume Local Disk
 Volume serial number is 64EC-90AC
 C:.
-│   -- publicスキーマ内の全てのテーブル名を取得.pgsql
 │   .env
 │   .gitignore
+│   all_table_column.pgsql
 │   db_rebuild.py
 │   insert_core_data.py
 │   insert_initial_data.py
 │   insert_test_login_data.py
 │   run.py
+│   select_table.pgsql
 │   table_create.pgsql
 │   tree.txt
 │   

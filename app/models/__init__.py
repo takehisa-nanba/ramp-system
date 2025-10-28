@@ -1,32 +1,51 @@
 # app/models/__init__.py
 
-# master.py からモデルをインポート
+# --- 1. master.py からモデルをインポート (変更あり) ---
 from .master import (
     StatusMaster, ReferralSourceMaster, RoleMaster, 
-    AttendanceStatusMaster, ServiceLocationMaster, PreparationActivityMaster, 
+    AttendanceStatusMaster, ServiceLocationMaster, 
+    # PreparationActivityMaster, ServiceTemplate, GovernmentOffice は audit_log.py へ移動
     EmploymentTypeMaster, WorkStyleMaster, DisclosureTypeMaster, 
-    ContactCategoryMaster, MeetingTypeMaster, ServiceTemplate
+    ContactCategoryMaster, MeetingTypeMaster
 )
 
-# core.py からモデルをインポート
+# --- 2. core.py からモデルをインポート (変更あり) ---
 from .core import (
-    Supporter, User, Prospect, AttendancePlan, DailyLog
+    Supporter, User, Prospect, AttendancePlan, DailyLog,
+    Contact # plan_audit.py から移動
 )
 
-# plan_audit.py からモデルをインポート
-from .plan_audit import (
+# --- 3. plan.py からモデルをインポート (新規) ---
+from .plan import (
     SupportPlan, ShortTermGoal, SpecificGoal, Monitoring, 
-    Assessment, MeetingMinute, SystemLog
+    Assessment, MeetingMinute
 )
 
-# SQLAlchemy-migrate がモデルを認識できるように、__all__ に全モデルを含める
+# --- 4. audit_log.py からモデルをインポート (新規) ---
+from .audit_log import (
+    SystemLog, # plan_audit.py から移動
+    GovernmentOffice, # master.py から移動
+    ServiceTemplate, # master.py から移動
+    PreparationActivityMaster # master.py から移動
+)
+
+
+# --- 5. __all__ に全モデルを含める ---
 __all__ = [
+    # master.py (移動モデル削除)
     'StatusMaster', 'ReferralSourceMaster', 'RoleMaster', 
-    'AttendanceStatusMaster', 'ServiceLocationMaster', 'PreparationActivityMaster', 
+    'AttendanceStatusMaster', 'ServiceLocationMaster', 
     'EmploymentTypeMaster', 'WorkStyleMaster', 'DisclosureTypeMaster', 
-    'ContactCategoryMaster', 'MeetingTypeMaster', 'ServiceTemplate',
-    'GoalCategoryMaster',
-    'Supporter', 'User', 'Prospect', 'AttendancePlan', 'DailyLog',
-    'SupportPlan', 'ShortTermGoal', 'SpecificGoal', 'Monitoring','Contact', 
-    'Assessment', 'MeetingMinute', 'SystemLog'
+    'ContactCategoryMaster', 'MeetingTypeMaster',
+
+    # core.py (Contact を追加)
+    'Supporter', 'User', 'Prospect', 'AttendancePlan', 'DailyLog', 'Contact',
+
+    # plan.py (plan_audit.py から移動)
+    'SupportPlan', 'ShortTermGoal', 'SpecificGoal', 'Monitoring',
+    'Assessment', 'MeetingMinute',
+    
+    # audit_log.py (新規/移動モデル)
+    'SystemLog', 'GovernmentOffice', 'ServiceTemplate', 'PreparationActivityMaster'
 ]
+# --- End of app/models/__init__.py ---

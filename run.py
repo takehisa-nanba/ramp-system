@@ -6,6 +6,7 @@ from app.__init__ import create_app
 # Flask-Migrateがアプリケーションインスタンスを見つけられるよう、トップレベルで作成
 app = create_app() 
 
+app.config.from_object('app.config.Config')
 
 if __name__ == '__main__':
     # Flaskサーバーの実行は通常通り
