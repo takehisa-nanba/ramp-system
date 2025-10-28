@@ -2,6 +2,8 @@
 
 # create_app関数をインポート
 from app.__init__ import create_app 
+# 💡 修正: dbオブジェクトを定義元からインポートする
+from app.extensions import db # 💡 Flask-SQLAlchemyのdbインスタンスをインポート
 
 # Flask-Migrateがアプリケーションインスタンスを見つけられるよう、トップレベルで作成
 app = create_app() 
