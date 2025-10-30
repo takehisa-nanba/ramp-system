@@ -1,13 +1,7 @@
 # app/models/__init__.py
 
 # --- 1. master.py からモデルをインポート (変更あり) ---
-from .master import (
-    StatusMaster, ReferralSourceMaster, RoleMaster, 
-    AttendanceStatusMaster, ServiceLocationMaster, 
-    # PreparationActivityMaster, ServiceTemplate, GovernmentOffice は audit_log.py へ移動
-    EmploymentTypeMaster, WorkStyleMaster, DisclosureTypeMaster, 
-    ContactCategoryMaster, MeetingTypeMaster
-)
+from . import master
 
 # --- 2. core.py からモデルをインポート (変更あり) ---
 from .core import (
@@ -29,6 +23,12 @@ from .audit_log import (
     PreparationActivityMaster # master.py から移動
 )
 
+from .user import user # user.py
+from .user import profile # profile.py
+
+# --- ▼▼▼ 以下を追記 ▼▼▼ ---
+from .user import compliance # compliance.py (Certificateモデル)
+from .user import skill # skill.py (Qualificationモデル)
 
 # --- 5. __all__ に全モデルを含める ---
 __all__ = [

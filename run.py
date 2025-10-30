@@ -8,7 +8,7 @@ from app.extensions import db # 💡 Flask-SQLAlchemyのdbインスタンスを�
 # Flask-Migrateがアプリケーションインスタンスを見つけられるよう、トップレベルで作成
 app = create_app() 
 
-app.config.from_object('app.config.Config')
+app.config.from_object('config.Config')
 
 if __name__ == '__main__':
     # Flaskサーバーの実行は通常通り
