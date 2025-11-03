@@ -1,7 +1,8 @@
 # app/api/auth_routes.py
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt
+# flask_jwt_extended から set_access_cookies と unset_jwt_cookies をインポート
+from flask_jwt_extended import create_access_token, jwt_required, get_jwt, set_access_cookies, unset_jwt_cookies # ★ 追加 ★
 from functools import wraps
 from app.extensions import db 
 from app.models.core import Supporter
@@ -30,20 +31,24 @@ def login():
     if supporter is None or not supporter.check_password(password):
         return jsonify({"msg": "認証情報が無効です。"}), 401
 
-# 3. 認証成功: アクセストークンを生成
-# identity=supporter.id を identity=str(supporter.id) に修正
+    # 3. 認証成功: アクセストークンを生成
     access_token = create_access_token(identity=str(supporter.id), additional_claims={
         'role_id': supporter.role_id,
         'role_name': supporter.role.name 
     })
 
-    # 4. レスポンスを返す
-    return jsonify(
-        access_token=access_token,
+    # 4. レスポポンスを準備 (JSONボディから access_token を削除)
+    response = jsonify(
+        msg="ログインに成功しました",
         supporter_id=supporter.id,
         role_id=supporter.role_id,
         full_name=f"{supporter.last_name} {supporter.first_name}"
-    ), 200
+    )
+    
+    # 5. ★ 重要: トークンをHTTP-Only Cookieとして設定する ★
+    set_access_cookies(response, access_token) 
+
+    return response, 200
 
 # ======================================================
 # 2. RBAC デコレーターの実装 (全てのインポートが上部にあるため、問題なく動作)
@@ -125,3 +130,15 @@ def get_system_logs():
         
     return jsonify(log_list), 200
 
+# ======================================================
+# 5. ログアウト API (POST /api/logout)
+# ======================================================
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    # JWTの認証を必須とせず、トークンがあろうとなかろうとCookieを削除する
+    response = jsonify(msg="ログアウトしました")
+    
+    # ★ 重要: クライアント側のJWT Cookieを削除する ★
+    unset_jwt_cookies(response)
+
+    return response, 200

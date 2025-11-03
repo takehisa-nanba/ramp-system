@@ -153,16 +153,6 @@ class DisabilityTypeMaster(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True) # 例: '身体障害', '知的障害', '精神障害'
     is_active = db.Column(db.Boolean, default=True)
 
-class CertificateTypeMaster(db.Model):
-    """
-    受給者証種別マスタ (compliance.py から参照)
-    """
-    __tablename__ = 'certificate_type_master'
-    __table_args__ = ({"extend_existing": True},)
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True) # 例: '障害福祉サービス受給者証'
-    is_active = db.Column(db.Boolean, default=True)
-
 class MunicipalityMaster(db.Model):
     """
     市区町村コードマスタ (compliance.py から参照)

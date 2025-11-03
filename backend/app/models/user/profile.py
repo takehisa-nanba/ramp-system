@@ -13,7 +13,6 @@ developmental_history_categories_association = db.Table(
 )
 # --- ▲▲▲ 中間テーブル ▲▲▲ ---
 
-
 class FamilyMember(db.Model):
     """
     家族構成モデル (利用者に1対多)
@@ -40,7 +39,6 @@ class FamilyMember(db.Model):
     def __repr__(self):
         return f'<FamilyMember {self.id} (User: {self.user_id})>'
 
-
 class EmergencyContact(db.Model):
     """
     緊急連絡先モデル (利用者に1対多)
@@ -66,7 +64,6 @@ class EmergencyContact(db.Model):
 
     def __repr__(self):
         return f'<EmergencyContact {self.id} (User: {self.user_id})>'
-
 
 class DevelopmentalHistoryItem(db.Model):
     """
