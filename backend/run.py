@@ -1,22 +1,12 @@
-# run.py (プロジェクトルート)
+# backend/run.py
 
-# create_app関数をインポート
-from app.__init__ import create_app 
-# 💡 修正: dbオブジェクトを定義元からインポートする
-from app.extensions import db # 💡 Flask-SQLAlchemyのdbインスタンスをインポート
+import os
+from app import create_app # <-- 修正後のインポート
 
-# Flask-Migrateがアプリケーションインスタンスを見つけられるよう、トップレベルで作成
-app = create_app() 
+# FLASK_ENV環境変数（例: development）などから設定を読み込む
+config_name = os.getenv('FLASK_ENV', 'default')
 
-app.config.from_object('config.Config')
+# create_appファクトリを呼び出して 'app' インスタンスを作成
+app = create_app()
 
-if __name__ == '__main__':
-    # Flaskサーバーの実行は通常通り
-    app.run(debug=True)
-
-def recreate_db():
-    with app.app_context():
-        db.drop_all()
-        db.create_all()
-        print("Database recreated successfully!")
-
+# これで 'flask' コマンドが 'app' を見つけられるようになります。

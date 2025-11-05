@@ -3,7 +3,10 @@ from app.extensions import db
 from datetime import datetime
 from sqlalchemy.exc import IntegrityError
 from app.api.auth_routes import role_required
-from app.models.core import Prospect, User, Supporter, DailyLog 
+# User, Supporter, DailyLog は core.py からインポート
+from app.models.core import User, Supporter, DailyLog 
+# Prospect は initial_support.py からインポート
+from app.models.initial_support import Prospect
 from app.models.master import StatusMaster, ReferralSourceMaster, RoleMaster, AttendanceStatusMaster
 
 # Blueprintを作成

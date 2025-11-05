@@ -13,10 +13,10 @@ from app.models.plan import SupportPlan, ShortTermGoal, SpecificGoal
 # core.py にあるモデル
 from app.models.core import User, Supporter, DailyLog
 # master.py に残ったモデル
-from app.models.master import StatusMaster 
+from app.models.master import StatusMaster, ServiceTemplate 
 # audit_log.py に移動したモデル
-from app.models.audit_log import ServiceTemplate, SystemLog
-
+# SystemLog は audit_log.py からインポート
+from app.models.audit_log import SystemLog
 # Blueprintを作成
 support_plan_bp = Blueprint('support_plan', __name__)
 
