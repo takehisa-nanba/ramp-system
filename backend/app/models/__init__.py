@@ -1,6 +1,8 @@
+# backend/app/models/__init__.py
+
 # SQLAlchemy Model Index and Exporter
 # ------------------------------------
-# Ramp-System V1.0 の全モデル定義を集約・公開する
+# Ramp-System V1.0 の全モデル定義を集約・公開する (設計変更 第2版)
 
 # --- 1. master.py (基本マスターデータ) ---
 from .master import (
@@ -17,6 +19,7 @@ from .master import (
 # --- 2. core.py (システムの核となる利用者・職員) ---
 from .core import (
     Supporter, User, AttendancePlan, DailyLog, Contact
+    # (Prospectは削除)
 )
 
 # --- 3. compliance.py (法令・報酬マスタ) ---
@@ -38,20 +41,20 @@ from .client_relations import (
     ProvisionalServicePeriod
 )
 
-# --- 6. initial_support.py (初期支援・見込み客) ---
-from .initial_support import (
-    Prospect, PreEnrollmentLog, PreEnrollmentAssessmentScore
-)
+# --- 6. initial_support.py (★ 削除 ★) ---
+# (ProspectモデルはUserモデルに統合されたため、ファイル自体を削除)
 
 # --- 7. plan.py (個別支援計画) ---
 from .plan import (
     SupportPlan, ShortTermGoal, SpecificGoal, Monitoring, 
-    Assessment, MeetingMinute, ReadinessAssessmentResult
+    Assessment, MeetingMinute, ReadinessAssessmentResult,
+    PreEnrollmentLog, PreEnrollmentAssessmentScore # ★ initial_support.py から移動 ★
 )
 
 # --- 8. records.py (日々のサービス提供記録) ---
 from .records import (
-    ServiceRecord, ExternalSupportRecord, BreakRecord, 
+    ServiceRecord, # (ExternalSupportRecordは削除し、ここに統一)
+    BreakRecord, 
     RecordSupporter, ServiceRecordAdditive, AttendanceRecord
 )
 
@@ -61,7 +64,6 @@ from .retention import (
 )
 
 # --- 10. business_dev.py (事業開発・営業) ---
-# ★★★ ファイル名のリネームを反映 ★★★
 from .business_dev import (
     JobOffer, CompanyContactLog, MarketingOutreachLog
 )
@@ -76,9 +78,11 @@ from .schedule import (
     Schedule, ScheduleParticipant
 )
 
-# --- 13. communication.py (チャット) ---
+# --- 13. communication.py (チャット・申請) ★ 修正 ★ ---
 from .communication import (
-    ChatMessage
+    SupportThread, ChatMessage,                # 利用者連絡帳
+    ChatChannel, ChannelParticipant, ChannelMessage, # 汎用チャット
+    UserRequest                                # 汎用申請
 )
 
 # --- 14. audit_log.py (監査ログ) ---
@@ -115,21 +119,22 @@ __all__ = [
     'ServiceProvisionPeriod', 'ServiceUnitPeriod', 'CopaymentLimitPeriod', 
     'ProvisionalServicePeriod',
 
-    # 6. initial_support.py
-    'Prospect', 'PreEnrollmentLog', 'PreEnrollmentAssessmentScore',
+    # 6. initial_support.py (★ 削除 ★)
 
     # 7. plan.py
     'SupportPlan', 'ShortTermGoal', 'SpecificGoal', 'Monitoring', 
     'Assessment', 'MeetingMinute', 'ReadinessAssessmentResult',
+    'PreEnrollmentLog', 'PreEnrollmentAssessmentScore', # ★ 追加
 
     # 8. records.py
-    'ServiceRecord', 'ExternalSupportRecord', 'BreakRecord', 
+    'ServiceRecord',
+    'BreakRecord', 
     'RecordSupporter', 'ServiceRecordAdditive', 'AttendanceRecord',
 
     # 9. retention.py
     'JobRetentionContract', 'JobRetentionRecord',
 
-    # 10. business_dev.py (★変更なし。モデル名はそのまま)
+    # 10. business_dev.py
     'JobOffer', 'CompanyContactLog', 'MarketingOutreachLog',
 
     # 11. hr.py
@@ -138,8 +143,10 @@ __all__ = [
     # 12. schedule.py
     'Schedule', 'ScheduleParticipant',
 
-    # 13. communication.py
-    'ChatMessage',
+    # 13. communication.py ★ 修正 ★
+    'SupportThread', 'ChatMessage',
+    'ChatChannel', 'ChannelParticipant', 'ChannelMessage',
+    'UserRequest',
 
     # 14. audit_log.py
     'SystemLog',

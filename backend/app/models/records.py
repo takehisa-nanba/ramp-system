@@ -6,7 +6,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy import UniqueConstraint
 
 # ----------------------------------------------------
-# 1. ServiceRecord (サービス提供記録 - 施設内)
+# 1. ServiceRecord (★ 唯一のサービス提供記録モデル ★)
 # ----------------------------------------------------
 class ServiceRecord(db.Model):
     __tablename__ = 'service_records'
@@ -14,62 +14,47 @@ class ServiceRecord(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
-    record_date = db.Column(db.Date, nullable=False)
+    # ★ 「場所」こそがフラグとなる (必須)
+    service_location_id = db.Column(db.Integer, db.ForeignKey('service_location_master.id'), nullable=False)
     
-    # 時間管理
+    record_date = db.Column(db.Date, nullable=False)
     start_time = db.Column(db.Time, nullable=False)
     end_time = db.Column(db.Time, nullable=False)
-    service_duration_minutes = db.Column(db.Integer, nullable=False) # 在所時間 (計算値)
+    service_duration_minutes = db.Column(db.Integer, nullable=False) # 総時間
 
-    service_type = db.Column(db.String(50), nullable=False)
+    service_type = db.Column(db.String(50), nullable=False) # 例: '個別訓練', 'SST', '施設外就労'
     service_content = db.Column(db.Text, nullable=False)
     
-    # ステータス
-    is_billable = db.Column(db.Boolean, default=True, nullable=False)
-    is_approved = db.Column(db.Boolean, default=False, nullable=False)
+    # 証憑 (しょうひょう)
+    user_confirmed_at = db.Column(db.DateTime, nullable=True) # 日々の確認
+    is_approved = db.Column(db.Boolean, default=False, nullable=False) # 職員承認
+    is_billable = db.Column(db.Boolean, default=True, nullable=False) # 請求対象
     
     # リレーションシップ
+    service_location = db.relationship('ServiceLocationMaster', back_populates='service_records')
     break_records = db.relationship('BreakRecord', back_populates='service_record', lazy=True)
-    record_supporters = db.relationship('RecordSupporter', back_populates='service_record', lazy=True, foreign_keys='RecordSupporter.service_record_id')
+    record_supporters = db.relationship('RecordSupporter', back_populates='service_record', lazy=True)
     additive_records = db.relationship('ServiceRecordAdditive', back_populates='service_record', lazy=True)
-
+    
+    # (userへのリレーションは core.py の User.service_records で backref 済み)
 
 # ----------------------------------------------------
-# 2. ExternalSupportRecord (施設外支援記録)
+# 2. ExternalSupportRecord (★ 削除 ★)
 # ----------------------------------------------------
-class ExternalSupportRecord(db.Model):
-    __tablename__ = 'external_support_records'
-    
-    id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    
-    record_date = db.Column(db.Date, nullable=False)
-    
-    # 時間管理
-    start_time = db.Column(db.Time, nullable=False)
-    end_time = db.Column(db.Time, nullable=False)
-    actual_work_minutes = db.Column(db.Integer, nullable=False) # 実働時間 (計算値)
-
-    support_location = db.Column(db.String(100), nullable=False)
-    support_content = db.Column(db.Text, nullable=False)
-    
-    is_billable = db.Column(db.Boolean, default=True, nullable=False)
-
-    # リレーションシップ
-    record_supporters = db.relationship('RecordSupporter', back_populates='external_record', lazy=True, foreign_keys='RecordSupporter.external_record_id')
-    additive_records = db.relationship('ServiceRecordAdditive', back_populates='external_record', lazy=True)
-
+# (モデル定義ごと削除)
 
 # ----------------------------------------------------
-# 3. BreakRecord (休憩時間の詳細履歴 - ServiceRecordの子)
+# 3. BreakRecord (休憩時間の詳細履歴)
 # ----------------------------------------------------
 class BreakRecord(db.Model):
     __tablename__ = 'break_records'
     
     id = db.Column(db.Integer, primary_key=True)
+    
+    # ★ 修正: service_record_id のみを参照 (シンプルに戻す)
     service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
     
-    break_type = db.Column(db.String(50), nullable=False) # '昼休憩', '小休憩'
+    break_type = db.Column(db.String(50), nullable=False)
     start_time = db.Column(db.Time, nullable=False)
     end_time = db.Column(db.Time, nullable=False)
     duration_minutes = db.Column(db.Integer, nullable=False)
@@ -77,26 +62,25 @@ class BreakRecord(db.Model):
     supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id')) # 承認職員
 
     service_record = db.relationship('ServiceRecord', back_populates='break_records')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
 
 
 # ----------------------------------------------------
-# 4. RecordSupporter (共同支援/記録担当職員の中間テーブル)
+# 4. RecordSupporter (共同支援/記録担当職員)
 # ----------------------------------------------------
 class RecordSupporter(db.Model):
     __tablename__ = 'record_supporters'
     
     id = db.Column(db.Integer, primary_key=True)
-    # ServiceRecord または ExternalSupportRecord のいずれか一方に紐づく
-    service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'))
-    external_record_id = db.Column(db.Integer, db.ForeignKey('external_support_records.id'))
-    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
     
-    is_primary = db.Column(db.Boolean, default=False, nullable=False) # 主担当者か
+    # ★ 修正: service_record_id のみを参照
+    service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
+    
+    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
+    is_primary = db.Column(db.Boolean, default=False, nullable=False) 
 
-    service_record = db.relationship('ServiceRecord', foreign_keys=[service_record_id], back_populates='record_supporters')
-    external_record = db.relationship('ExternalSupportRecord', foreign_keys=[external_record_id], back_populates='record_supporters')
+    service_record = db.relationship('ServiceRecord', back_populates='record_supporters')
     supporter = db.relationship('Supporter')
-
 
 # ----------------------------------------------------
 # 5. ServiceRecordAdditive (加算実績)
@@ -105,34 +89,42 @@ class ServiceRecordAdditive(db.Model):
     __tablename__ = 'service_record_additives'
     
     id = db.Column(db.Integer, primary_key=True)
-    # ServiceRecord または ExternalSupportRecord のいずれか一方に紐づく
-    service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'))
-    external_record_id = db.Column(db.Integer, db.ForeignKey('external_support_records.id'))
+
+    # ★ 修正: service_record_id のみを参照
+    service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
     
     fee_master_id = db.Column(db.Integer, db.ForeignKey('government_fee_master.id'), nullable=False)
     
     units_applied = db.Column(db.Numeric, nullable=False)
-    fee_rate_at_record = db.Column(db.Numeric, nullable=False) # 記録時点の単価（検証用）
+    fee_rate_at_record = db.Column(db.Numeric, nullable=False)
     
-    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id')) # 加算の発生に関わった職員
+    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'))
 
-    service_record = db.relationship('ServiceRecord', foreign_keys=[service_record_id], back_populates='additive_records')
-    external_record = db.relationship('ExternalSupportRecord', foreign_keys=[external_record_id], back_populates='additive_records')
+    service_record = db.relationship('ServiceRecord', back_populates='additive_records')
     fee_master = db.relationship('GovernmentFeeMaster')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
 
 
 # ----------------------------------------------------
-# 6. AttendanceRecord (実績記録表 - 月次集計)
+# 6. AttendanceRecord (月次集計)
 # ----------------------------------------------------
 class AttendanceRecord(db.Model):
     __tablename__ = 'attendance_records'
     
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-
     reporting_month = db.Column(db.Date, nullable=False)
     
     total_days_attended = db.Column(db.Integer, default=0, nullable=False)
     total_duration_minutes = db.Column(db.Integer, default=0, nullable=False)
+
+    # ★ 新規追加: 月次の同意（サイン）
+    user_consent_date = db.Column(db.DateTime, nullable=True)
+    attending_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=True)
+    is_finalized = db.Column(db.Boolean, default=False, nullable=False)
     
+    # リレーションシップ
+    user = db.relationship('User', back_populates='attendance_records')
+    attending_supporter = db.relationship('Supporter', foreign_keys=[attending_supporter_id])
+
     __table_args__ = (UniqueConstraint('user_id', 'reporting_month', name='uq_user_month'),)

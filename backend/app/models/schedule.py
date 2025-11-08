@@ -22,10 +22,17 @@ class Schedule(db.Model):
     
     creator_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
     is_canceled = db.Column(db.Boolean, default=False, nullable=False)
+
+    # --- ★ ここに「場所」のFKを追加 ★ ---
+    # この予定が実施される場所 (これが自動振り分けのキーになる)
+    service_location_id = db.Column(db.Integer, db.ForeignKey('service_location_master.id'), nullable=True)
     
     # リレーションシップ
     creator_supporter = db.relationship('Supporter', back_populates='created_schedules')
     participants = db.relationship('ScheduleParticipant', back_populates='schedule', lazy=True)
+    
+    # ★ service_location へのリレーションを追加 ★
+    service_location = db.relationship('ServiceLocationMaster', back_populates='schedules')
 
 
 # ----------------------------------------------------

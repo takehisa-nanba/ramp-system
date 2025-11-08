@@ -39,17 +39,28 @@ def create_app():
     from . import models 
 
     # 5. Blueprint（APIルート）のインポートと登録
-    from .api.user_routes import user_bp
-    from .api.daily_log_routes import daily_log_bp
-    from .api.auth_routes import auth_bp
-    from .api.support_plan_routes import support_plan_bp
-    from .api.attendance_routes import attendance_bp
+    # 認証 (ログイン・ログアウト)
+    from .api.auth_routes import auth_bp    
+    # 利用者 (User)
+    from .api.user_routes import user_bp    
+    # 職員 (Supporter)
+    from .api.supporter_routes import supporter_bp # ★ 新規追加    
+    # 見込み客 (Prospect)
+    from .api.prospect_routes import prospect_bp # ★ 新規追加    
+    # サービス記録 (ServiceRecord)
+    from .api.record_routes import record_bp # ★ 新規追加
+    # 個別支援計画 (SupportPlan)
+    from .api.support_plan_routes import support_plan_bp    
+    # 監査ログ (SystemLog)
+    from .api.audit_log_routes import audit_log_bp # ★ 新規追加
 
-    # 以下の Blueprint 登録は問題ありません
-    app.register_blueprint(user_bp, url_prefix='/api')
-    app.register_blueprint(daily_log_bp, url_prefix='/api')
+    # --- Blueprint の登録 ---
     app.register_blueprint(auth_bp, url_prefix='/api')
+    app.register_blueprint(user_bp, url_prefix='/api')
+    app.register_blueprint(supporter_bp, url_prefix='/api')     # ★ 新規追加
+    app.register_blueprint(prospect_bp, url_prefix='/api')       # ★ 新規追加
+    app.register_blueprint(record_bp, url_prefix='/api')         # ★ 新規追加
     app.register_blueprint(support_plan_bp, url_prefix='/api')
-    app.register_blueprint(attendance_bp, url_prefix='/api')
-
+    app.register_blueprint(audit_log_bp, url_prefix='/api')      # ★ 新規追加
+    
     return app
