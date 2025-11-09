@@ -2,29 +2,70 @@
 
 from app.extensions import db
 from sqlalchemy.orm import relationship
+from sqlalchemy import String, Boolean, Date, Integer, UniqueConstraint, ForeignKey
 
-# --- 1. システム運用ロール ---
+# --- 1. システム運用ロール (レガシー互換性のため残す) ---
 class RoleMaster(db.Model):
     __tablename__ = 'role_master'
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), nullable=False, unique=True) #例: 'SystemAdmin', 'OfficeAdmin', 'Staff'
+    name = db.Column(db.String(50), nullable=False, unique=True)
     
     supporters = db.relationship('Supporter', back_populates='role')
 
-# --- 2. 法令上/組織上の職務マスタ (★ 新規追加 ★) ---
+# ----------------------------------------------------
+# 2. JobTitleMaster (★ 全ロールの源泉 / SystemAdmin権限定義 ★)
+# ----------------------------------------------------
 class JobTitleMaster(db.Model):
     __tablename__ = 'job_title_master'
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), nullable=False, unique=True) #例: '生活支援員', '就労支援員', '経営者', '課長'
+    id = db.Column(Integer, primary_key=True)
+    name = db.Column(String(100), nullable=False, unique=True)
     
-    # 'LEGAL' (法令上の職務) or 'ORG' (組織上の役職)
-    job_type = db.Column(db.String(50), nullable=False, default='LEGAL')
+    # 'LEGAL' (事業所の職務), 'ORG' (組織の職務), 'SYSTEM' (Systemの職務)
+    job_type = db.Column(String(50), nullable=False, index=True)
     
-    # Trueなら加配要件などに関わる、簡単に変更できない職務
-    is_compliance_role = db.Column(db.Boolean, default=False, nullable=False)
+    # 届け出が必要な職務か
+    is_filing_required = db.Column(Boolean, default=False, nullable=False)
     
-    # この職務を割り当てられている全履歴
+    # ★ System運用上の最高権限フラグ (Trueの場合、SystemAdminパーミッションを持つ)
+    is_system_admin = db.Column(Boolean, default=False, nullable=False)
+    
+    filing_history = db.relationship('JobFilingRecord', back_populates='job_title') 
     assignments = db.relationship('SupporterJobAssignment', back_populates='job_title')
+    
+    # ★ 新規追加: JobTitleが持つ「標準パーミッション」のリスト
+    standard_permissions = db.relationship(
+        'JobTitlePermission', 
+        back_populates='job_title', 
+        cascade="all, delete-orphan"
+    )
+
+# ----------------------------------------------------
+# 3. SystemPermission (★ 新規追加: 全機能のパーミッションマスタ ★)
+# ----------------------------------------------------
+class SystemPermission(db.Model):
+    __tablename__ = 'system_permissions'
+    id = db.Column(Integer, primary_key=True)
+    
+    # APIのエンドポイントや機能に対応するユニークなコード
+    code = db.Column(String(100), nullable=False, unique=True) # 例: 'RECORD_DELETE', 'USER_CREATE', 'BILLING_READ'
+    
+    description = db.Column(String(255), nullable=False)
+    category = db.Column(String(50), nullable=False) # 例: 'RECORD', 'USER', 'ADMIN', 'BILLING'
+
+    # 逆参照: JobTitlePermission, SupporterPermissionOverride
+    job_title_permissions = db.relationship('JobTitlePermission', back_populates='permission')
+    supporter_overrides = db.relationship('SupporterPermissionOverride', back_populates='permission')
+
+# ----------------------------------------------------
+# 4. JobTitlePermission (★ 新規追加: 職務とパーミッションの紐付け)
+# ----------------------------------------------------
+class JobTitlePermission(db.Model):
+    __tablename__ = 'job_title_permissions'
+    job_title_id = db.Column(Integer, db.ForeignKey('job_title_master.id'), primary_key=True)
+    permission_id = db.Column(Integer, db.ForeignKey('system_permissions.id'), primary_key=True)
+
+    job_title = db.relationship('JobTitleMaster', back_populates='standard_permissions')
+    permission = db.relationship('SystemPermission', back_populates='job_title_permissions')
 
 # --- 3. その他、既存のマスター ---
 class StatusMaster(db.Model):

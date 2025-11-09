@@ -23,8 +23,16 @@ class ServiceRecord(db.Model):
     service_duration_minutes = db.Column(db.Integer, nullable=False) # 総時間
 
     service_type = db.Column(db.String(50), nullable=False) # 例: '個別訓練', 'SST', '施設外就労'
-    service_content = db.Column(db.Text, nullable=False)
     
+    # --- ★ ここを修正（分離）★ ---
+    # 1. 「何を」したか (活動の事実)
+    activity_summary = db.Column(db.Text, nullable=True) # ★ 修正: 旧service_contentから名称変更
+    # 2. 「どう」したか (支援員の所見) - 利用者に公開・非公開はoffice側で制御
+    supporter_insight = db.Column(db.Text, nullable=True) # ★ 新規追加
+    # 3. 「本人の声」 (利用者の振り返り)
+    user_voice = db.Column(db.Text, nullable=True) # ★ 新規追加
+    # --- ★ 修正ここまで ★ ---
+
     # 証憑 (しょうひょう)
     user_confirmed_at = db.Column(db.DateTime, nullable=True) # 日々の確認
     is_approved = db.Column(db.Boolean, default=False, nullable=False) # 職員承認
@@ -36,7 +44,7 @@ class ServiceRecord(db.Model):
     record_supporters = db.relationship('RecordSupporter', back_populates='service_record', lazy=True, cascade="all, delete-orphan")
     additive_records = db.relationship('ServiceRecordAdditive', back_populates='service_record', lazy=True, cascade="all, delete-orphan")
     
-    # (userへのリレーションは core.py の User.service_records で backref 済み)
+    # (userへのリレーションは core.py の User.service_records で back_poplates 済み)
 
 # ----------------------------------------------------
 # 2. ExternalSupportRecord (★ 削除 ★)
@@ -48,10 +56,7 @@ class ServiceRecord(db.Model):
 # ----------------------------------------------------
 class BreakRecord(db.Model):
     __tablename__ = 'break_records'
-    
     id = db.Column(db.Integer, primary_key=True)
-    
-    # ★ 修正: service_record_id のみを参照 (シンプルに戻す)
     service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
     
     break_type = db.Column(db.String(50), nullable=False)
@@ -64,18 +69,13 @@ class BreakRecord(db.Model):
     service_record = db.relationship('ServiceRecord', back_populates='break_records')
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
 
-
 # ----------------------------------------------------
 # 4. RecordSupporter (共同支援/記録担当職員)
 # ----------------------------------------------------
 class RecordSupporter(db.Model):
     __tablename__ = 'record_supporters'
-    
     id = db.Column(db.Integer, primary_key=True)
-    
-    # ★ 修正: service_record_id のみを参照
     service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
-    
     supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
     is_primary = db.Column(db.Boolean, default=False, nullable=False) 
 
@@ -87,12 +87,8 @@ class RecordSupporter(db.Model):
 # ----------------------------------------------------
 class ServiceRecordAdditive(db.Model):
     __tablename__ = 'service_record_additives'
-    
     id = db.Column(db.Integer, primary_key=True)
-
-    # ★ 修正: service_record_id のみを参照
     service_record_id = db.Column(db.Integer, db.ForeignKey('service_records.id'), nullable=False)
-    
     fee_master_id = db.Column(db.Integer, db.ForeignKey('government_fee_master.id'), nullable=False)
     
     units_applied = db.Column(db.Numeric, nullable=False)
@@ -103,7 +99,6 @@ class ServiceRecordAdditive(db.Model):
     service_record = db.relationship('ServiceRecord', back_populates='additive_records')
     fee_master = db.relationship('GovernmentFeeMaster')
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
-
 
 # ----------------------------------------------------
 # 6. AttendanceRecord (月次集計)
@@ -118,7 +113,7 @@ class AttendanceRecord(db.Model):
     total_days_attended = db.Column(db.Integer, default=0, nullable=False)
     total_duration_minutes = db.Column(db.Integer, default=0, nullable=False)
 
-    # ★ 新規追加: 月次の同意（サイン）
+    # 月次の同意（サイン）
     user_consent_date = db.Column(db.DateTime, nullable=True)
     attending_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=True)
     is_finalized = db.Column(db.Boolean, default=False, nullable=False)

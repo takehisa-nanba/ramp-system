@@ -3,6 +3,7 @@
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy.orm import relationship
+from sqlalchemy import ForeignKey # ★ インポート確認
 
 # ----------------------------------------------------
 # 1. Schedule (予定の基本情報)
@@ -33,6 +34,8 @@ class Schedule(db.Model):
     
     # ★ service_location へのリレーションを追加 ★
     service_location = db.relationship('ServiceLocationMaster', back_populates='schedules')
+    # --- ★ UserRequestからの逆参照を追加 ★ ---
+    user_requests = db.relationship('UserRequest', back_populates='target_schedule')
 
 
 # ----------------------------------------------------
