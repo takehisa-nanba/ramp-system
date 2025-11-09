@@ -8,9 +8,10 @@ from app.api.auth_routes import role_required # 認証デコレーター
 
 # --- V1.1 モデルのインポート ---
 from app.models.core import Supporter
-from app.models.master import RoleMaster, JobTitleMaster # ★ JobTitleMasterを追加
-from app.models.hr import SupporterJobAssignment # ★ SupporterJobAssignmentを追加
-from app.models.office_admin import OfficeSetting # ★ OfficeSettingを追加
+from app.models.master import RoleMaster, JobTitleMaster # ★ JobTitleMaster は master から
+from app.models.hr import SupporterJobAssignment # ★ hr からは SupporterJobAssignment のみ
+from app.models.office_admin import OfficeSetting # ★ これも必要
+from sqlalchemy import select # ★ これも必要
 
 # Blueprintを作成
 supporter_bp = Blueprint('supporter', __name__)
@@ -155,4 +156,131 @@ def get_supporter_list():
         return jsonify(supporter_list), 200
 
     except Exception as e:
+        return jsonify({"error": "サーバー内部エラーが発生しました。", "details": str(e)}), 500
+
+# ======================================================
+# 3. 職員詳細取得 API (GET /api/supporters/<int:supporter_id>)
+# ======================================================
+@supporter_bp.route('/supporters/<int:supporter_id>', methods=['GET'])
+@role_required(['SystemAdmin', 'OfficeAdmin', 'Sabikan']) # 管理職以上が閲覧可能
+def get_supporter_detail(supporter_id):
+    """
+    特定の職員の詳細情報を取得します。
+    3つのロール（システム・組織・法令職務）をすべて返します。
+    """
+    try:
+        # 1. 基本情報 + システムロール + 組織ロール
+        stmt = (
+            db.select(
+                Supporter,
+                RoleMaster.name.label('system_role_name'),
+                OfficeSetting.office_name.label('office_name')
+            )
+            .join(RoleMaster, Supporter.role_id == RoleMaster.id)
+            .outerjoin(OfficeSetting, Supporter.office_id == OfficeSetting.id)
+            .where(Supporter.id == supporter_id)
+        )
+        supporter_result = db.session.execute(stmt).first()
+
+        if not supporter_result:
+            return jsonify({"error": "職員が見つかりません。"}), 404
+
+        supporter = supporter_result.Supporter
+        
+        response_data = {
+            "id": supporter.id,
+            "full_name": f"{supporter.last_name} {supporter.first_name}",
+            "full_name_kana": f"{supporter.last_name_kana} {supporter.first_name_kana}",
+            "email": supporter.email,
+            "is_active": supporter.is_active,
+            "hire_date": supporter.hire_date.isoformat() if supporter.hire_date else None,
+            "seal_image_url": supporter.seal_image_url,
+            
+            # 常勤換算
+            "is_full_time": supporter.is_full_time,
+            "scheduled_work_hours": supporter.scheduled_work_hours,
+            "employment_type": supporter.employment_type,
+            
+            # 3ロール
+            "system_role_name": supporter_result.system_role_name,
+            "office_name": supporter_result.office_name,
+            "office_id": supporter.office_id,
+        }
+
+        # 2. 法令上の職務（JobTitle）を取得 (現在有効なもの)
+        job_stmt = (
+            db.select(JobTitleMaster.name)
+            .join(SupporterJobAssignment, JobTitleMaster.id == SupporterJobAssignment.job_title_id)
+            .where(
+                SupporterJobAssignment.supporter_id == supporter_id,
+                SupporterJobAssignment.end_date == None # 現在有効な職務
+            )
+        )
+        jobs = db.session.execute(job_stmt).scalars().all()
+        response_data['job_titles'] = jobs
+
+        return jsonify(response_data), 200
+
+    except Exception as e:
+        return jsonify({"error": "サーバー内部エラーが発生しました。", "details": str(e)}), 500
+
+# ======================================================
+# 4. 職員情報更新 API (PUT /api/supporters/<int:supporter_id>)
+# ======================================================
+@supporter_bp.route('/supporters/<int:supporter_id>', methods=['PUT'])
+@role_required(['SystemAdmin', 'OfficeAdmin']) # ★ システム管理者または経営者のみ
+def update_supporter_detail(supporter_id):
+    """
+    [管理者用] 職員の情報を更新します。
+    （※職務履歴(JobAssignment)の変更は、別の専用APIで行うのが望ましい）
+    """
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "更新データがありません。"}), 400
+
+    try:
+        supporter = db.session.get(Supporter, supporter_id)
+        if not supporter:
+            return jsonify({"error": "職員が見つかりません。"}), 404
+
+        # 1. システム・ロールの変更
+        if 'system_role_name' in data:
+            role = RoleMaster.query.filter_by(name=data['system_role_name']).first()
+            if not role:
+                return jsonify({"error": f"無効なシステムロール名です: {data['system_role_name']}"}), 400
+            supporter.role_id = role.id
+            
+        # 2. 組織ロール（所属事業所）の変更
+        if 'office_id' in data:
+            office = db.session.get(OfficeSetting, data['office_id'])
+            if not office:
+                 return jsonify({"error": f"無効な事業所IDです: {data['office_id']}"}), 400
+            supporter.office_id = office.id
+
+        # 3. 基本情報の更新
+        supporter.last_name = data.get('last_name', supporter.last_name)
+        supporter.first_name = data.get('first_name', supporter.first_name)
+        supporter.last_name_kana = data.get('last_name_kana', supporter.last_name_kana)
+        supporter.first_name_kana = data.get('first_name_kana', supporter.first_name_kana)
+        supporter.is_active = data.get('is_active', supporter.is_active)
+        supporter.seal_image_url = data.get('seal_image_url', supporter.seal_image_url)
+
+        # 4. 常勤換算の更新
+        supporter.is_full_time = data.get('is_full_time', supporter.is_full_time)
+        supporter.scheduled_work_hours = data.get('scheduled_work_hours', supporter.scheduled_work_hours)
+        supporter.employment_type = data.get('employment_type', supporter.employment_type)
+
+        # (日付の更新)
+        if 'hire_date' in data and data['hire_date']:
+            supporter.hire_date = datetime.strptime(data['hire_date'], '%Y-%m-%d').date()
+
+        db.session.commit()
+
+        return jsonify({"message": f"職員 {supporter.last_name} の情報を更新しました。"}), 200
+
+    except IntegrityError as e:
+        db.session.rollback()
+        return jsonify({"error": "データベース制約違反です。", "details": str(e)}), 409
+    except Exception as e:
+        db.session.rollback()
         return jsonify({"error": "サーバー内部エラーが発生しました。", "details": str(e)}), 500
