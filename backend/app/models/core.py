@@ -47,7 +47,11 @@ class Supporter(db.Model):
 
     # --- リレーションシップ ---
     role = db.relationship('RoleMaster', back_populates='supporters')
-    office = db.relationship('OfficeSetting', foreign_keys=[office_id], backref='staff_members') # ★ 3. 組織ロール
+    office = db.relationship('OfficeSetting', foreign_keys=[office_id], back_populates='staff_members') # ★ 3. 組織ロール
+    # --- ★ ここに以下のリレーションを追加 ★ ---
+    # 自分が管理者(owner)となっている事業所
+    owned_offices = db.relationship('OfficeSetting', back_populates='owner_supporter', foreign_keys='[OfficeSetting.owner_supporter_id]')
+    # --- ★ 追加ここまで ★ ---
     
     primary_users = db.relationship(
         'User', 
@@ -77,9 +81,10 @@ class Supporter(db.Model):
 
     # チャット
     sent_support_messages = db.relationship('ChatMessage', back_populates='sender_supporter', foreign_keys='ChatMessage.sender_supporter_id')
-    staff_channel_participations = db.relationship('StaffChannelParticipant', back_populates='supporter')
-    sent_staff_messages = db.relationship('StaffChannelMessage', back_populates='sender', foreign_keys='StaffChannelMessage.sender_id')
-
+    # ★ 修正: 'StaffChannelParticipant' -> 'ChannelParticipant'
+    staff_channel_participations = db.relationship('ChannelParticipant', back_populates='supporter')
+    # ★ 修正: 'StaffChannelMessage' -> 'ChannelMessage'
+    sent_staff_messages = db.relationship('ChannelMessage', back_populates='sender_supporter', foreign_keys='ChannelMessage.sender_supporter_id')
 
     def set_password(self, password):
         self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')

@@ -58,6 +58,9 @@ class BeneficiaryCertificate(db.Model):
     unit_periods = db.relationship('ServiceUnitPeriod', back_populates='certificate', lazy=True)
     limit_periods = db.relationship('CopaymentLimitPeriod', back_populates='certificate', lazy=True)
     provisional_periods = db.relationship('ProvisionalServicePeriod', back_populates='certificate', lazy=True)
+    # --- ★ ここに以下の1行を追加 ★ ---
+    billing_municipality = db.relationship('MunicipalityMaster', back_populates='certificates_issued_here')
+    # --- ★ 追加ここまで ★ ---
 
 
 # ----------------------------------------------------

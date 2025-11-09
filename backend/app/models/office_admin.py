@@ -58,10 +58,10 @@ class OfficeSetting(db.Model):
     municipality = db.relationship('MunicipalityMaster', back_populates='offices_located_here')
     
     # ★ 3. 組織ロール（管理者）
-    owner_supporter = db.relationship('Supporter', foreign_keys=[owner_supporter_id], backref='owned_offices')
+    owner_supporter = db.relationship('Supporter', foreign_keys=[owner_supporter_id], back_populates='owned_offices')
     
     # ★ 3. 組織ロール（所属職員）(core.pyのSupporter.office_idからの逆参照)
-    staff_members = db.relationship('Supporter', foreign_keys='[Supporter.office_id]', backref='office')
+    staff_members = db.relationship('Supporter', foreign_keys='[Supporter.office_id]', back_populates='office')
 
     
     # 多機能型対応: サービス設定へのリレーション

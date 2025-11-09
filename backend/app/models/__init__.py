@@ -6,7 +6,8 @@
 
 # --- 1. master.py (基本マスターデータ) ---
 from .master import (
-    RoleMaster, StatusMaster, AttendanceStatusMaster, ReferralSourceMaster, 
+    RoleMaster, JobTitleMaster, # ★ 3ロール分離
+    StatusMaster, AttendanceStatusMaster, ReferralSourceMaster, 
     EmploymentTypeMaster, WorkStyleMaster, DisclosureTypeMaster, 
     ContactCategoryMaster, MeetingTypeMaster, ServiceLocationMaster, 
     AssessmentItemMaster, AssessmentScoreMaster, CertificateTypeMaster, 
@@ -16,73 +17,73 @@ from .master import (
     FeePayerMaster
 )
 
-# --- 2. core.py (システムの核となる利用者・職員) ---
+# --- 2. communication.py (チャット・申請) ★ 修正: 先にインポート ★ ---
+from .communication import (
+    SupportThread, ChatMessage,                # 利用者連絡帳
+    ChatChannel, ChannelParticipant, ChannelMessage, # 汎用チャット
+    UserRequest                                # 汎用申請
+)
+
+# --- 3. core.py (システムの核となる利用者・職員) ★ 修正: 順番を変更 ★ ---
 from .core import (
     Supporter, User, AttendancePlan, DailyLog, Contact
     # (Prospectは削除)
 )
 
-# --- 3. compliance.py (法令・報酬マスタ) ---
+# --- 4. compliance.py (法令・報酬マスタ) ---
 from .compliance import (
     GovernmentFeeMaster, ComplianceRule, FeeEligibilityRequirement, 
     ComplianceFact
 )
 
-# --- 4. office_admin.py (法人・事業所管理) ---
+# --- 5. office_admin.py (法人・事業所管理) ---
 from .office_admin import (
     Corporation, OfficeSetting, OfficeServiceConfiguration, 
     OfficeAdditiveFiling, FeeCalculationDecision
 )
 
-# --- 5. client_relations.py (受給者証・利用者関係) ---
+# --- 6. client_relations.py (受給者証・利用者関係) ---
 from .client_relations import (
     EmergencyContact, MedicalInstitution, BeneficiaryCertificate, 
     ServiceProvisionPeriod, ServiceUnitPeriod, CopaymentLimitPeriod, 
     ProvisionalServicePeriod
 )
 
-# --- 6. initial_support.py (★ 削除 ★) ---
-# (ProspectモデルはUserモデルに統合されたため、ファイル自体を削除)
+# --- 7. initial_support.py (★ 削除 ★) ---
 
-# --- 7. plan.py (個別支援計画) ---
+# --- 8. plan.py (個別支援計画) ---
 from .plan import (
     SupportPlan, ShortTermGoal, SpecificGoal, Monitoring, 
     Assessment, MeetingMinute, ReadinessAssessmentResult,
-    PreEnrollmentLog, PreEnrollmentAssessmentScore # ★ initial_support.py から移動 ★
+    PreEnrollmentLog, PreEnrollmentAssessmentScore 
 )
 
-# --- 8. records.py (日々のサービス提供記録) ---
+# --- 9. records.py (日々のサービス提供記録) ---
 from .records import (
-    ServiceRecord, # (ExternalSupportRecordは削除し、ここに統一)
+    ServiceRecord, 
     BreakRecord, 
     RecordSupporter, ServiceRecordAdditive, AttendanceRecord
 )
 
-# --- 9. retention.py (就労定着支援) ---
+# --- 10. retention.py (就労定着支援) ---
 from .retention import (
     JobRetentionContract, JobRetentionRecord
 )
 
-# --- 10. business_dev.py (事業開発・営業) ---
+# --- 11. business_dev.py (事業開発・営業) ---
 from .business_dev import (
     JobOffer, CompanyContactLog, MarketingOutreachLog
 )
 
-# --- 11. hr.py (人事・勤怠) ---
+# --- 12. hr.py (人事・勤怠) ---
 from .hr import (
-    SupporterTimecard, ExpenseCategoryMaster, ExpenseRecord
+    SupporterTimecard, SupporterJobAssignment, # ★ 3ロール分離
+    ExpenseCategoryMaster, ExpenseRecord
 )
 
-# --- 12. schedule.py (スケジュール) ---
+# --- 13. schedule.py (スケジュール) ---
 from .schedule import (
     Schedule, ScheduleParticipant
-)
-
-# --- 13. communication.py (チャット・申請) ★ 修正 ★ ---
-from .communication import (
-    SupportThread, ChatMessage,                # 利用者連絡帳
-    ChatChannel, ChannelParticipant, ChannelMessage, # 汎用チャット
-    UserRequest                                # 汎用申請
 )
 
 # --- 14. audit_log.py (監査ログ) ---
@@ -94,37 +95,41 @@ from .audit_log import (
 # --- 全モデルを __all__ リストで公開 ---
 __all__ = [
     # 1. master.py
-    'RoleMaster', 'StatusMaster', 'AttendanceStatusMaster', 'ReferralSourceMaster', 
+    'RoleMaster', 'JobTitleMaster', # ★ 追加
+    'StatusMaster', 'AttendanceStatusMaster', 'ReferralSourceMaster', 
     'EmploymentTypeMaster', 'WorkStyleMaster', 'DisclosureTypeMaster', 
     'ContactCategoryMaster', 'MeetingTypeMaster', 'ServiceLocationMaster', 
     'AssessmentItemMaster', 'AssessmentScoreMaster', 'CertificateTypeMaster', 
     'AssessmentTypeMaster', 'GenderLegalMaster', 'DisabilityTypeMaster', 
     'MunicipalityMaster', 'HistoryCategoryMaster',
     'GovernmentOffice', 'ServiceTemplate', 'PreparationActivityMaster',
-    'FeePayerMaster',
+    'FeePayerMaster', 
 
-    # 2. core.py
+    # 2. communication.py ★ 順番変更 ★
+    'SupportThread', 'ChatMessage',
+    'ChatChannel', 'ChannelParticipant', 'ChannelMessage',
+    'UserRequest',
+
+    # 3. core.py ★ 順番変更 ★
     'Supporter', 'User', 'AttendancePlan', 'DailyLog', 'Contact',
 
-    # 3. compliance.py
+    # 4. compliance.py
     'GovernmentFeeMaster', 'ComplianceRule', 'FeeEligibilityRequirement', 
     'ComplianceFact',
 
-    # 4. office_admin.py
+    # 5. office_admin.py
     'Corporation', 'OfficeSetting', 'OfficeServiceConfiguration', 
     'OfficeAdditiveFiling', 'FeeCalculationDecision',
 
-    # 5. client_relations.py
+    # 6. client_relations.py
     'EmergencyContact', 'MedicalInstitution', 'BeneficiaryCertificate', 
     'ServiceProvisionPeriod', 'ServiceUnitPeriod', 'CopaymentLimitPeriod', 
     'ProvisionalServicePeriod',
 
-    # 6. initial_support.py (★ 削除 ★)
-
     # 7. plan.py
     'SupportPlan', 'ShortTermGoal', 'SpecificGoal', 'Monitoring', 
     'Assessment', 'MeetingMinute', 'ReadinessAssessmentResult',
-    'PreEnrollmentLog', 'PreEnrollmentAssessmentScore', # ★ 追加
+    'PreEnrollmentLog', 'PreEnrollmentAssessmentScore',
 
     # 8. records.py
     'ServiceRecord',
@@ -138,16 +143,12 @@ __all__ = [
     'JobOffer', 'CompanyContactLog', 'MarketingOutreachLog',
 
     # 11. hr.py
-    'SupporterTimecard', 'ExpenseCategoryMaster', 'ExpenseRecord',
+    'SupporterTimecard', 'SupporterJobAssignment', # ★ 追加
+    'ExpenseCategoryMaster', 'ExpenseRecord',
 
     # 12. schedule.py
     'Schedule', 'ScheduleParticipant',
 
-    # 13. communication.py ★ 修正 ★
-    'SupportThread', 'ChatMessage',
-    'ChatChannel', 'ChannelParticipant', 'ChannelMessage',
-    'UserRequest',
-
-    # 14. audit_log.py
+    # 13. audit_log.py
     'SystemLog',
 ]

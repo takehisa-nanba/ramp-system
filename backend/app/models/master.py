@@ -156,11 +156,11 @@ class HistoryCategoryMaster(db.Model):
     name = db.Column(db.String(100), nullable=False, unique=True)
     is_active = db.Column(db.Boolean, default=True)
     
-    history_items = db.relationship(
-        'DevelopmentalHistoryItem',
-        secondary='developmental_history_categories_association',
-        back_populates='categories'
-    )
+    # history_items = db.relationship(
+    #     'DevelopmentalHistoryItem',
+    #     secondary='developmental_history_categories_association',
+    #     back_populates='categories'
+    # )
 
 # --- (audit_log.py から移動してきたマスター) ---
 

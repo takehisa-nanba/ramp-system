@@ -3,7 +3,7 @@
 from app.extensions import db
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from .master import StatusMaster, MeetingTypeMaster, AssessmentItemMaster, AssessmentScoreMaster
+from .master import StatusMaster, MeetingTypeMaster, AssessmentItemMaster, AssessmentScoreMaster, ServiceTemplate
 # (plan.pyが他のモデルを参照しないように、core/masterからのインポートを修正)
 
 # ----------------------------------------------------
