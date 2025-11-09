@@ -32,9 +32,9 @@ class ServiceRecord(db.Model):
     
     # リレーションシップ
     service_location = db.relationship('ServiceLocationMaster', back_populates='service_records')
-    break_records = db.relationship('BreakRecord', back_populates='service_record', lazy=True)
-    record_supporters = db.relationship('RecordSupporter', back_populates='service_record', lazy=True)
-    additive_records = db.relationship('ServiceRecordAdditive', back_populates='service_record', lazy=True)
+    break_records = db.relationship('BreakRecord', back_populates='service_record', lazy=True, cascade="all, delete-orphan")
+    record_supporters = db.relationship('RecordSupporter', back_populates='service_record', lazy=True, cascade="all, delete-orphan")
+    additive_records = db.relationship('ServiceRecordAdditive', back_populates='service_record', lazy=True, cascade="all, delete-orphan")
     
     # (userへのリレーションは core.py の User.service_records で backref 済み)
 

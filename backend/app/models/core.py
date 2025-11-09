@@ -3,16 +3,16 @@
 from app.extensions import db, bcrypt
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, CheckConstraint # ★ CheckConstraint をインポート
 from .master import(
     RoleMaster, StatusMaster, AttendanceStatusMaster, ServiceLocationMaster,
     ContactCategoryMaster, DisabilityTypeMaster, PreparationActivityMaster,
     GovernmentOffice # Contactモデルが参照するためインポート
 )
-from .plan import SpecificGoal # DailyLogモデルが参照するためインポート
+# (plan.py をインポートすると循環参照になるため、SpecificGoalのインポートは削除します)
+# from .plan import SpecificGoal 
 
-# --- コアユーザーおよび活動記録テーブル ---
-
+# --- 1. Supporter (職員) ---
 class Supporter(db.Model):
     __tablename__ = 'supporters'
     id = db.Column(db.Integer, primary_key=True)
@@ -27,14 +27,18 @@ class Supporter(db.Model):
     hire_date = db.Column(db.Date)
     is_active = db.Column(db.Boolean, default=True)
     
-    # 人事/常勤換算計算のための拡張
+    # 人事/常勤換算
     is_full_time = db.Column(db.Boolean, default=False, nullable=False)
-    scheduled_work_hours = db.Column(db.Integer, default=40, nullable=False) # 週の所定労働時間（時間）
+    scheduled_work_hours = db.Column(db.Integer, default=40, nullable=False)
     employment_type = db.Column(db.String(50), default='正社員', nullable=False)
 
+    # --- ★ 1. システム運用上のロール ★ ---
     role_id = db.Column(db.Integer, db.ForeignKey('role_master.id'), nullable=False)
     
-    # ★ 新規追加: 職員個人の印影画像URL
+    # --- ★ 3. 組織としてのロール（所属先）★ ---
+    office_id = db.Column(db.Integer, db.ForeignKey('office_settings.id'), nullable=True) # 主たる所属事業所
+    
+    # 印影
     seal_image_url = db.Column(db.String(500), nullable=True)
     
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
@@ -43,32 +47,35 @@ class Supporter(db.Model):
 
     # --- リレーションシップ ---
     role = db.relationship('RoleMaster', back_populates='supporters')
+    office = db.relationship('OfficeSetting', foreign_keys=[office_id], backref='staff_members') # ★ 3. 組織ロール
     
-    # Userへのリレーション
     primary_users = db.relationship(
         'User', 
         back_populates='primary_supporter',
         foreign_keys='User.primary_supporter_id'
     )
     
-    # Planへのリレーション (外部キー定義は各モデル側にある)
-    # (Planモデル側で back_populates が定義されていれば、ここは不要な場合もある)
+    # 計画系
     plan_approvals = db.relationship('SupportPlan', back_populates='sabikan', foreign_keys='SupportPlan.sabikan_id')
     assessment_approvals = db.relationship('Assessment', back_populates='sabikan', foreign_keys='Assessment.sabikan_id')
     monitoring_approvals = db.relationship('Monitoring', back_populates='sabikan', foreign_keys='Monitoring.sabikan_id')
     responsible_tasks = db.relationship('SpecificGoal', back_populates='responsible_supporter', foreign_keys='SpecificGoal.responsible_supporter_id')
 
-    # 記録系へのリレーション
+    # 記録系
     daily_logs = db.relationship('DailyLog', foreign_keys='[DailyLog.supporter_id]', back_populates='creator')
     approved_daily_logs = db.relationship('DailyLog', foreign_keys='[DailyLog.approved_by_id]', back_populates='approver')
     onsite_daily_logs = db.relationship('DailyLog', foreign_keys='[DailyLog.supporter_on_site_id]', back_populates='supporter_on_site')
     timecards = db.relationship('SupporterTimecard', back_populates='supporter')
+    approved_requests = db.relationship('UserRequest', back_populates='approver_supporter', foreign_keys='UserRequest.approver_supporter_id')
     
-    # Scheduleへのリレーション
+    # ★ 2. 法令上の職務（履歴）★
+    job_assignments = db.relationship('SupporterJobAssignment', back_populates='supporter', lazy='dynamic') # ★ 2. 職務ロール
+
+    # スケジュール
     created_schedules = db.relationship('Schedule', back_populates='creator_supporter', foreign_keys='Schedule.creator_supporter_id')
     scheduled_participations = db.relationship('ScheduleParticipant', back_populates='supporter')
 
-    # ★ 修正: Communication (チャット) へのリレーション
+    # チャット
     sent_support_messages = db.relationship('ChatMessage', back_populates='sender_supporter', foreign_keys='ChatMessage.sender_supporter_id')
     staff_channel_participations = db.relationship('StaffChannelParticipant', back_populates='supporter')
     sent_staff_messages = db.relationship('StaffChannelMessage', back_populates='sender', foreign_keys='StaffChannelMessage.sender_id')
@@ -80,35 +87,45 @@ class Supporter(db.Model):
     def check_password(self, password):
         return bcrypt.check_password_hash(self.password_hash, password)
 
+# --- 2. User (利用者・見学者) ---
 class User(db.Model):
     __tablename__ = 'users'
     id = db.Column(db.Integer, primary_key=True)
-    last_name = db.Column(db.String(50), nullable=False)
-    first_name = db.Column(db.String(50), nullable=False)
+    
+    # ★ 修正: 法的な実名 -> 任意
+    last_name = db.Column(db.String(50), nullable=True) 
+    first_name = db.Column(db.String(50), nullable=True)
+    
+    # ★ 新規追加: アカウント名 (必須)
+    display_name = db.Column(db.String(100), nullable=False) 
+    
     last_name_kana = db.Column(db.String(50))
     first_name_kana = db.Column(db.String(50))
     birth_date = db.Column(db.Date)
     gender = db.Column(db.String(10)) 
     
-    # 住所・連絡先
+    # 連絡先
     postal_code = db.Column(db.String(10))
     address = db.Column(db.String(255))
     phone_number = db.Column(db.String(20))
     
-    # ★ 修正: nullable=True に変更 (LINE登録/見学者対応)
+    # 認証 (nullable=True でソーシャルログイン対応)
     email = db.Column(db.String(120), unique=True, nullable=True)
+    password_hash = db.Column(db.String(128), nullable=True) 
+    pin_hash = db.Column(db.String(128), nullable=True)
     
-    # ★ 新規追加: 印影画像URL
+    # 汎用SNSカラム
+    sns_provider = db.Column(db.String(50), nullable=True, index=True) 
+    sns_account_id = db.Column(db.String(255), nullable=True, index=True)
+    
+    # 印影
     seal_image_url = db.Column(db.String(500), nullable=True)
     
-    # ★ 新規追加: LINE ID (OAuth用)
-    line_id = db.Column(db.String(255), unique=True, nullable=True, index=True)
-
     # サービス・契約状況
     service_start_date = db.Column(db.Date) 
     service_end_date = db.Column(db.Date)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-    is_archivable = db.Column(db.Boolean, default=False, nullable=False) # アーカイブ移行トリガー
+    is_archivable = db.Column(db.Boolean, default=False, nullable=False)
     remote_service_allowed = db.Column(db.Boolean, default=False, nullable=False)
     plan_consultation_office = db.Column(db.String(100))
     
@@ -121,12 +138,15 @@ class User(db.Model):
     disability_type_id = db.Column(db.Integer, db.ForeignKey('disability_type_master.id'))
     handbook_level = db.Column(db.String(20))
     is_handbook_certified = db.Column(db.Boolean, default=False, nullable=False)
-
-    pin_hash = db.Column(db.String(128)) 
-    primary_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'))
     
-    # ★ 修正: status_id は NULL を許可しない (必ず'新規問合せ'などが入る)
+    # 外部キー
+    primary_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'))
     status_id = db.Column(db.Integer, db.ForeignKey('status_master.id'), nullable=False)
+
+    # マーケティング（流入経路）
+    utm_source = db.Column(db.String(100), nullable=True, index=True) 
+    utm_medium = db.Column(db.String(100), nullable=True) 
+    utm_campaign = db.Column(db.String(100), nullable=True) 
     
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
@@ -134,7 +154,7 @@ class User(db.Model):
 
     # --- リレーションシップ ---
     status = db.relationship('StatusMaster', foreign_keys=[status_id]) 
-    disability_type = db.relationship('DisabilityTypeMaster')
+    disability_type = db.relationship('DisabilityTypeMaster', back_populates='users')
     primary_supporter = db.relationship(
         'Supporter', 
         back_populates='primary_users',
@@ -151,6 +171,7 @@ class User(db.Model):
     support_plans = db.relationship('SupportPlan', back_populates='user')
     assessments = db.relationship('Assessment', back_populates='user')
     meeting_minutes = db.relationship('MeetingMinute', back_populates='user')
+    pre_enrollment_logs = db.relationship('PreEnrollmentLog', back_populates='user', lazy=True) # 見学者記録
     
     # 監査・その他
     system_logs = db.relationship('SystemLog', back_populates='user', foreign_keys='SystemLog.user_id')
@@ -167,20 +188,50 @@ class User(db.Model):
     # コンプライアンス
     compliance_facts = db.relationship('ComplianceFact', back_populates='user', lazy=True)
     
-    # Schedule
+    # スケジュール
     scheduled_participations = db.relationship('ScheduleParticipant', back_populates='user')
 
-    # ★ 修正: Communication (チャット)
+    # チャット・申請
     support_threads = db.relationship('SupportThread', back_populates='user', lazy=True)
     sent_messages = db.relationship('ChatMessage', back_populates='sender_user', foreign_keys='ChatMessage.sender_user_id')
+    channel_participations = db.relationship('ChannelParticipant', back_populates='user')
+    channel_messages = db.relationship('ChannelMessage', back_populates='sender_user', foreign_keys='ChannelMessage.sender_user_id')
+    sent_requests = db.relationship('UserRequest', back_populates='requester_user', foreign_keys='UserRequest.requester_user_id')
+
     
-    # ★ 新規追加: 見学者時代の記録 (Prospectから移動)
-    pre_enrollment_logs = db.relationship('PreEnrollmentLog', back_populates='user', lazy=True)
+    # --- パスワード/PIN ハッシュ化メソッド ---
+    def set_password(self, password):
+        from app.extensions import bcrypt 
+        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
+    def check_password(self, password):
+        from app.extensions import bcrypt
+        if self.password_hash is None:
+            return False
+        return bcrypt.check_password_hash(self.password_hash, password)
+
+    def set_pin(self, pin):
+        from app.extensions import bcrypt
+        self.pin_hash = bcrypt.generate_password_hash(pin).decode('utf-8')
+
+    def check_pin(self, pin):
+        from app.extensions import bcrypt
+        if self.pin_hash is None:
+            return False
+        return bcrypt.check_password_hash(self.pin_hash, pin)
+        
+    # ★ 汎用カラムを使う場合の制約 (推奨) ★
+    __table_args__ = (
+        CheckConstraint(
+            '(sns_provider IS NULL AND sns_account_id IS NULL) OR '
+            '(sns_provider IS NOT NULL AND sns_account_id IS NOT NULL)',
+            name='ck_user_sns_auth_pair'
+        ),
+        UniqueConstraint('sns_provider', 'sns_account_id', name='uq_user_sns_auth')
+    )
 
 
-# --- (Prospect モデルは削除) ---
-
-
+# --- 3. AttendancePlan (通所予定 - 旧) ---
 class AttendancePlan(db.Model):
     __tablename__ = 'attendance_plans'
     id = db.Column(db.Integer, primary_key=True)
@@ -193,6 +244,7 @@ class AttendancePlan(db.Model):
     user = db.relationship('User', back_populates='attendance_plans')
     __table_args__ = (UniqueConstraint('user_id', 'planned_date', name='uq_user_date'),)
 
+# --- 4. DailyLog (日報 - 旧) ---
 class DailyLog(db.Model):
     __tablename__ = 'daily_logs'
     id = db.Column(db.Integer, primary_key=True)
@@ -227,6 +279,7 @@ class DailyLog(db.Model):
     preparation_activity = db.relationship('PreparationActivityMaster', back_populates='daily_logs')
     specific_goal = db.relationship('SpecificGoal', back_populates='daily_logs')
 
+# --- 5. Contact (関連機関・連絡先) ---
 class Contact(db.Model):
     __tablename__ = 'contacts'
     id = db.Column(db.Integer, primary_key=True)
@@ -244,4 +297,3 @@ class Contact(db.Model):
     user = relationship('User', back_populates='contacts')
     category = relationship('ContactCategoryMaster', back_populates='contacts')
     government_office = relationship('GovernmentOffice', back_populates='contacts')
-    

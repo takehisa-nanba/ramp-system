@@ -24,9 +24,32 @@ class SupporterTimecard(db.Model):
     
     supporter = db.relationship('Supporter', back_populates='timecards')
 
+# ----------------------------------------------------
+# 2. SupporterJobAssignment (★ 新規追加: 職務割り当て履歴)
+# ----------------------------------------------------
+class SupporterJobAssignment(db.Model):
+    __tablename__ = 'supporter_job_assignments'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    
+    # 「誰が」
+    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
+    
+    # 「どの職務を」
+    job_title_id = db.Column(db.Integer, db.ForeignKey('job_title_master.id'), nullable=False)
+    
+    # 「いつから」
+    start_date = db.Column(db.Date, nullable=False)
+    
+    # 「いつまで」 (NULLの場合は現在も有効)
+    end_date = db.Column(db.Date, nullable=True)
+    
+    # リレーションシップ
+    supporter = db.relationship('Supporter', back_populates='job_assignments')
+    job_title = db.relationship('JobTitleMaster', back_populates='assignments')
 
 # ----------------------------------------------------
-# 2. ExpenseCategoryMaster (勘定科目マスタ)
+# 3. ExpenseCategoryMaster (勘定科目マスタ)
 # ----------------------------------------------------
 class ExpenseCategoryMaster(db.Model):
     __tablename__ = 'expense_category_master'
@@ -37,7 +60,7 @@ class ExpenseCategoryMaster(db.Model):
 
 
 # ----------------------------------------------------
-# 3. ExpenseRecord (経費精算記録)
+# 4. ExpenseRecord (経費精算記録)
 # ----------------------------------------------------
 class ExpenseRecord(db.Model):
     __tablename__ = 'expense_records'

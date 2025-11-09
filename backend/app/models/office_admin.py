@@ -22,7 +22,7 @@ class Corporation(db.Model):
     address = db.Column(db.String(255), nullable=True)
     phone_number = db.Column(db.String(20), nullable=True)
     
-    # ★ 新規追加: 法人印（丸印）の画像URL
+    # ★ 法人印（丸印）
     corporation_seal_image_url = db.Column(db.String(500), nullable=True)
     
     is_active = db.Column(db.Boolean, default=True, nullable=False)
@@ -45,18 +45,24 @@ class OfficeSetting(db.Model):
     # 所在地情報
     municipality_id = db.Column(db.Integer, db.ForeignKey('municipality_master.id'), nullable=False)
     
-    # 管理者情報
-    owner_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False) # 経営責任者
+    # ★ 3. 組織ロール（管理者）★
+    owner_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False) # 事業所の法的な管理者
     
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     
-    # ★ 新規追加: 事業所印（角印）の画像URL
+    # ★ 事業所印（角印）
     office_seal_image_url = db.Column(db.String(500), nullable=True)
     
-    # リレーションシップ
+    # --- リレーションシップ ---
     corporation = db.relationship('Corporation', back_populates='offices')
-    municipality = db.relationship('MunicipalityMaster')
-    owner_supporter = db.relationship('Supporter')
+    municipality = db.relationship('MunicipalityMaster', back_populates='offices_located_here')
+    
+    # ★ 3. 組織ロール（管理者）
+    owner_supporter = db.relationship('Supporter', foreign_keys=[owner_supporter_id], backref='owned_offices')
+    
+    # ★ 3. 組織ロール（所属職員）(core.pyのSupporter.office_idからの逆参照)
+    staff_members = db.relationship('Supporter', foreign_keys='[Supporter.office_id]', backref='office')
+
     
     # 多機能型対応: サービス設定へのリレーション
     service_configs = db.relationship('OfficeServiceConfiguration', back_populates='office', lazy=True)
@@ -68,14 +74,18 @@ class OfficeSetting(db.Model):
 # 3. OfficeServiceConfiguration (多機能型サービス設定)
 # ----------------------------------------------------
 class OfficeServiceConfiguration(db.Model):
-    # (変更なし)
     __tablename__ = 'office_service_configurations'
+    
     id = db.Column(db.Integer, primary_key=True)
     office_id = db.Column(db.Integer, db.ForeignKey('office_settings.id'), nullable=False)
-    service_type = db.Column(db.String(50), nullable=False)
-    capacity = db.Column(db.Integer, nullable=False)
-    service_provider_number = db.Column(db.String(20), nullable=False)
+    
+    service_type = db.Column(db.String(50), nullable=False) # 提供サービス種別
+    capacity = db.Column(db.Integer, nullable=False) # 当該サービスにおける定員
+    service_provider_number = db.Column(db.String(20), nullable=False) # サービス別の事業所番号
+    
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    
+    # リレーションシップ
     office = db.relationship('OfficeSetting', back_populates='service_configs')
     
     
@@ -83,14 +93,17 @@ class OfficeServiceConfiguration(db.Model):
 # 4. OfficeAdditiveFiling (加算届出状況)
 # ----------------------------------------------------
 class OfficeAdditiveFiling(db.Model):
-    # (変更なし)
     __tablename__ = 'office_additive_filings'
+    
     id = db.Column(db.Integer, primary_key=True)
     office_id = db.Column(db.Integer, db.ForeignKey('office_settings.id'), nullable=False)
-    fee_master_id = db.Column(db.Integer, db.ForeignKey('government_fee_master.id'), nullable=False)
-    is_filed = db.Column(db.Boolean, default=False, nullable=False)
+    fee_master_id = db.Column(db.Integer, db.ForeignKey('government_fee_master.id'), nullable=False) # 届出対象の加算
+    
+    is_filed = db.Column(db.Boolean, default=False, nullable=False) # 行政に届出済みか
     filing_date = db.Column(db.Date)
-    effective_start_date = db.Column(db.Date)
+    effective_start_date = db.Column(db.Date) # 届出が有効になる日付
+
+    # リレーションシップ
     office = db.relationship('OfficeSetting', back_populates='additive_filings')
     fee_master = db.relationship('GovernmentFeeMaster')
 
@@ -99,16 +112,19 @@ class OfficeAdditiveFiling(db.Model):
 # 5. FeeCalculationDecision (算定意思決定)
 # ----------------------------------------------------
 class FeeCalculationDecision(db.Model):
-    # (変更なし)
     __tablename__ = 'fee_calculation_decisions'
+    
     id = db.Column(db.Integer, primary_key=True)
     office_id = db.Column(db.Integer, db.ForeignKey('office_settings.id'), nullable=False)
     fee_master_id = db.Column(db.Integer, db.ForeignKey('government_fee_master.id'), nullable=False)
-    calculation_month = db.Column(db.Date, nullable=False)
-    is_calculated = db.Column(db.Boolean, default=True, nullable=False)
-    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False)
-    decision_timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    calculation_month = db.Column(db.Date, nullable=False) # 算定を決定する対象月
+    is_calculated = db.Column(db.Boolean, default=True, nullable=False) # 実際に算定する/適用する
+    
+    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=False) # 最終決定を行った管理者
+    decision_timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow) # 決定日時
+    
+    # リレーションシップ
     office = db.relationship('OfficeSetting', back_populates='fee_decisions')
     fee_master = db.relationship('GovernmentFeeMaster')
     supporter = db.relationship('Supporter')
-    
