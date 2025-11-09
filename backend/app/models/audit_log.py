@@ -14,7 +14,9 @@ class SystemLog(db.Model):
     
     user_id = db.Column(db.Integer, db.ForeignKey('users.id')) 
     support_plan_id = db.Column(db.Integer, db.ForeignKey('support_plans.id'))
-    
+    # --- ★ ここに「詳細」カラムを追加 ★ ---
+    details = db.Column(db.Text, nullable=True) # 監査ログの詳細
+    # --- ★ 追加ここまで ★ ---
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
