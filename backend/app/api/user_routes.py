@@ -1,3 +1,5 @@
+# backend/app/api/user_routes.py
+
 from flask import Blueprint, request, jsonify
 from app.extensions import db
 from datetime import datetime
@@ -15,16 +17,15 @@ user_bp = Blueprint('user', __name__)
 # 1. [職員用] 利用者新規登録 API (POST /api/users)
 # ======================================================
 @user_bp.route('/users', methods=['POST'])
-@role_required(['管理者', 'サービス管理責任者', '支援員']) 
+# --- ★ 修正: V1.1の新しいロール名を使用 ★ ---
+@role_required(['SystemAdmin', 'OfficeAdmin', 'Sabikan', 'Staff'])
 def create_user():
     """
     [職員用] 新しい利用者をデータベースに登録します。
-    実名(last/first_name)が必須です。
-    display_name は実名から自動生成されます。
     """
     data = request.get_json()
 
-    # 1. 必須フィールドの検証 (職員が登録する場合、実名は必須)
+    # 1. 必須フィールドの検証 (実名)
     required_fields = [
         'last_name', 'first_name', 
         'last_name_kana', 'first_name_kana',
@@ -46,14 +47,12 @@ def create_user():
              return jsonify({"error": f"無効な障害種別IDです: {data['disability_type_id']}"}), 400
 
         # 3. Userオブジェクトの作成
-        
-        # ★ 修正: display_name（必須）を実名から自動生成
         display_name = f"{data['last_name']} {data['first_name']}"
         
         new_user = User(
             last_name=data['last_name'],
             first_name=data['first_name'],
-            display_name=display_name, # ★ 追加
+            display_name=display_name, # ★ display_name（必須）を実名から自動生成
             
             last_name_kana=data['last_name_kana'],
             first_name_kana=data['first_name_kana'],
@@ -63,22 +62,22 @@ def create_user():
             disability_type_id=data['disability_type_id'],
             primary_supporter_id=data.get('primary_supporter_id'),
             
-            # 連絡先 (任意)
+            # 連絡先
             postal_code=data.get('postal_code'),
             address=data.get('address'),
             phone_number=data.get('phone_number'),
             email=data.get('email'),
             
-            # SNS (任意)
+            # SNS
             sns_provider=data.get('sns_provider'),
             sns_account_id=data.get('sns_account_id'),
 
-            # マーケティング (任意)
+            # マーケティング
             utm_source=data.get('utm_source'),
             utm_medium=data.get('utm_medium'),
             utm_campaign=data.get('utm_campaign'),
             
-            # ( ... 他のフィールド ...)
+            # (その他)
             service_start_date=datetime.strptime(data.get('service_start_date'), '%Y-%m-%d').date() if data.get('service_start_date') else None,
             plan_consultation_office=data.get('plan_consultation_office'),
             handbook_level=data.get('handbook_level'),
@@ -107,8 +106,12 @@ def create_user():
 # 2. 利用者一覧取得 API (GET /api/users)
 # ======================================================
 @user_bp.route('/users', methods=['GET'])
-@role_required(['管理者', 'サービス管理責任者', '支援員'])
+# --- ★ 修正: V1.1の新しいロール名を使用 ★ ---
+@role_required(['SystemAdmin', 'OfficeAdmin', 'Sabikan', 'Staff'])
 def get_user_list():
+    """
+    登録されている利用者の一覧を取得します。
+    """
     try:
         stmt = (
             db.select(
@@ -120,7 +123,7 @@ def get_user_list():
             .join(StatusMaster, User.status_id == StatusMaster.id)
             .outerjoin(Supporter, User.primary_supporter_id == Supporter.id)
             .where(User.is_archivable == False)
-            .order_by(User.last_name_kana, User.first_name_kana) # ★ 実名が登録されていればカナ順
+            .order_by(User.last_name_kana, User.first_name_kana) 
         )
         users_result = db.session.execute(stmt).all()
 
@@ -152,8 +155,12 @@ def get_user_list():
 # 3. 利用者詳細取得 API (GET /api/users/<int:user_id>)
 # ======================================================
 @user_bp.route('/users/<int:user_id>', methods=['GET'])
-@role_required(['管理者', 'サービス管理責任者', '支援員'])
+# --- ★ 修正: V1.1の新しいロール名を使用 ★ ---
+@role_required(['SystemAdmin', 'OfficeAdmin', 'Sabikan', 'Staff'])
 def get_user_detail(user_id):
+    """
+    特定の利用者の詳細情報を取得します。
+    """
     try:
         stmt = (
             db.select(
@@ -181,9 +188,9 @@ def get_user_detail(user_id):
 
         response_data = {
             "id": user.id,
-            "display_name": user.display_name, # ★ 表示名
-            "last_name": user.last_name,       # ★ 実名
-            "first_name": user.first_name,     # ★ 実名
+            "display_name": user.display_name,
+            "last_name": user.last_name,
+            "first_name": user.first_name,
             "last_name_kana": user.last_name_kana,
             "first_name_kana": user.first_name_kana,
             "birth_date": user.birth_date.isoformat() if user.birth_date else None,
@@ -200,10 +207,17 @@ def get_user_detail(user_id):
             "email": user.email,
             "seal_image_url": user.seal_image_url,
             
+            # SNS
             "sns_provider": user.sns_provider,
             "sns_account_id": user.sns_account_id,
             
-            # ( ... 障害情報, 契約情報, 就労情報 ...)
+            # 障害情報 (V1.0)
+            "disability_type_name": user_result.disability_type_name,
+            "disability_type_id": user.disability_type_id,
+            "handbook_level": user.handbook_level,
+            "is_handbook_certified": user.is_handbook_certified,
+
+            # ... (契約情報、就労情報 - 省略) ...
             
             # マーケティング
             "utm_source": user.utm_source,
@@ -221,8 +235,12 @@ def get_user_detail(user_id):
 # 4. 利用者情報更新 API (PUT /api/users/<int:user_id>)
 # ======================================================
 @user_bp.route('/users/<int:user_id>', methods=['PUT'])
-@role_required(['管理者', 'サービス管理責任者', '支援員'])
+# --- ★ 修正: V1.1の新しいロール名を使用 ★ ---
+@role_required(['SystemAdmin', 'OfficeAdmin', 'Sabikan', 'Staff'])
 def update_user_detail(user_id):
+    """
+    特定の利用者の詳細情報を更新します。
+    """
     data = request.get_json()
     if not data:
         return jsonify({"error": "更新データがありません。"}), 400
