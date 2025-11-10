@@ -13,7 +13,12 @@ __pycache__/
 
 # ログファイル
 *.log
-
+#db_structure_exporter.py.log
+db_structure_exporter.py
+load_models.py
+data_list.py
+fetch_supporter_data.py
+diagnose_model_loading.py
 ---
 
 # --------------------------

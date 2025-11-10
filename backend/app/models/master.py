@@ -30,9 +30,7 @@ class JobTitleMaster(db.Model):
     is_system_admin = db.Column(Boolean, default=False, nullable=False)
     
     filing_history = db.relationship('JobFilingRecord', back_populates='job_title') 
-    assignments = db.relationship('SupporterJobAssignment', back_populates='job_title')
-    
-    # ★ 新規追加: JobTitleが持つ「標準パーミッション」のリスト
+    assignments = db.relationship('SupporterJobAssignment', back_populates='job_title') 
     standard_permissions = db.relationship(
         'JobTitlePermission', 
         back_populates='job_title', 
