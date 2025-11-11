@@ -6,7 +6,7 @@
 
 # --- 1. master.py (基本マスターデータ) ---
 from .master import (
-    RoleMaster, JobTitleMaster, # ★ 3ロール分離
+    RoleMaster, SupporterPermissionOverride, JobTitleMaster, # ★ 3ロール分離
     StatusMaster, AttendanceStatusMaster, ReferralSourceMaster, 
     EmploymentTypeMaster, WorkStyleMaster, DisclosureTypeMaster, 
     ContactCategoryMaster, MeetingTypeMaster, ServiceLocationMaster, 
@@ -95,7 +95,7 @@ from .audit_log import (
 # --- 全モデルを __all__ リストで公開 ---
 __all__ = [
     # 1. master.py
-    'RoleMaster', 'JobTitleMaster', # ★ 追加
+    'RoleMaster', 'SupporterPermissionOverride', 'JobTitleMaster', # ★ 追加
     'StatusMaster', 'AttendanceStatusMaster', 'ReferralSourceMaster', 
     'EmploymentTypeMaster', 'WorkStyleMaster', 'DisclosureTypeMaster', 
     'ContactCategoryMaster', 'MeetingTypeMaster', 'ServiceLocationMaster', 

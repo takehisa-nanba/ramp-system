@@ -3,13 +3,9 @@
 from app.extensions import db, bcrypt
 from datetime import datetime
 from sqlalchemy.orm import relationship
-from sqlalchemy import UniqueConstraint, CheckConstraint, ForeignKey # ★ 追加
-from .master import(
-    RoleMaster, StatusMaster, AttendanceStatusMaster, ServiceLocationMaster,
-    ContactCategoryMaster, DisabilityTypeMaster, PreparationActivityMaster,
-    GovernmentOffice # Contactモデルが参照するためインポート
-)
-# from .plan import SpecificGoal  # DailyLogが参照するが、Planのインポート後に解決
+from sqlalchemy import UniqueConstraint, CheckConstraint, ForeignKey 
+# ★★★ 循環参照の原因となる外部モデルクラスのインポートを全て削除しました ★★★
+
 
 # --- 1. Supporter (職員) ---
 class Supporter(db.Model):
@@ -35,8 +31,8 @@ class Supporter(db.Model):
     office_id = db.Column(db.Integer, db.ForeignKey('office_settings.id'), nullable=True) 
     
     # システム責任: PINハッシュと印影
-    pin_hash = db.Column(db.String(128), nullable=True) # ★ 責任承認用PIN
-    seal_image_url = db.Column(db.String(500), nullable=True) # ★ 職員個人の印影
+    pin_hash = db.Column(db.String(128), nullable=True) 
+    seal_image_url = db.Column(db.String(500), nullable=True) 
     
     # システムロール（レガシー互換性のため残す。JobTitleに移行すべき）
     role_id = db.Column(db.Integer, db.ForeignKey('role_master.id'), nullable=False)
@@ -46,19 +42,22 @@ class Supporter(db.Model):
     remarks = db.Column(db.Text)
 
     # --- リレーションシップ ---
-    role = db.relationship('RoleMaster', back_populates='supporters')
-    office = db.relationship('OfficeSetting', foreign_keys=[office_id], back_populates='staff_members') # 組織ロール
+    # B. 不要なリレーションの削除: roleリレーションを削除
+    # role = db.relationship('RoleMaster', back_populates='supporters') # <- 削除済み
     
-    # 法令上の職務
-    job_assignments = db.relationship('SupporterJobAssignment', back_populates='supporter', lazy='dynamic')
-    
-    # パーミッション上書き
-    permission_overrides = db.relationship('SupporterPermissionOverride', back_populates='supporter', cascade="all, delete-orphan") # ★ パーミッション
-    
-    # 責任承認ログ
+    # ★ 外部参照は全て文字列に統一 ★
+    office = db.relationship('OfficeSetting', foreign_keys=[office_id], back_populates='staff_members') 
+    job_assignments = db.relationship(
+        'SupporterJobAssignment', 
+        back_populates='supporter', 
+        lazy='dynamic',
+        cascade="all, delete-orphan"
+    )
+    permission_overrides = db.relationship('SupporterPermissionOverride', back_populates='supporter', cascade="all, delete-orphan") 
     admin_action_logs = db.relationship('SystemAdminActionLog', back_populates='supporter')
-    
-    # ... (その他リレーションシップ) ...
+    owned_offices = db.relationship('OfficeSetting', back_populates='owner_supporter', foreign_keys='OfficeSetting.owner_supporter_id')
+
+    # ... (その他リレーションシップも文字列リテラルで統一されていることを確認) ...
     primary_users = db.relationship('User', back_populates='primary_supporter', foreign_keys='User.primary_supporter_id')
     plan_approvals = db.relationship('SupportPlan', back_populates='sabikan', foreign_keys='SupportPlan.sabikan_id')
     assessment_approvals = db.relationship('Assessment', back_populates='sabikan', foreign_keys='Assessment.sabikan_id')
@@ -74,8 +73,7 @@ class Supporter(db.Model):
     sent_support_messages = db.relationship('ChatMessage', back_populates='sender_supporter', foreign_keys='ChatMessage.sender_supporter_id')
     staff_channel_participations = db.relationship('ChannelParticipant', back_populates='supporter')
     sent_staff_messages = db.relationship('ChannelMessage', back_populates='sender_supporter', foreign_keys='ChannelMessage.sender_supporter_id')
-
-
+    
     def set_password(self, password):
         self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
 
@@ -90,7 +88,6 @@ class Supporter(db.Model):
         """職員用PINチェックメソッド"""
         if self.pin_hash is None: return False
         return bcrypt.check_password_hash(self.pin_hash, pin)
-
 
 # --- 2. User (利用者・見学者) ---
 class User(db.Model):
@@ -156,6 +153,7 @@ class User(db.Model):
     remarks = db.Column(db.Text)
 
     # --- リレーションシップ ---
+    # ★★★ 修正箇所: 全て文字列リテラルに厳格化 ★★★
     status = db.relationship('StatusMaster', foreign_keys=[status_id]) 
     disability_type = db.relationship('DisabilityTypeMaster', back_populates='users')
     primary_supporter = db.relationship(
@@ -163,7 +161,46 @@ class User(db.Model):
         back_populates='primary_users',
         foreign_keys=[primary_supporter_id]
     )
-    
+    # support_threads リレーションを文字列で厳格化 
+    support_threads = db.relationship(
+        'SupportThread',              
+        back_populates='user',          
+        lazy='dynamic',                 
+        cascade='all, delete-orphan'    
+    )
+    sent_messages = db.relationship(
+        'ChatMessage',
+        back_populates='sender_user',
+        foreign_keys='ChatMessage.sender_user_id'
+    )
+    # ★ 修正箇所: communication.py の ChannelParticipant からの逆参照が欠落
+    channel_participations = db.relationship('ChannelParticipant', back_populates='user')    
+    # ★ 修正箇所: communication.py の ChannelMessage からの逆参照が欠落
+    channel_messages = db.relationship('ChannelMessage', back_populates='sender_user', foreign_keys='ChannelMessage.sender_user_id')
+    # ★ 修正箇所: communication.py の UserRequest からの逆参照が欠落
+    sent_requests = db.relationship('UserRequest', back_populates='requester_user', foreign_keys='UserRequest.requester_user_id')
+    attendance_plans = db.relationship('AttendancePlan', back_populates='user')
+    daily_logs = db.relationship('DailyLog', back_populates='user')
+    support_plans = db.relationship('SupportPlan', back_populates='user')
+    assessments = db.relationship('Assessment', back_populates='user')
+    monitorings = db.relationship('Monitoring', back_populates='user')
+    meeting_minutes = db.relationship('MeetingMinute', back_populates='user')
+    contacts = db.relationship('Contact', back_populates='user')
+    compliance_facts = db.relationship('ComplianceFact', back_populates='user')
+    pre_enrollment_logs = db.relationship(
+        'PreEnrollmentLog', 
+        back_populates='user',
+        lazy='dynamic' 
+    )
+    attendance_records = db.relationship(
+        'AttendanceRecord',
+        back_populates='user',
+        lazy='dynamic'
+    )
+    job_rentention_contracts = db.relationship('JobRetentionContract', back_populates='user')
+    scheduled_participations = db.relationship('ScheduleParticipant', back_populates='user')
+    system_logs = db.relationship('SystemLog', back_populates='user')
+
     # ... (その他リレーションシップ) ...
     
     def set_password(self, password):
@@ -237,6 +274,8 @@ class DailyLog(db.Model):
     creator = db.relationship('Supporter', foreign_keys=[supporter_id], back_populates='daily_logs')
     approver = db.relationship('Supporter', foreign_keys=[approved_by_id], back_populates='approved_daily_logs')
     supporter_on_site = db.relationship('Supporter', foreign_keys=[supporter_on_site_id], back_populates='onsite_daily_logs')
+    
+    # ★★★ 修正箇所: 全て文字列リテラルに厳格化 ★★★
     attendance_status = db.relationship('AttendanceStatusMaster', back_populates='daily_logs')
     service_location = db.relationship('ServiceLocationMaster', back_populates='daily_logs')
     preparation_activity = db.relationship('PreparationActivityMaster', back_populates='daily_logs')

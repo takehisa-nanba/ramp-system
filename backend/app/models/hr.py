@@ -1,12 +1,9 @@
-# backend/app/models/hr.py
+# backend/app/models/hr.py の修正版 (循環参照の断絶を最優先)
 
 from datetime import datetime
 from app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import UniqueConstraint, Date, Integer, ForeignKey, Column
-
-from app.models.master import JobTitleMaster
-from app.models.office_admin import OfficeSetting
 
 # ----------------------------------------------------
 # 1. SupporterTimecard (職員タイムカード - 常勤換算の根拠)
@@ -25,6 +22,7 @@ class SupporterTimecard(db.Model):
     actual_work_minutes = Column(Integer, default=0, nullable=False) # 実働時間 (計算値)
     is_approved = Column(db.Boolean, default=False, nullable=False)
     
+    # Supporter モデルは core.py にあり、循環参照の対象ではないため、そのまま
     supporter = db.relationship('Supporter', back_populates='timecards')
 
 # ----------------------------------------------------
@@ -49,7 +47,12 @@ class SupporterJobAssignment(db.Model):
     
     # リレーションシップ
     supporter = db.relationship('Supporter', back_populates='job_assignments')
-    job_title = db.relationship('JobTitleMaster', back_populates='assignments')
+    
+    # A. 厳格化適用: JobTitleMaster をクラス名文字列に変更
+    job_title = db.relationship(
+        'JobTitleMaster', # <- クラス名を参照する文字列に変更
+        back_populates='assignments'
+    )
 
     __table_args__ = (
         UniqueConstraint('supporter_id', 'job_title_id', 'start_date', name='uq_supporter_job_start'),
@@ -76,24 +79,34 @@ class JobFilingRecord(db.Model):
     document_url = Column(db.String(500), nullable=True)
     
     # リレーションシップ
-    office = db.relationship('OfficeSetting', back_populates='job_filings')
-    job_title = db.relationship('JobTitleMaster', back_populates='filing_history')
+    # C. 厳格化適用: OfficeSetting をクラス名文字列に変更 (office_admin.pyとの循環参照回避)
+    office = db.relationship(
+        'OfficeSetting', # <- クラス名を参照する文字列に変更
+        back_populates='job_filings'
+    )
+    
+    # A. 厳格化適用: JobTitleMaster をクラス名文字列に変更
+    job_title = db.relationship(
+        'JobTitleMaster', # <- クラス名を参照する文字列に変更
+        back_populates='filing_history'
+    )
 
 # ----------------------------------------------------
 # 4. ExpenseCategoryMaster (勘定科目マスタ)
 # ----------------------------------------------------
 class ExpenseCategoryMaster(db.Model):
+# ... (変更なし) ...
     __tablename__ = 'expense_category_master'
     id = Column(Integer, primary_key=True)
     code = db.Column(db.String(20), nullable=False, unique=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
     is_active = db.Column(db.Boolean, default=True)
 
-
 # ----------------------------------------------------
 # 5. ExpenseRecord (経費精算記録)
 # ----------------------------------------------------
 class ExpenseRecord(db.Model):
+# ... (変更なし) ...
     __tablename__ = 'expense_records'
     id = Column(Integer, primary_key=True)
     supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False)

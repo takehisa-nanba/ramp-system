@@ -5,9 +5,11 @@ from app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import CheckConstraint, ForeignKey
 
+# ★★★ 最終修正: 外部の参照クラスを全て文字列で置き換え、インポートの順序に依存しないようにする ★★★
+# Pythonは文字列リテラルを参照する際は、ロード順序を気にしません。
+
 # ----------------------------------------------------
 # 1. SupportThread (利用者連絡帳スレッド)
-# 目的: 利用者1名 ⇔ 職員N名 の証憑が残る連絡
 # ----------------------------------------------------
 class SupportThread(db.Model):
     __tablename__ = 'support_threads'
@@ -15,20 +17,16 @@ class SupportThread(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     
     # このスレッドが「誰（利用者）」に紐づくか (必須)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False) # ★ ForeignKeyは文字列
     
-    subject = db.Column(db.String(255), nullable=False) # スレッドの件名
-    status = db.Column(db.String(50), default='open', nullable=False) # 'open', 'closed'
+    subject = db.Column(db.String(255), nullable=False) 
+    status = db.Column(db.String(50), default='open', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    
-    # アナウンス用 (Trueなら全利用者が閲覧可能)
-    thread_type = db.Column(db.String(50), default='PERSONAL', nullable=False) # 'PERSONAL' or 'ANNOUNCEMENT'
+    thread_type = db.Column(db.String(50), default='PERSONAL', nullable=False)
 
-    # このスレッドにぶら下がる全メッセージ (逆参照)
+    # リレーションシップ (User, ChatMessageは文字列)
     messages = db.relationship('ChatMessage', back_populates='thread', lazy='dynamic', cascade="all, delete-orphan")
-    
-    # このスレッドの持ち主 (逆参照)
-    user = db.relationship('User', back_populates='support_threads')
+    user = db.relationship('User', back_populates='support_threads') # ★ Userは文字列
 
 # ----------------------------------------------------
 # 2. ChatMessage (利用者連絡帳メッセージ)
@@ -47,16 +45,13 @@ class ChatMessage(db.Model):
 
     message_text = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    
-    # Trueの場合、利用者には表示しない (職員同士の内部メモ用)
     is_internal_note = db.Column(db.Boolean, default=False, nullable=False)
 
-    # リレーションシップ
+    # リレーションシップ (すべて文字列)
     thread = db.relationship('SupportThread', back_populates='messages')
     sender_supporter = db.relationship('Supporter', foreign_keys=[sender_supporter_id], back_populates='sent_support_messages')
     sender_user = db.relationship('User', foreign_keys=[sender_user_id], back_populates='sent_messages')
 
-    # ★ 送信者は必ず1人だけであることを保証する制約 ★
     __table_args__ = (
         CheckConstraint(
             '(sender_supporter_id IS NOT NULL AND sender_user_id IS NULL) OR '
@@ -66,22 +61,19 @@ class ChatMessage(db.Model):
     )
 
 # ----------------------------------------------------
-# 3. ChatChannel (汎用チャットルーム - Slack/Teams)
-# 目的: 職員間(STAFF_ONLY) または 訓練用(TRAINING)
+# 3. ChatChannel (汎用チャットルーム)
 # ----------------------------------------------------
 class ChatChannel(db.Model):
     __tablename__ = 'chat_channels'
     id = db.Column(db.Integer, primary_key=True)
     
-    name = db.Column(db.String(100), nullable=False) # 例: '浜松事業所', 'AさんBさんSST'
-    
-    # ★ ルールの核 ★
-    # 'STAFF_ONLY' (職員専用) or 'TRAINING' (訓練用)
+    name = db.Column(db.String(100), nullable=False) 
     channel_type = db.Column(db.String(50), nullable=False, default='STAFF_ONLY')
     
+    # リレーションシップ (すべて文字列)
     messages = db.relationship('ChannelMessage', back_populates='channel', lazy='dynamic', cascade="all, delete-orphan")
     participants = db.relationship('ChannelParticipant', back_populates='channel', lazy=True, cascade="all, delete-orphan")
-    u2u_request = db.relationship('UserRequest', back_populates='created_channel', uselist=False) # ★ 申請書からの逆参照
+    u2u_request = db.relationship('UserRequest', back_populates='created_channel', uselist=False)
 
 # ----------------------------------------------------
 # 4. ChannelParticipant (汎用チャット参加者)
@@ -92,15 +84,15 @@ class ChannelParticipant(db.Model):
     
     channel_id = db.Column(db.Integer, db.ForeignKey('chat_channels.id'), nullable=False)
     
-    # ★ 参加者は「職員」か「利用者」のどちらか ★
+    # 参加者は「職員」か「利用者」のどちらか
     supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
 
+    # リレーションシップ (すべて文字列)
     channel = db.relationship('ChatChannel', back_populates='participants')
     supporter = db.relationship('Supporter', back_populates='staff_channel_participations')
     user = db.relationship('User', back_populates='channel_participations')
     
-    # ★ 参加者は必ず1人だけであることを保証する制約 ★
     __table_args__ = (
         CheckConstraint(
             '(supporter_id IS NOT NULL AND user_id IS NULL) OR '
@@ -118,18 +110,18 @@ class ChannelMessage(db.Model):
     
     channel_id = db.Column(db.Integer, db.ForeignKey('chat_channels.id'), nullable=False)
     
-    # ★ 送信者も「職員」か「利用者」のどちらか ★
+    # 送信者も「職員」か「利用者」のどちらか
     sender_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=True)
     sender_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     
     message_text = db.Column(db.Text, nullable=False)
     timestamp = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     
+    # リレーションシップ (すべて文字列)
     channel = db.relationship('ChatChannel', back_populates='messages')
     sender_supporter = db.relationship('Supporter', foreign_keys=[sender_supporter_id], back_populates='sent_staff_messages')
-    sender_user = db.relationship('User', foreign_keys=[sender_user_id], back_populates='channel_messages') # Userからの逆参照
+    sender_user = db.relationship('User', foreign_keys=[sender_user_id], back_populates='channel_messages') 
 
-    # ★ 送信者は必ず1人だけであることを保証する制約 ★
     __table_args__ = (
         CheckConstraint(
             '(sender_supporter_id IS NOT NULL AND sender_user_id IS NULL) OR '
@@ -139,7 +131,7 @@ class ChannelMessage(db.Model):
     )
 
 # ----------------------------------------------------
-# 6. UserRequest (★ 汎用的な「申請書」モデル ★)
+# 6. UserRequest (汎用的な「申請書」モデル)
 # ----------------------------------------------------
 class UserRequest(db.Model):
     __tablename__ = 'user_requests'
@@ -150,33 +142,24 @@ class UserRequest(db.Model):
     requester_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
     
     # --- 2. 申請タイプ (これが核) ---
-    # 'U2U_CHAT' (利用者間チャット), 'ABSENCE' (欠席連絡), 'SCHEDULE_CHANGE' (予定変更申請), 
-    # 'INTERVIEW_REQUEST' (面談申請), 'RESUME_REVIEW' (履歴書添削) など
     request_type = db.Column(db.String(50), nullable=False, index=True)
     
     # --- 3. 申請内容 (JSON形式で柔軟に保存) ---
-    # 例: {'target_user_id': 12, 'topic': '...'}
-    # 例: {'date': '2025-11-10', 'reason': '...'}
     details = db.Column(db.JSON, nullable=True) 
     
     # --- 4. 承認ワークフロー ---
-    # 'pending' (申請中), 'approved' (承認済), 'rejected' (却下)
     status = db.Column(db.String(50), default='pending', nullable=False, index=True)
-    
     approver_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), nullable=True)
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     approved_at = db.Column(db.DateTime, nullable=True)
 
     # --- 5. 関連リソース (どのオブジェクトに紐づくか) ---
-    # 承認されて作成されたチャットルームのID
     created_channel_id = db.Column(db.Integer, db.ForeignKey('chat_channels.id'), nullable=True)
-    
-    # 変更対象のスケジュールID
     target_schedule_id = db.Column(db.Integer, db.ForeignKey('schedules.id'), nullable=True)
     
-    # リレーションシップ
+    # リレーションシップ (すべて文字列)
     requester_user = db.relationship('User', foreign_keys=[requester_user_id], back_populates='sent_requests')
     approver_supporter = db.relationship('Supporter', foreign_keys=[approver_supporter_id], back_populates='approved_requests')
     created_channel = db.relationship('ChatChannel', back_populates='u2u_request')
-    target_schedule = db.relationship('Schedule', backref='user_requests')
+    target_schedule = db.relationship('Schedule', back_populates='user_requests')

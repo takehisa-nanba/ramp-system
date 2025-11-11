@@ -38,7 +38,6 @@ class GovernmentFeeMaster(db.Model):
     ### office_admin.py 側に一本化するため、ここでは削除を推奨します。
     # decisions = db.relationship('FeeCalculationDecision', back_populates='fee_master', lazy=True)
 
-
 # ----------------------------------------------------
 # 2. ComplianceRule (法令ルールマスタ)
 # ----------------------------------------------------
@@ -52,7 +51,6 @@ class ComplianceRule(db.Model):
     service_type = db.Column(db.String(50), nullable=False)
     min_frequency = db.Column(db.Integer) 
     is_active = db.Column(db.Boolean, default=True, nullable=False)
-
 
 # ----------------------------------------------------
 # 3. FeeEligibilityRequirement (報酬算定要件詳細)
@@ -71,7 +69,6 @@ class FeeEligibilityRequirement(db.Model):
 
     fee_master = db.relationship('GovernmentFeeMaster', back_populates='requirements')
     compliance_rule = db.relationship('ComplianceRule')
-
 
 # ----------------------------------------------------
 # 4. ComplianceFact (システムによる要件充足度の評価結果)

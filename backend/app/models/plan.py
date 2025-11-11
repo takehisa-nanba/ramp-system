@@ -39,7 +39,6 @@ class SupportPlan(db.Model):
     meeting_minutes = db.relationship('MeetingMinute', back_populates='support_plan')
     system_logs = db.relationship('SystemLog', back_populates='support_plan', foreign_keys='SystemLog.support_plan_id') # 監査ログ
 
-
 # ----------------------------------------------------
 # 2. ShortTermGoal (短期目標)
 # ----------------------------------------------------
@@ -70,6 +69,9 @@ class SpecificGoal(db.Model):
     
     priority = db.Column(db.Integer) # 優先度
     
+    # ユーザー
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
     # 担当職員（FK to Supporter）
     responsible_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id')) 
     template_id = db.Column(db.Integer, db.ForeignKey('service_templates.id'))
@@ -103,9 +105,12 @@ class Monitoring(db.Model):
     progress_summary = db.Column(db.Text) # 進捗サマリー
     next_plan = db.Column(db.Text)       # 次期計画への提案
 
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+
     # リレーションシップ
     plan = db.relationship('SupportPlan', back_populates='monitorings')
     sabikan = db.relationship('Supporter', back_populates='monitoring_approvals', foreign_keys=[sabikan_id])
+    user = db.relationship('User', back_populates='monitorings')
 
 # ----------------------------------------------------
 # 5. Assessment (アセスメント)
@@ -126,7 +131,6 @@ class Assessment(db.Model):
     user = db.relationship('User', back_populates='assessments')
     sabikan = db.relationship('Supporter', back_populates='assessment_approvals', foreign_keys=[sabikan_id])
     results = db.relationship('ReadinessAssessmentResult', back_populates='assessment', lazy=True, cascade="all, delete-orphan") # ★ 逆参照
-
 
 # ----------------------------------------------------
 # 6. MeetingMinute (議事録)
@@ -173,7 +177,6 @@ class ReadinessAssessmentResult(db.Model):
     assessment_item = db.relationship('AssessmentItemMaster', back_populates='assessment_results')
     assessment_score = db.relationship('AssessmentScoreMaster', back_populates='readiness_assessment_results')
 
-
 # ----------------------------------------------------
 # 8. PreEnrollmentLog (★ initial_support.py から移動 ★)
 # 見学者・体験利用時の記録 (Userモデルに紐づく)
@@ -199,7 +202,6 @@ class PreEnrollmentLog(db.Model):
     
     # 初期アセスメントスコア
     assessment_scores = db.relationship('PreEnrollmentAssessmentScore', back_populates='enrollment_log', lazy=True, cascade="all, delete-orphan")
-
 
 # ----------------------------------------------------
 # 9. PreEnrollmentAssessmentScore (★ initial_support.py から移動 ★)

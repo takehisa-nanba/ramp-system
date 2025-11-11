@@ -1,5 +1,6 @@
-# backend/app/models/master.py
+# backend/app/models/master.py 最終修正版
 
+#import pdb; pdb.set_trace() # ★ ここで実行が停止する ★
 from app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import String, Boolean, Date, Integer, UniqueConstraint, ForeignKey
@@ -10,8 +11,15 @@ class RoleMaster(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), nullable=False, unique=True)
     
-    supporters = db.relationship('Supporter', back_populates='role')
-
+    # 【修正点 1: 不整合の解消】
+    # core.pyのSupporterから'role'リレーションが削除されたため、
+    # RoleMaster側でSupporterへの参照を明示的に定義し、back_populates='role'を回避します。
+    # これで「Mapper[Supporter(supporters)] has no property 'role'」エラーが解消されます。
+    supporters = db.relationship(
+        'Supporter', 
+        foreign_keys='[Supporter.role_id]', 
+        backref='legacy_role' # 仮のbackrefを設定
+    )
 # ----------------------------------------------------
 # 2. JobTitleMaster (★ 全ロールの源泉 / SystemAdmin権限定義 ★)
 # ----------------------------------------------------
@@ -29,14 +37,35 @@ class JobTitleMaster(db.Model):
     # ★ System運用上の最高権限フラグ (Trueの場合、SystemAdminパーミッションを持つ)
     is_system_admin = db.Column(Boolean, default=False, nullable=False)
     
-    filing_history = db.relationship('JobFilingRecord', back_populates='job_title') 
-    assignments = db.relationship('SupporterJobAssignment', back_populates='job_title') 
+    # 【修正点 2: 整合性の厳格化】
+    # hr.pyとの循環参照を確実に断つため、JobFilingRecordへの参照を文字列で明示。
+    filing_history = db.relationship(
+        'JobFilingRecord', 
+        back_populates='job_title'
+    ) 
+    # 【修正点 2: 整合性の厳格化】
+    # hr.pyとの循環参照を確実に断つため、SupporterJobAssignmentへの参照を文字列で明示。
+    assignments = db.relationship(
+        'SupporterJobAssignment', 
+        back_populates='job_title'
+    ) 
     standard_permissions = db.relationship(
         'JobTitlePermission', 
         back_populates='job_title', 
         cascade="all, delete-orphan"
     )
 
+class SupporterPermissionOverride(db.Model):
+    __tablename__ = 'supporter_permission_overrides'
+    
+    # ForeignKeyはそのまま
+    supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id'), primary_key=True)
+    permission_id = db.Column(db.Integer, db.ForeignKey('system_permissions.id'), primary_key=True)
+    
+    # 'Supporter'はcore.pyにあるため、文字列参照を維持
+    supporter = db.relationship('Supporter', back_populates='permission_overrides') 
+    permission = db.relationship('SystemPermission', back_populates='supporter_overrides') 
+# ★★★ SupporterPermissionOverride の定義は SystemPermission より上に配置 ★★★
 # ----------------------------------------------------
 # 3. SystemPermission (★ 新規追加: 全機能のパーミッションマスタ ★)
 # ----------------------------------------------------
@@ -52,7 +81,12 @@ class SystemPermission(db.Model):
 
     # 逆参照: JobTitlePermission, SupporterPermissionOverride
     job_title_permissions = db.relationship('JobTitlePermission', back_populates='permission')
-    supporter_overrides = db.relationship('SupporterPermissionOverride', back_populates='permission')
+    # 【修正点 3: ロード順エラーの解消】
+    # core.py内のクラスを参照するリレーションを文字列にすることで、ロード順序によるエラーを回避。
+    supporter_overrides = db.relationship(
+        'SupporterPermissionOverride', 
+        back_populates='permission'
+    )
 
 # ----------------------------------------------------
 # 4. JobTitlePermission (★ 新規追加: 職務とパーミッションの紐付け)
@@ -71,6 +105,9 @@ class StatusMaster(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(50), nullable=False) #例: 'user', 'plan'
     name = db.Column(db.String(50), nullable=False) #例: '新規問合せ', '利用中', 'Draft'
+    
+    Users = db.relationship('User', back_populates='status')
+    SupportPlans = db.relationship('SupportPlan', back_populates='status')
     
 class AttendanceStatusMaster(db.Model):
     __tablename__ = 'attendance_status_master'

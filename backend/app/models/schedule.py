@@ -37,7 +37,6 @@ class Schedule(db.Model):
     # --- ★ UserRequestからの逆参照を追加 ★ ---
     user_requests = db.relationship('UserRequest', back_populates='target_schedule')
 
-
 # ----------------------------------------------------
 # 2. ScheduleParticipant (参加者管理)
 # ----------------------------------------------------

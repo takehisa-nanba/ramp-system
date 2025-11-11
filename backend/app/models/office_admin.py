@@ -49,6 +49,7 @@ class OfficeSetting(db.Model):
     service_configs = db.relationship('OfficeServiceConfiguration', back_populates='office', lazy=True)
     additive_filings = db.relationship('OfficeAdditiveFiling', back_populates='office', lazy=True)
     fee_decisions = db.relationship('FeeCalculationDecision', back_populates='office', lazy=True)
+    job_filings = db.relationship('JobFilingRecord', back_populates='office', lazy=True)
 
 # ----------------------------------------------------
 # 3. OfficeServiceConfiguration (多機能型サービス設定)

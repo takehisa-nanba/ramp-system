@@ -26,7 +26,7 @@ class JobRetentionContract(db.Model):
     fee_payer_id = db.Column(db.Integer, db.ForeignKey('fee_payer_master.id'))
 
     # リレーションシップ
-    user = db.relationship('User', back_populates='retention_contracts')
+    user = db.relationship('User')
     records = db.relationship('JobRetentionRecord', back_populates='contract', lazy=True)
     fee_payer = db.relationship('FeePayerMaster', back_populates='retention_contracts')
 
