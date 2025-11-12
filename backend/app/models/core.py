@@ -152,6 +152,21 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow) 
     remarks = db.Column(db.Text)
 
+    @property
+    def certificate_number(self):
+        """受給者証番号を読み出すときに、暗号文を復号して平文を返す (ゲッター)"""
+        # 復号処理を security_service に依頼
+        return decrypt_data(self.encrypted_certificate_number)
+
+    @certificate_number.setter
+    def certificate_number(self, plaintext):
+        """受給者証番号を書き込むときに、平文を暗号化してDBに保存する (セッター)"""
+        if plaintext:
+            # 暗号化処理を security_service に依頼
+            self.encrypted_certificate_number = encrypt_data(plaintext)
+        else:
+            self.encrypted_certificate_number = None
+
     # --- リレーションシップ ---
     # ★★★ 修正箇所: 全て文字列リテラルに厳格化 ★★★
     status = db.relationship('StatusMaster', foreign_keys=[status_id]) 

@@ -69,9 +69,6 @@ class SpecificGoal(db.Model):
     
     priority = db.Column(db.Integer) # 優先度
     
-    # ユーザー
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-
     # 担当職員（FK to Supporter）
     responsible_supporter_id = db.Column(db.Integer, db.ForeignKey('supporters.id')) 
     template_id = db.Column(db.Integer, db.ForeignKey('service_templates.id'))
