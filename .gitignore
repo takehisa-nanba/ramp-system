@@ -19,6 +19,8 @@ load_models.py
 data_list.py
 fetch_supporter_data.py
 diagnose_model_loading.py
+test_get_data.py
+
 ---
 
 # --------------------------
