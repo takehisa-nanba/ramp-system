@@ -1,4 +1,4 @@
-from ...extensions import db
+from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
@@ -130,7 +130,10 @@ class SupportConferenceLog(db.Model):
     
     conference_date = Column(DateTime, nullable=False, default=func.now())
     participant_user_flag = Column(Boolean, default=False) # 本人参加フラグ
-    # participant_supporter_ids (JSON or Link Table)
+    
+    # ★ NEW: 本人不在の「やむを得ない理由」（原理1）
+    # 本人が不在(False)の場合、この理由の記述が「同意待ち」に進むための必須条件となる
+    reason_for_user_absence = Column(Text, nullable=True) 
     
     # --- 議事録（原理4） ---
     minutes_content = Column(Text) # 議事録のテキスト内容（システムがPDF化）

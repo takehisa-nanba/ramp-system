@@ -1,9 +1,9 @@
 from flask import Flask
 # ★ 修正点: 'from config' を 'from ..config' に変更
 # これにより、appパッケージの「親」にある config.py を正しく参照する
-from ..config import Config
+from backend.config import Config
 # 拡張機能を「app/extensions.py」からインポートします
-from .extensions import db, bcrypt, migrate
+from backend.app.extensions import db, bcrypt, migrate
 
 def create_app(config_name='default'):
     """アプリケーションファクトリ関数"""

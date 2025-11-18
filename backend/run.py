@@ -1,8 +1,8 @@
 import os
 # ★ 修正点: 'from app' を 'from .app' に変更
 # これにより、run.py と同じ階層にある app パッケージを正しく参照する
-from .app import create_app, db
-from .app import models 
+from backend.app import create_app, db
+from backend.app import models 
 
 # どの設定で起動するかを決定 (環境変数から)
 config_name = os.getenv('FLASK_CONFIG') or 'default'

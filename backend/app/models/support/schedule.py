@@ -1,4 +1,4 @@
-from ...extensions import db
+from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime
 

@@ -1,4 +1,4 @@
-from ...extensions import db
+from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
@@ -40,22 +40,26 @@ class CommitteeActivityLog(db.Model):
 class OfficeTrainingEvent(db.Model):
     """
     事業所が実施した研修イベント（避難訓練など）の「実施事実」。
-    職員の参加記録(TrainingLog)の親となる。
+    TrainingTypeMasterと紐づけることで、法定頻度を監視可能にする（原理1）。
     """
     __tablename__ = 'office_training_events'
     
     id = Column(Integer, primary_key=True)
     office_id = Column(Integer, ForeignKey('office_settings.id'), nullable=False, index=True)
     
-    training_name = Column(String(255), nullable=False)
-    # (例: 'FIRE_DRILL', 'ABUSE_PREVENTION_TRAINING')
-    training_type = Column(String(50), nullable=False, index=True)
+    # ★ 修正: 文字列ではなくマスタIDを参照
+    training_type_id = Column(Integer, ForeignKey('training_type_master.id'), nullable=False, index=True)
+    
+    training_name = Column(String(255), nullable=False) # 具体的な研修名
     
     event_timestamp = Column(DateTime, nullable=False, default=func.now())
     duration_minutes = Column(Integer) # 研修時間（分）
     instructor = Column(String(100)) # 講師名
     
     office = relationship('OfficeSetting')
+    # ★ NEW: 研修種別へのリレーション
+    training_type = relationship('TrainingTypeMaster', back_populates='events')
+    
     # 参加した職員のTrainingLogからの逆参照
     attendee_logs = relationship('TrainingLog', back_populates='office_event', lazy='dynamic')
 

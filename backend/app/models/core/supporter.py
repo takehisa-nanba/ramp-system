@@ -1,8 +1,8 @@
-from ...extensions import db, bcrypt
+from backend.app.extensions import db, bcrypt
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
 # RBAC連携テーブルをインポート
-from .rbac_links import supporter_role_link
+from backend.app.models.core.rbac_links import supporter_role_link
 
 # ====================================================================
 # 1. Supporter (職員情報 / 契約の責務)
@@ -189,3 +189,27 @@ class AttendanceCorrectionRequest(db.Model):
     
     supporter = relationship('Supporter', foreign_keys=[supporter_id])
     approver = relationship('Supporter', foreign_keys=[approver_id])
+
+# ====================================================================
+# 6. StaffActivityAllocationLog (職員活動配分ログ / 生産性分析)
+# ====================================================================
+class StaffActivityAllocationLog(db.Model):
+    """
+    職員の日次の活動時間配分（支援、事務、移動など）。
+    業務改善（ムダ取り）の基礎データとなる。
+    """
+    __tablename__ = 'staff_activity_allocation_logs'
+    
+    id = Column(Integer, primary_key=True)
+    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False, index=True)
+    
+    activity_date = Column(Date, nullable=False)
+    
+    # どの活動か (masters/master_definitions.py の StaffActivityMaster を参照)
+    staff_activity_master_id = Column(Integer, ForeignKey('staff_activity_master.id'), nullable=False)
+    
+    allocated_minutes = Column(Integer, nullable=False) # 時間（分）
+    
+    # --- リレーションシップ ---
+    supporter = relationship('Supporter')
+    activity_type = relationship('StaffActivityMaster', back_populates='logs')

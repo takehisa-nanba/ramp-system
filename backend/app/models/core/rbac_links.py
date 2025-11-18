@@ -1,4 +1,4 @@
-from ...extensions import db
+from backend.app.extensions import db
 from sqlalchemy import Column, Integer, ForeignKey, Table
 
 # ====================================================================

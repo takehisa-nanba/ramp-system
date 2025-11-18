@@ -1,11 +1,11 @@
 # 🚨 修正点: 'from app.extensions import db' を
 # 3階層上の 'extensions.py' を指すように変更
-from ...extensions import db
+from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text, Numeric
 
 # 🚨 修正点: rbac_links のインポートパスを相対パスに変更
-from ..core.rbac_links import supporter_role_link, role_permission_link
+from backend.app.models.core.rbac_links import supporter_role_link, role_permission_link
 
 # ====================================================================
 # 法令上の定義と分類
@@ -29,7 +29,7 @@ class DisabilityTypeMaster(db.Model):
     name = Column(String(50), unique=True, nullable=False)
     
     # Userモデルからの逆参照
-    users = relationship('User', back_populates='disability_type', lazy='dynamic')
+    users = relationship('UserPII', back_populates='disability_type', lazy='dynamic')
 
 class GenderLegalMaster(db.Model):
     """戸籍上の性別（男性/女性）"""
@@ -38,7 +38,7 @@ class GenderLegalMaster(db.Model):
     name = Column(String(20), unique=True, nullable=False)
 
     # Userモデルからの逆参照
-    users = relationship('User', back_populates='gender_legal', lazy='dynamic')
+    users = relationship('UserPII', back_populates='gender_legal', lazy='dynamic')
     
 class MunicipalityMaster(db.Model):
     """発行自治体情報（請求先コード、自治体名など）"""
@@ -100,10 +100,7 @@ class TrainingPrerequisiteMaster(db.Model):
     id = Column(Integer, primary_key=True)
     job_title_id = Column(Integer, ForeignKey('job_title_master.id'))
     law_name = Column(String(100)) # 法的根拠
-    
-    # 🚨 修正点: 裸の 'law_article' を削除し、正しい Column 定義のみを残します
     law_article = Column(String(50)) # 該当条項
-    
     effective_date = Column(Date) # このルールが有効になる日付
 
 class DocumentTypeMaster(db.Model):
@@ -111,6 +108,8 @@ class DocumentTypeMaster(db.Model):
     __tablename__ = 'document_type_master'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False) # 例: 履歴書, 実務経験証明書, 委任状
+    # ★ 機密フラグ (user_333での合意)
+    is_confidential = Column(Boolean, default=False)
     
     # UserDocumentからの逆参照
     user_documents = relationship('UserDocument', back_populates='document_type_master', lazy='dynamic')
@@ -124,6 +123,17 @@ class CommitteeTypeMaster(db.Model):
     
     # CommitteeActivityLogからの逆参照
     logs = relationship('CommitteeActivityLog', back_populates='committee_type', lazy='dynamic')
+
+# ★ NEW: 研修種別マスタ (TrainingTypeMaster)
+class TrainingTypeMaster(db.Model):
+    """法定研修の種別マスター（虐待防止研修、感染症対策研修など）"""
+    __tablename__ = 'training_type_master'
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    required_frequency_months = Column(Integer) # 法令上の実施頻度
+    
+    # OfficeTrainingEventからの逆参照
+    events = relationship('OfficeTrainingEvent', back_populates='training_type', lazy='dynamic')
     
 class StaffActivityMaster(db.Model):
     """職員の就業時間内の活動種別マスター（請求業務、事務作業など）"""
