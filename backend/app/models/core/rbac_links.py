@@ -5,7 +5,6 @@ from sqlalchemy import Column, Integer, ForeignKey, Table
 # 1. SupporterRoleLink (職員と役割の連携)
 # ====================================================================
 # 責務: 職員(Supporter)と役割(RoleMaster)の多対多（N:M）関係を定義する。
-# これにより、一人の職員が複数の役割（例: 業務ロール、法人ロール）を持つことができる。
 supporter_role_link = Table(
     'supporter_role_link',
     db.metadata,
@@ -17,7 +16,6 @@ supporter_role_link = Table(
 # 2. RolePermissionLink (役割と権限の連携)
 # ====================================================================
 # 責務: 役割(RoleMaster)と権限(PermissionMaster)の多対多（N:M）関係を定義する。
-# これにより、「サビ管ロール」に「計画承認権限」を紐づけるなど、柔軟な権限設定が可能になる。
 role_permission_link = Table(
     'role_permission_link',
     db.metadata,

@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -35,6 +36,6 @@ class AuditActionLog(db.Model):
     change_details = Column(Text) 
     timestamp = Column(DateTime, default=func.now(), nullable=False)
     
-    # リレーションシップ（core/user.py, core/supporter.py を参照）
+    # リレーションシップ
     user = relationship('User', foreign_keys=[user_id])
     supporter = relationship('Supporter', foreign_keys=[supporter_id])

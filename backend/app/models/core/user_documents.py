@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -25,7 +26,7 @@ class UserSkill(db.Model):
     acquisition_date = Column(Date) # 取得日または評価日
     
     user = relationship('User', back_populates='skills')
-    skill_master = relationship('SkillMaster')
+    skill_master = relationship('SkillMaster', back_populates='user_skills')
 
 # ====================================================================
 # 2. UserDocument (源泉文書の管理)
@@ -51,4 +52,4 @@ class UserDocument(db.Model):
     assessment_notes_by_staff = Column(Text) 
     
     user = relationship('User', back_populates='documents')
-    document_type_master = relationship('DocumentTypeMaster')
+    document_type_master = relationship('DocumentTypeMaster', back_populates='user_documents')

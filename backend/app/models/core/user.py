@@ -1,9 +1,10 @@
-# 🚨 修正点: 'from app...' を 'backend.app...' に修正
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, UniqueConstraint, CheckConstraint, func
 
-# 🚨 修正点: 'security_service'のインポートを削除（Userモデルは直接使わず、UserPIIが実行時インポートする）
+# 🚨 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
+#    各メソッド内で実行時にインポートします。
 import datetime
 
 # ====================================================================
@@ -12,7 +13,7 @@ import datetime
 class User(db.Model):
     """
     利用者の業務データ（システムの核）。
-    個人特定可能情報(PII)を一切含まず、匿名IDとステータスで管理する。
+    個人特定可能情報(PII)や認証情報を一切含まず、匿名IDのみで管理する。
     """
     __tablename__ = 'users'
     
@@ -38,7 +39,7 @@ class User(db.Model):
     
     # --- リレーションシップ ---
     
-    # PII（個人特定可能情報）保管庫への1対1リレーション
+    # PII（個人特定可能情報＆認証）保管庫への1対1リレーション
     pii = relationship('UserPII', back_populates='user', uselist=False, cascade="all, delete-orphan")
     
     # マスター関連 (mastersパッケージのモデルを参照)
@@ -70,16 +71,23 @@ class User(db.Model):
     # --- 就労先の子テーブル ---
     job_placements = relationship('JobPlacementLog', back_populates='user', lazy='dynamic')
     
+    # --- 監査・コンプライアンス ---
+    compliance_events = relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
+    
+    # --- インシデント・苦情 ---
+    incident_reports = relationship('IncidentReport', back_populates='user', lazy='dynamic')
+    complaints = relationship('ComplaintLog', foreign_keys='ComplaintLog.complainant_user_id', lazy='dynamic')
+
     def __repr__(self):
         return f'<User {self.id}: {self.display_name}>'
 
 # ====================================================================
-# 2. UserPII (個人特定可能情報 / 3階層暗号化)
+# 2. UserPII (個人特定可能情報 & 認証 / 3階層暗号化)
 # ====================================================================
 class UserPII(db.Model):
     """
     利用者の最高機密情報（PII）および認証情報。
-    Userモデルと1対1で紐づく。
+    Userモデルと1対1で紐づき、データは3階層の暗号化戦略で隔離される（原理6）。
     """
     __tablename__ = 'user_pii'
     
@@ -87,23 +95,23 @@ class UserPII(db.Model):
     user_id = Column(Integer, ForeignKey('users.id'), unique=True, nullable=False)
     
     # --- 階層1：最高機密（エンベロープ暗号化） ---
-    encrypted_certificate_number = Column(String(512))
-    encrypted_data_key = Column(String(512)) 
+    encrypted_certificate_number = Column(String(512)) # 受給者証番号
+    encrypted_data_key = Column(String(512)) # ★ 法人KEKで暗号化されたDEK
 
     # --- 階層2：機密PII（システム共通鍵暗号化） ---
+    # 氏名、住所、連絡先などは「階層2」の鍵で暗号化
     encrypted_last_name = Column(String(255))
     encrypted_first_name = Column(String(255))
     encrypted_last_name_kana = Column(String(255))
     encrypted_first_name_kana = Column(String(255))
     encrypted_address = Column(String(512))
     
-    # --- 平文（検索・計算用） ---
-    # ★ 修正: 生年月日を平文(Date型)に変更
-    birth_date = Column(Date) 
+    # --- 平文（検索・計算・ユニーク制約用） ---
+    # 原理4（パフォーマンス）と原理6（セキュリティ）のバランス調整結果
+    birth_date = Column(Date) # 年齢計算・検索のため平文
+    phone_number = Column(String(20), index=True) # 重複チェックのため平文
+    email = Column(String(120), unique=True, index=True) # ログインIDのため平文
     
-    # ★ 修正: 電話番号・Email・SNS ID は平文
-    phone_number = Column(String(20), index=True)
-    email = Column(String(120), unique=True, index=True)
     sns_account_id = Column(String(255), index=True)
     sns_provider = Column(String(50), index=True) 
 
@@ -111,7 +119,7 @@ class UserPII(db.Model):
     password_hash = Column(String(128)) 
     pin_hash = Column(String(128))
     
-    # --- 平文の業務データ ---
+    # --- 平文（暗号化不要）の業務データ ---
     gender_legal_id = Column(Integer, ForeignKey('gender_legal_master.id')) 
     gender_identity = Column(String(100))
     disability_type_id = Column(Integer, ForeignKey('disability_type_master.id')) 
@@ -125,14 +133,139 @@ class UserPII(db.Model):
     gender_legal = relationship('GenderLegalMaster', foreign_keys=[gender_legal_id])
     disability_type = relationship('DisabilityTypeMaster', foreign_keys=[disability_type_id])
 
-    # === プロパティ（ゲッター/セッター） ===
+    # === プロパティ（ゲッター/セッター）による暗号化の抽象化 ===
     
-    # (certificate_number, last_name, address などのプロパティは変更なし)
+    def _get_corporation_id(self) -> int:
+        """
+        このPIIが属する「法人ID」を取得する。
+        """
+        # 🚨 暫定的なフォールバック（本来は契約情報から取得）
+        return 1 
+
+    # --- 階層1：受給者証番号 (エンベロープ暗号化) ---
+    @property
+    def certificate_number(self):
+        """受給者証番号（平文）を読み出す (階層1)"""
+        if not self.encrypted_certificate_number or not self.encrypted_data_key:
+            return None
+        
+        # 実行時インポート（循環参照回避）
+        from backend.app.services.core_service import get_corporation_id_for_user, get_corporation_kek
+        from backend.app.services.security_service import decrypt_data_envelope
+        
+        corp_id = get_corporation_id_for_user(self.user)
+        kek_bytes = get_corporation_kek(corp_id)
+        
+        return decrypt_data_envelope(
+            self.encrypted_certificate_number, 
+            self.encrypted_data_key, 
+            kek_bytes
+        )
+
+    @certificate_number.setter
+    def certificate_number(self, plaintext):
+        """受給者証番号（平文）を暗号化して保存する (階層1)"""
+        from backend.app.services.core_service import get_corporation_id_for_user, get_corporation_kek
+        from backend.app.services.security_service import encrypt_data_envelope
+        
+        if plaintext:
+            corp_id = get_corporation_id_for_user(self.user)
+            kek_bytes = get_corporation_kek(corp_id)
+            
+            encrypted_data, encrypted_key = encrypt_data_envelope(plaintext, kek_bytes)
+            self.encrypted_certificate_number = encrypted_data
+            self.encrypted_data_key = encrypted_key
+        else:
+            self.encrypted_certificate_number = None
+            self.encrypted_data_key = None
+
+    # --- 階層2：機密PII (システム共通鍵) ---
     
-    # ★ 削除: birth_date の暗号化プロパティは不要になったため削除
-    
-    # ... (認証メソッドなどは変更なし) ...
-    
+    @property
+    def last_name(self):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import decrypt_data_pii
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_last_name, key)
+
+    @last_name.setter
+    def last_name(self, plaintext):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import encrypt_data_pii
+        key = get_system_pii_key()
+        self.encrypted_last_name = encrypt_data_pii(plaintext, key)
+
+    @property
+    def first_name(self):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import decrypt_data_pii
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_first_name, key)
+
+    @first_name.setter
+    def first_name(self, plaintext):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import encrypt_data_pii
+        key = get_system_pii_key()
+        self.encrypted_first_name = encrypt_data_pii(plaintext, key)
+
+    @property
+    def last_name_kana(self):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import decrypt_data_pii
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_last_name_kana, key)
+
+    @last_name_kana.setter
+    def last_name_kana(self, plaintext):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import encrypt_data_pii
+        key = get_system_pii_key()
+        self.encrypted_last_name_kana = encrypt_data_pii(plaintext, key)
+
+    @property
+    def first_name_kana(self):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import decrypt_data_pii
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_first_name_kana, key)
+
+    @first_name_kana.setter
+    def first_name_kana(self, plaintext):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import encrypt_data_pii
+        key = get_system_pii_key()
+        self.encrypted_first_name_kana = encrypt_data_pii(plaintext, key)
+        
+    @property
+    def address(self):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import decrypt_data_pii
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_address, key)
+
+    @address.setter
+    def address(self, plaintext):
+        from backend.app.services.core_service import get_system_pii_key
+        from backend.app.services.security_service import encrypt_data_pii
+        key = get_system_pii_key()
+        self.encrypted_address = encrypt_data_pii(plaintext, key)
+
+    # --- 階層3：認証 ---
+    def set_password(self, password):
+        self.password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+
+    def check_password(self, password):
+        if self.password_hash is None: return False
+        return bcrypt.check_password_hash(self.password_hash, password)
+
+    def set_pin(self, pin):
+        self.pin_hash = bcrypt.generate_password_hash(pin).decode('utf-8')
+
+    def check_pin(self, pin):
+        if self.pin_hash is None: return False
+        return bcrypt.check_password_hash(self.pin_hash, pin)
+
     __table_args__ = (
         CheckConstraint(
             '(sns_provider IS NULL AND sns_account_id IS NULL) OR '
