@@ -6,9 +6,6 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateT
 # 🚨 修正点: rbac_links を絶対参照でインポート
 from backend.app.models.core.rbac_links import supporter_role_link
 
-# 🚨 修正点: 暗号化サービスのインポート（実行時インポート推奨だが、型定義などで必要なら記述）
-# ここでは循環参照回避のためプロパティ内でインポートするスタイルを踏襲
-
 # ====================================================================
 # 1. Supporter (職員の業務エンティティ / 表)
 # ====================================================================
@@ -53,22 +50,40 @@ class Supporter(db.Model):
     job_assignments = relationship('SupporterJobAssignment', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
     qualifications = relationship('SupporterQualification', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
     
-    # 活動配分ログ（生産性分析）
-    activity_allocations = relationship('StaffActivityAllocationLog', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
+    # 活動配分ログ（あいまい回避のため foreign_keys を明示）
+    activity_allocations = relationship(
+        'StaffActivityAllocationLog', 
+        back_populates='supporter', 
+        foreign_keys='StaffActivityAllocationLog.supporter_id', 
+        lazy='dynamic', 
+        cascade="all, delete-orphan"
+    )
     
-    # 勤怠修正申請
-    attendance_correction_requests = relationship('AttendanceCorrectionRequest', foreign_keys='AttendanceCorrectionRequest.supporter_id', lazy='dynamic')
+    # 勤怠修正申請（あいまい回避のため foreign_keys を明示）
+    attendance_correction_requests = relationship(
+        'AttendanceCorrectionRequest', 
+        back_populates='supporter',
+        foreign_keys='AttendanceCorrectionRequest.supporter_id', 
+        lazy='dynamic'
+    )
     
     # ★ RBAC（役割）へのリレーションシップ
     roles = relationship('RoleMaster', secondary=supporter_role_link, back_populates='supporters')
     
-    # 逆参照 (User, OfficeSettingなど)
+    # 逆参照 (User)
     primary_users = relationship('User', back_populates='primary_supporter', lazy='dynamic')
-    owned_offices = relationship('OfficeSetting', back_populates='owner_supporter', foreign_keys='OfficeSetting.owner_supporter_id')
+    
+    # 逆参照 (Office - 管理者など)
+    # ※ owned_offices は削除しました（OfficeSetting側のカラム削除に伴い）
+    
+    # サービス管理責任者としての担当サービス
     managed_services = relationship('OfficeServiceConfiguration', back_populates='manager_supporter', foreign_keys='OfficeServiceConfiguration.manager_supporter_id')
     
     # 内省ログ
     reflection_logs = relationship('StaffReflectionLog', back_populates='supporter', lazy='dynamic')
+    
+    # ★ 追加: 所属事業所へのリレーション
+    office = relationship('OfficeSetting', back_populates='staff_members', foreign_keys=[office_id])
     
     def __repr__(self):
         return f'<Supporter {self.id}: {self.last_name} {self.first_name}>'
@@ -166,7 +181,9 @@ class SupporterTimecard(db.Model):
     check_out = Column(DateTime)
     total_break_minutes = Column(Integer, default=0, nullable=False)
     
-    # --- みなし時間・休暇 ---
+    # --- 常勤換算と法令遵守（みなし時間） ---
+    scheduled_work_minutes = Column(Integer, default=0, nullable=False)
+    
     is_absent = Column(Boolean, default=False)
     absence_type = Column(String(50)) # 'PAID_LEAVE', 'TRAINING', etc.
     deemed_work_minutes = Column(Integer, default=0) # 有給などのみなし時間
@@ -264,7 +281,7 @@ class StaffActivityAllocationLog(db.Model):
     # --- 承認 ---
     approver_id = Column(Integer, ForeignKey('supporters.id'))
     
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    supporter = relationship('Supporter', foreign_keys=[supporter_id], back_populates='activity_allocations')
     activity_type = relationship('StaffActivityMaster', back_populates='logs')
     approver = relationship('Supporter', foreign_keys=[approver_id])
 
@@ -289,5 +306,5 @@ class AttendanceCorrectionRequest(db.Model):
     approver_id = Column(Integer, ForeignKey('supporters.id'))
     processed_at = Column(DateTime)
     
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    supporter = relationship('Supporter', foreign_keys=[supporter_id], back_populates='attendance_correction_requests')
     approver = relationship('Supporter', foreign_keys=[approver_id])

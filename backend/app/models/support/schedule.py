@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime
@@ -7,16 +8,19 @@ from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime
 # ====================================================================
 # 責務: スケジュール(N)と参加者(M)を紐づける
 # 利用者(User)と職員(Supporter)の両方を参加者として扱えるよう、
-# user_id と supporter_id の両方をFKとして持つ。
+# user_id と supporter_id の両方をFKとして持つ（原理5）。
+# 修正: 1つのスケジュールに複数の参加者を登録できるよう、代理キー(id)を設定。
 schedule_participants = db.Table(
     'schedule_participants', 
-    db.Column('schedule_id', db.Integer, db.ForeignKey('schedules.id'), primary_key=True),
+    db.metadata,
+    db.Column('id', db.Integer, nullable=False, primary_key=True),
+    db.Column('schedule_id', db.Integer, db.ForeignKey('schedules.id'), index=True),
     
-    # 利用者の参加
-    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), primary_key=True, index=True), 
+    # 利用者の参加 (NULL許容)
+    db.Column('user_id', db.Integer, db.ForeignKey('users.id'), index=True), 
     
-    # 職員の参加
-    db.Column('supporter_id', db.Integer, db.ForeignKey('supporters.id'), primary_key=True, index=True) 
+    # 職員の参加 (NULL許容)
+    db.Column('supporter_id', db.Integer, db.ForeignKey('supporters.id'), index=True) 
 )
 
 # ====================================================================
@@ -28,20 +32,27 @@ class Schedule(db.Model):
     利用者と職員の両方の参加に対応する。
     """
     __tablename__ = 'schedules'
-    id = Column(Integer, primary_key=True)
+    
+    id = Column(Integer, nullable=False, primary_key=True)
     title = Column(String(255), nullable=False)
     location = Column(String(255))
     
     start_time = Column(DateTime, nullable=False, index=True)
     end_time = Column(DateTime)
     
-    # スケジュール種別（例: 'INDIVIDUAL_SUPPORT', 'STAFF_MEETING', 'SHIFT')
+    # スケジュール種別（例: 'INDIVIDUAL_SUPPORT', 'STAFF_MEETING', 'SHIFT', 'OUTSIDE_WORK'）
+    # 'OUTSIDE_WORK'の場合、オフライン準備のアラートトリガーとなる。
     schedule_type = Column(String(50))
+    
+    # 備考（詳細な指示など）
+    description = Column(String(500))
 
     # --- リレーションシップ (多対多) ---
     
-    # このスケジュールに参加する「利用者」 (core/user.py を参照)
+    # このスケジュールに参加する「利用者」
+    # (Userモデルの backref='user_schedules' で逆参照可能)
     participants_user = db.relationship('User', secondary=schedule_participants, backref='user_schedules')
     
-    # このスケジュールに参加する「職員」 (core/supporter.py を参照)
+    # このスケジュールに参加する「職員」
+    # (Supporterモデルの backref='supporter_schedules' で逆参照可能)
     participants_supporter = db.relationship('Supporter', secondary=schedule_participants, backref='supporter_schedules')

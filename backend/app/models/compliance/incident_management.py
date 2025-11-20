@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -9,6 +10,7 @@ class IncidentReport(db.Model):
     """
     事故・ヒヤリハット報告（リスクマネジメントの核）。
     「事実の記録」と「再発防止策の追跡」を担う（原理1）。
+    「問題の所在」タグ付けにより、ナレッジベース化する（原理2）。
     """
     __tablename__ = 'incident_reports'
     
@@ -21,12 +23,19 @@ class IncidentReport(db.Model):
     # (例: 'ACCIDENT', 'NEAR_MISS')
     incident_type = Column(String(30), nullable=False, index=True) 
     
+    # ナレッジ共有のためのタグ (masters/master_definitions.py の IssueCategoryMaster を参照)
+    issue_category_id = Column(Integer, ForeignKey('issue_category_master.id'))
+    
     occurrence_timestamp = Column(DateTime, nullable=False, default=func.now()) # 発生日時
     detailed_description = Column(Text, nullable=False) # 詳細 (NULL禁止)
     
     # --- 監査証跡（原理1） ---
     cause_analysis = Column(Text, nullable=False) # 原因分析 (NULL禁止)
     preventive_action_plan = Column(Text, nullable=False) # 再発防止策 (NULL禁止)
+    
+    # --- 意味のポケット（原理2：ポジティブな転換） ---
+    # トラブルの中に潜んでいた、肯定的な変化や兆し（任意）
+    positive_turning_point = Column(Text)
     
     # --- ワークフロー ---
     # (DRAFT, PENDING_APPROVAL, FINALIZED)
@@ -37,6 +46,7 @@ class IncidentReport(db.Model):
     user = relationship('User')
     reporting_staff = relationship('Supporter', foreign_keys=[reporting_staff_id])
     approver = relationship('Supporter', foreign_keys=[approver_id])
+    issue_category = relationship('IssueCategoryMaster')
 
 # ====================================================================
 # 2. ComplaintLog (苦情対応記録)

@@ -1,8 +1,8 @@
-"""V2.0 - Initial logical model structure
+"""V2.2 - Finalized Architecture
 
-Revision ID: 2c5f03c019a9
+Revision ID: 4fc6ace55584
 Revises: 
-Create Date: 2025-11-17 20:15:46.224617
+Create Date: 2025-11-21 07:44:56.092505
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '2c5f03c019a9'
+revision = '4fc6ace55584'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -42,6 +42,7 @@ def upgrade():
     sa.Column('phone_number', sa.String(length=20), nullable=True),
     sa.Column('corporation_seal_image_url', sa.String(length=500), nullable=True),
     sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('kek_reference_id', sa.String(length=255), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('corporation_number')
     )
@@ -54,6 +55,7 @@ def upgrade():
     op.create_table('document_type_master',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('is_confidential', sa.Boolean(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('employer_master',
@@ -68,9 +70,36 @@ def upgrade():
     with op.batch_alter_table('employer_master', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_employer_master_company_name'), ['company_name'], unique=False)
 
+    op.create_table('failure_factor_master',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('description', sa.Text(), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
     op.create_table('gender_legal_master',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=20), nullable=False),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name')
+    )
+    op.create_table('government_fee_master',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('code', sa.String(length=20), nullable=False),
+    sa.Column('category', sa.String(length=20), nullable=False),
+    sa.Column('units', sa.Integer(), nullable=True),
+    sa.Column('needs_office_filing', sa.Boolean(), nullable=True),
+    sa.Column('needs_user_eligibility', sa.Boolean(), nullable=True),
+    sa.Column('needs_daily_record', sa.Boolean(), nullable=True),
+    sa.Column('calculation_type', sa.String(length=20), nullable=False),
+    sa.Column('logic_key', sa.String(length=50), nullable=True),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('code')
+    )
+    op.create_table('issue_category_master',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -126,6 +155,7 @@ def upgrade():
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('name', sa.String(length=50), nullable=False),
     sa.Column('role_scope', sa.String(length=20), nullable=False),
+    sa.Column('sort_order', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
@@ -136,6 +166,7 @@ def upgrade():
     sa.Column('start_time', sa.DateTime(), nullable=False),
     sa.Column('end_time', sa.DateTime(), nullable=True),
     sa.Column('schedule_type', sa.String(length=50), nullable=True),
+    sa.Column('description', sa.String(length=500), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('schedules', schema=None) as batch_op:
@@ -167,30 +198,17 @@ def upgrade():
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('name')
     )
-    op.create_table('supporters',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('last_name', sa.String(length=50), nullable=False),
-    sa.Column('first_name', sa.String(length=50), nullable=False),
-    sa.Column('last_name_kana', sa.String(length=50), nullable=False),
-    sa.Column('first_name_kana', sa.String(length=50), nullable=False),
-    sa.Column('hire_date', sa.Date(), nullable=False),
-    sa.Column('retirement_date', sa.Date(), nullable=True),
-    sa.Column('email', sa.String(length=120), nullable=False),
-    sa.Column('password_hash', sa.String(length=128), nullable=True),
-    sa.Column('employment_type', sa.String(length=50), nullable=False),
-    sa.Column('weekly_scheduled_minutes', sa.Integer(), nullable=False),
-    sa.Column('employment_contract_url', sa.String(length=500), nullable=True),
-    sa.Column('resume_url', sa.String(length=500), nullable=True),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('supporters', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_supporters_email'), ['email'], unique=True)
-
     op.create_table('system_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
     sa.Column('log_level', sa.String(length=20), nullable=True),
     sa.Column('message', sa.Text(), nullable=False),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('training_type_master',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('required_frequency_months', sa.Integer(), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_table('vendor_master',
@@ -200,6 +218,122 @@ def upgrade():
     sa.Column('contact_person', sa.String(length=100), nullable=True),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_table('office_settings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('corporation_id', sa.Integer(), nullable=False),
+    sa.Column('office_name', sa.String(length=100), nullable=False),
+    sa.Column('municipality_id', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.Column('office_seal_image_url', sa.String(length=500), nullable=True),
+    sa.Column('full_time_weekly_minutes', sa.Integer(), nullable=False),
+    sa.Column('operational_regulations_version', sa.String(length=50), nullable=True),
+    sa.Column('local_rules_config', sa.JSON(), nullable=True),
+    sa.Column('bcp_document_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['corporation_id'], ['corporations.id'], ),
+    sa.ForeignKeyConstraint(['municipality_id'], ['municipality_master.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('office_settings', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_office_settings_corporation_id'), ['corporation_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_office_settings_municipality_id'), ['municipality_id'], unique=False)
+
+    op.create_table('role_permission_link',
+    sa.Column('role_id', sa.Integer(), nullable=False),
+    sa.Column('permission_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['permission_id'], ['permission_master.id'], ),
+    sa.ForeignKeyConstraint(['role_id'], ['role_master.id'], ),
+    sa.PrimaryKeyConstraint('role_id', 'permission_id')
+    )
+    op.create_table('training_prerequisite_master',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('job_title_id', sa.Integer(), nullable=True),
+    sa.Column('law_name', sa.String(length=100), nullable=True),
+    sa.Column('law_article', sa.String(length=50), nullable=True),
+    sa.Column('effective_date', sa.Date(), nullable=True),
+    sa.ForeignKeyConstraint(['job_title_id'], ['job_title_master.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_table('job_filing_records',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_id', sa.Integer(), nullable=False),
+    sa.Column('job_title_id', sa.Integer(), nullable=False),
+    sa.Column('effective_date', sa.Date(), nullable=False),
+    sa.Column('document_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['job_title_id'], ['job_title_master.id'], ),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('job_filing_records', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_job_filing_records_office_id'), ['office_id'], unique=False)
+
+    op.create_table('office_operations_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_id', sa.Integer(), nullable=False),
+    sa.Column('meeting_type', sa.String(length=50), nullable=False),
+    sa.Column('meeting_date', sa.DateTime(), nullable=True),
+    sa.Column('agenda_summary', sa.Text(), nullable=True),
+    sa.Column('shared_information', sa.Text(), nullable=True),
+    sa.Column('decisions_made', sa.Text(), nullable=True),
+    sa.Column('minutes_file_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('office_operations_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_office_operations_logs_office_id'), ['office_id'], unique=False)
+
+    op.create_table('office_training_events',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_id', sa.Integer(), nullable=False),
+    sa.Column('training_type_id', sa.Integer(), nullable=False),
+    sa.Column('training_name', sa.String(length=255), nullable=False),
+    sa.Column('event_timestamp', sa.DateTime(), nullable=False),
+    sa.Column('duration_minutes', sa.Integer(), nullable=True),
+    sa.Column('instructor', sa.String(length=100), nullable=True),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.ForeignKeyConstraint(['training_type_id'], ['training_type_master.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('office_training_events', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_office_training_events_office_id'), ['office_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_office_training_events_training_type_id'), ['training_type_id'], unique=False)
+
+    op.create_table('supporters',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('last_name', sa.String(length=50), nullable=False),
+    sa.Column('first_name', sa.String(length=50), nullable=False),
+    sa.Column('last_name_kana', sa.String(length=50), nullable=False),
+    sa.Column('first_name_kana', sa.String(length=50), nullable=False),
+    sa.Column('office_id', sa.Integer(), nullable=True),
+    sa.Column('hire_date', sa.Date(), nullable=False),
+    sa.Column('retirement_date', sa.Date(), nullable=True),
+    sa.Column('employment_type', sa.String(length=50), nullable=False),
+    sa.Column('weekly_scheduled_minutes', sa.Integer(), nullable=False),
+    sa.Column('is_active', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('supporters', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_supporters_first_name'), ['first_name'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporters_last_name'), ['last_name'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporters_office_id'), ['office_id'], unique=False)
+
+    op.create_table('committee_activity_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_id', sa.Integer(), nullable=False),
+    sa.Column('committee_type_id', sa.Integer(), nullable=False),
+    sa.Column('meeting_timestamp', sa.DateTime(), nullable=False),
+    sa.Column('discussion_summary', sa.Text(), nullable=False),
+    sa.Column('decided_action_plan', sa.Text(), nullable=True),
+    sa.Column('manager_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['committee_type_id'], ['committee_type_master.id'], ),
+    sa.ForeignKeyConstraint(['manager_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('committee_activity_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_committee_activity_logs_committee_type_id'), ['committee_type_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_committee_activity_logs_office_id'), ['office_id'], unique=False)
+
     op.create_table('goal_assessments',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('assessor_type_id', sa.Integer(), nullable=False),
@@ -207,7 +341,6 @@ def upgrade():
     sa.Column('goal_type', sa.String(length=50), nullable=False),
     sa.Column('goal_id', sa.Integer(), nullable=False),
     sa.Column('assessment_date', sa.Date(), nullable=False),
-    sa.Column('score', sa.Integer(), nullable=True),
     sa.Column('comment', sa.Text(), nullable=True),
     sa.ForeignKeyConstraint(['assessor_type_id'], ['assessor_types.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
@@ -231,44 +364,40 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_job_development_logs_employer_id'), ['employer_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_job_development_logs_supporter_id'), ['supporter_id'], unique=False)
 
-    op.create_table('office_settings',
+    op.create_table('office_service_configurations',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('corporation_id', sa.Integer(), nullable=False),
-    sa.Column('office_name', sa.String(length=100), nullable=False),
-    sa.Column('municipality_id', sa.Integer(), nullable=False),
-    sa.Column('is_active', sa.Boolean(), nullable=False),
-    sa.Column('office_seal_image_url', sa.String(length=500), nullable=True),
-    sa.Column('full_time_weekly_minutes', sa.Integer(), nullable=False),
-    sa.Column('local_rules_config', sa.JSON(), nullable=True),
-    sa.Column('bcp_document_url', sa.String(length=500), nullable=True),
-    sa.ForeignKeyConstraint(['corporation_id'], ['corporations.id'], ),
-    sa.ForeignKeyConstraint(['municipality_id'], ['municipality_master.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.Column('office_id', sa.Integer(), nullable=False),
+    sa.Column('service_type_master_id', sa.Integer(), nullable=False),
+    sa.Column('manager_supporter_id', sa.Integer(), nullable=True),
+    sa.Column('jigyosho_bango', sa.String(length=20), nullable=False),
+    sa.Column('capacity', sa.Integer(), nullable=False),
+    sa.Column('initial_designation_date', sa.Date(), nullable=True),
+    sa.Column('operational_regulations_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['manager_supporter_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.ForeignKeyConstraint(['service_type_master_id'], ['service_type_master.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('jigyosho_bango')
     )
-    with op.batch_alter_table('office_settings', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_office_settings_corporation_id'), ['corporation_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_office_settings_municipality_id'), ['municipality_id'], unique=False)
+    with op.batch_alter_table('office_service_configurations', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_office_service_configurations_manager_supporter_id'), ['manager_supporter_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_office_service_configurations_office_id'), ['office_id'], unique=False)
 
-    op.create_table('role_permission_link',
-    sa.Column('role_id', sa.Integer(), nullable=False),
-    sa.Column('permission_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['permission_id'], ['permission_master.id'], ),
-    sa.ForeignKeyConstraint(['role_id'], ['role_master.id'], ),
-    sa.PrimaryKeyConstraint('role_id', 'permission_id')
-    )
-    op.create_table('staff_reflection_logs',
+    op.create_table('staff_activity_allocation_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('supporter_id', sa.Integer(), nullable=False),
-    sa.Column('reflection_timestamp', sa.DateTime(), nullable=False),
-    sa.Column('context_log_type', sa.String(length=50), nullable=True),
-    sa.Column('context_log_id', sa.Integer(), nullable=True),
-    sa.Column('reflection_summary', sa.Text(), nullable=False),
-    sa.Column('personal_growth_plan', sa.Text(), nullable=True),
+    sa.Column('activity_date', sa.Date(), nullable=False),
+    sa.Column('staff_activity_master_id', sa.Integer(), nullable=False),
+    sa.Column('allocated_minutes', sa.Integer(), nullable=False),
+    sa.Column('is_governance_task', sa.Boolean(), nullable=True),
+    sa.Column('approver_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['approver_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['staff_activity_master_id'], ['staff_activity_master.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('staff_reflection_logs', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_staff_reflection_logs_supporter_id'), ['supporter_id'], unique=False)
+    with op.batch_alter_table('staff_activity_allocation_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_staff_activity_allocation_logs_supporter_id'), ['supporter_id'], unique=False)
 
     op.create_table('supporter_attendance_correction_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -287,6 +416,23 @@ def upgrade():
     with op.batch_alter_table('supporter_attendance_correction_requests', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_supporter_attendance_correction_requests_supporter_id'), ['supporter_id'], unique=False)
 
+    op.create_table('supporter_pii',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('email', sa.String(length=120), nullable=False),
+    sa.Column('password_hash', sa.String(length=128), nullable=True),
+    sa.Column('encrypted_personal_phone', sa.String(length=255), nullable=True),
+    sa.Column('encrypted_address', sa.String(length=512), nullable=True),
+    sa.Column('encrypted_bank_account_info', sa.String(length=512), nullable=True),
+    sa.Column('encrypted_employment_contract_url', sa.String(length=500), nullable=True),
+    sa.Column('encrypted_resume_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('supporter_id')
+    )
+    with op.batch_alter_table('supporter_pii', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_supporter_pii_email'), ['email'], unique=True)
+
     op.create_table('supporter_qualifications',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('supporter_id', sa.Integer(), nullable=False),
@@ -294,7 +440,7 @@ def upgrade():
     sa.Column('certification_date', sa.Date(), nullable=True),
     sa.Column('expiry_date', sa.Date(), nullable=True),
     sa.Column('certificate_document_url', sa.String(length=500), nullable=True),
-    sa.Column('training_evaluation_score', sa.Integer(), nullable=True),
+    sa.Column('visibility_scope', sa.String(length=20), nullable=False),
     sa.ForeignKeyConstraint(['qualification_master_id'], ['qualification_master.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -309,15 +455,24 @@ def upgrade():
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.PrimaryKeyConstraint('supporter_id', 'role_id')
     )
-    op.create_table('training_prerequisite_master',
+    op.create_table('training_logs',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('job_title_id', sa.Integer(), nullable=True),
-    sa.Column('law_name', sa.String(length=100), nullable=True),
-    sa.Column('law_article', sa.String(length=50), nullable=True),
-    sa.Column('effective_date', sa.Date(), nullable=True),
-    sa.ForeignKeyConstraint(['job_title_id'], ['job_title_master.id'], ),
+    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('office_training_event_id', sa.Integer(), nullable=True),
+    sa.Column('training_name', sa.String(length=255), nullable=False),
+    sa.Column('training_type', sa.String(length=50), nullable=False),
+    sa.Column('obligation_status', sa.String(length=50), nullable=True),
+    sa.Column('completion_date', sa.Date(), nullable=False),
+    sa.Column('duration_minutes', sa.Integer(), nullable=True),
+    sa.Column('document_url', sa.String(length=500), nullable=True),
+    sa.Column('summary_of_learning', sa.Text(), nullable=False),
+    sa.ForeignKeyConstraint(['office_training_event_id'], ['office_training_events.id'], ),
+    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    with op.batch_alter_table('training_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_training_logs_supporter_id'), ['supporter_id'], unique=False)
+
     op.create_table('users',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('display_name', sa.String(length=100), nullable=False),
@@ -387,6 +542,28 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_audit_action_logs_supporter_id'), ['supporter_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_audit_action_logs_user_id'), ['user_id'], unique=False)
 
+    op.create_table('case_conference_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('initiator_supporter_id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('conference_type', sa.String(length=50), nullable=False),
+    sa.Column('triggering_log_reference', sa.String(length=100), nullable=True),
+    sa.Column('concern_summary', sa.Text(), nullable=False),
+    sa.Column('conference_datetime', sa.DateTime(), nullable=False),
+    sa.Column('agreed_action', sa.Text(), nullable=False),
+    sa.Column('plan_direction_update', sa.Text(), nullable=True),
+    sa.Column('external_collaboration_required', sa.Boolean(), nullable=True),
+    sa.Column('issue_category_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['initiator_supporter_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['issue_category_id'], ['issue_category_master.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('case_conference_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_case_conference_logs_initiator_supporter_id'), ['initiator_supporter_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_case_conference_logs_user_id'), ['user_id'], unique=False)
+
     op.create_table('client_invoices',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -398,6 +575,8 @@ def upgrade():
     sa.Column('payment_status', sa.String(length=30), nullable=False),
     sa.Column('payment_date', sa.Date(), nullable=True),
     sa.Column('payment_confirmed_by_id', sa.Integer(), nullable=True),
+    sa.Column('receipt_pdf_url', sa.String(length=500), nullable=True),
+    sa.Column('receipt_issued_at', sa.DateTime(), nullable=True),
     sa.Column('receipt_confirmation_timestamp', sa.DateTime(), nullable=True),
     sa.Column('handover_method', sa.String(length=30), nullable=True),
     sa.Column('handover_supporter_id', sa.Integer(), nullable=True),
@@ -409,23 +588,6 @@ def upgrade():
     with op.batch_alter_table('client_invoices', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_client_invoices_billing_month'), ['billing_month'], unique=False)
         batch_op.create_index(batch_op.f('ix_client_invoices_user_id'), ['user_id'], unique=False)
-
-    op.create_table('committee_activity_logs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('office_id', sa.Integer(), nullable=False),
-    sa.Column('committee_type_id', sa.Integer(), nullable=False),
-    sa.Column('meeting_timestamp', sa.DateTime(), nullable=False),
-    sa.Column('discussion_summary', sa.Text(), nullable=False),
-    sa.Column('decided_action_plan', sa.Text(), nullable=True),
-    sa.Column('manager_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['committee_type_id'], ['committee_type_master.id'], ),
-    sa.ForeignKeyConstraint(['manager_id'], ['supporters.id'], ),
-    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('committee_activity_logs', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_committee_activity_logs_committee_type_id'), ['committee_type_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_committee_activity_logs_office_id'), ['office_id'], unique=False)
 
     op.create_table('complaint_logs',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -495,6 +657,44 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_document_consent_logs_document_id'), ['document_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_document_consent_logs_user_id'), ['user_id'], unique=False)
 
+    op.create_table('emergency_contacts',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('phone_number', sa.String(length=20), nullable=False),
+    sa.Column('relation', sa.String(length=50), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('emergency_contacts', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_emergency_contacts_user_id'), ['user_id'], unique=False)
+
+    op.create_table('family_members',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('name', sa.String(length=100), nullable=False),
+    sa.Column('relation', sa.String(length=50), nullable=True),
+    sa.Column('phone_number', sa.String(length=20), nullable=True),
+    sa.Column('is_main_contact', sa.Boolean(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('family_members', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_family_members_user_id'), ['user_id'], unique=False)
+
+    op.create_table('fee_calculation_decisions',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('calculation_month', sa.Date(), nullable=False),
+    sa.Column('applied_fees_json', sa.Text(), nullable=True),
+    sa.Column('is_finalized', sa.Boolean(), nullable=True),
+    sa.Column('finalized_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('fee_calculation_decisions', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_fee_calculation_decisions_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+
     op.create_table('holistic_support_policies',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
@@ -514,14 +714,17 @@ def upgrade():
     sa.Column('user_id', sa.Integer(), nullable=True),
     sa.Column('reporting_staff_id', sa.Integer(), nullable=False),
     sa.Column('incident_type', sa.String(length=30), nullable=False),
+    sa.Column('issue_category_id', sa.Integer(), nullable=True),
     sa.Column('occurrence_timestamp', sa.DateTime(), nullable=False),
     sa.Column('detailed_description', sa.Text(), nullable=False),
     sa.Column('cause_analysis', sa.Text(), nullable=False),
     sa.Column('preventive_action_plan', sa.Text(), nullable=False),
+    sa.Column('positive_turning_point', sa.Text(), nullable=True),
     sa.Column('report_status', sa.String(length=30), nullable=False),
     sa.Column('approver_id', sa.Integer(), nullable=True),
     sa.Column('approved_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['approver_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['issue_category_id'], ['issue_category_master.id'], ),
     sa.ForeignKeyConstraint(['reporting_staff_id'], ['supporters.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -579,39 +782,38 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_monthly_attendance_plans_target_month'), ['target_month'], unique=False)
         batch_op.create_index(batch_op.f('ix_monthly_attendance_plans_user_id'), ['user_id'], unique=False)
 
-    op.create_table('office_service_configurations',
+    op.create_table('monthly_billing_summary',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('office_id', sa.Integer(), nullable=False),
-    sa.Column('service_type_master_id', sa.Integer(), nullable=False),
-    sa.Column('manager_supporter_id', sa.Integer(), nullable=True),
-    sa.Column('jigyosho_bango', sa.String(length=20), nullable=False),
-    sa.Column('capacity', sa.Integer(), nullable=False),
-    sa.Column('initial_designation_date', sa.Date(), nullable=True),
-    sa.Column('operational_regulations_url', sa.String(length=500), nullable=True),
-    sa.ForeignKeyConstraint(['manager_supporter_id'], ['supporters.id'], ),
-    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
-    sa.ForeignKeyConstraint(['service_type_master_id'], ['service_type_master.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('jigyosho_bango')
-    )
-    with op.batch_alter_table('office_service_configurations', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_office_service_configurations_manager_supporter_id'), ['manager_supporter_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_office_service_configurations_office_id'), ['office_id'], unique=False)
-
-    op.create_table('office_training_events',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('office_id', sa.Integer(), nullable=False),
-    sa.Column('training_name', sa.String(length=255), nullable=False),
-    sa.Column('training_type', sa.String(length=50), nullable=False),
-    sa.Column('event_timestamp', sa.DateTime(), nullable=False),
-    sa.Column('duration_minutes', sa.Integer(), nullable=True),
-    sa.Column('instructor', sa.String(length=100), nullable=True),
-    sa.ForeignKeyConstraint(['office_id'], ['office_settings.id'], ),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('billing_month', sa.Date(), nullable=False),
+    sa.Column('total_units_claimed', sa.Integer(), nullable=False),
+    sa.Column('claim_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('claim_status', sa.String(length=30), nullable=False),
+    sa.Column('lock_date', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    with op.batch_alter_table('office_training_events', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_office_training_events_office_id'), ['office_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_office_training_events_training_type'), ['training_type'], unique=False)
+    with op.batch_alter_table('monthly_billing_summary', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_billing_month'), ['billing_month'], unique=False)
+        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_user_id'), ['user_id'], unique=False)
+
+    op.create_table('office_additive_filings',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('fee_master_id', sa.Integer(), nullable=False),
+    sa.Column('is_filed', sa.Boolean(), nullable=False),
+    sa.Column('filing_date', sa.Date(), nullable=True),
+    sa.Column('effective_start_date', sa.Date(), nullable=True),
+    sa.Column('effective_end_date', sa.Date(), nullable=True),
+    sa.ForeignKeyConstraint(['fee_master_id'], ['government_fee_master.id'], ),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('office_additive_filings', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_office_additive_filings_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
 
     op.create_table('post_transition_follow_ups',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -629,22 +831,45 @@ def upgrade():
     with op.batch_alter_table('post_transition_follow_ups', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_post_transition_follow_ups_user_id'), ['user_id'], unique=False)
 
+    op.create_table('sales_invoices',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('vendor_id', sa.Integer(), nullable=False),
+    sa.Column('issue_date', sa.Date(), nullable=False),
+    sa.Column('due_date', sa.Date(), nullable=True),
+    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('tax_amount', sa.Numeric(precision=10, scale=2), nullable=False),
+    sa.Column('invoice_status', sa.String(length=30), nullable=False),
+    sa.Column('payment_date', sa.Date(), nullable=True),
+    sa.Column('receipt_pdf_url', sa.String(length=500), nullable=True),
+    sa.Column('receipt_issued_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.ForeignKeyConstraint(['vendor_id'], ['vendor_master.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('sales_invoices', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_sales_invoices_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_sales_invoices_vendor_id'), ['vendor_id'], unique=False)
+
     op.create_table('schedule_participants',
-    sa.Column('schedule_id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('schedule_id', sa.Integer(), nullable=True),
+    sa.Column('user_id', sa.Integer(), nullable=True),
+    sa.Column('supporter_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['schedule_id'], ['schedules.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('schedule_id', 'user_id', 'supporter_id')
+    sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('schedule_participants', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_schedule_participants_schedule_id'), ['schedule_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_schedule_participants_supporter_id'), ['supporter_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_schedule_participants_user_id'), ['user_id'], unique=False)
 
     op.create_table('service_certificates',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
     sa.Column('certificate_issue_date', sa.Date(), nullable=False),
     sa.Column('municipality_master_id', sa.Integer(), nullable=False),
     sa.Column('certificate_type', sa.String(length=50), nullable=True),
@@ -653,34 +878,23 @@ def upgrade():
     sa.Column('created_at', sa.DateTime(), nullable=False),
     sa.Column('updated_at', sa.DateTime(), nullable=True),
     sa.ForeignKeyConstraint(['municipality_master_id'], ['municipality_master.id'], ),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('service_certificates', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_service_certificates_municipality_master_id'), ['municipality_master_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_service_certificates_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_service_certificates_user_id'), ['user_id'], unique=False)
-
-    op.create_table('support_plans',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('plan_version', sa.Integer(), nullable=False),
-    sa.Column('plan_status', sa.String(length=30), nullable=False),
-    sa.Column('sabikan_approved_by_id', sa.Integer(), nullable=True),
-    sa.Column('sabikan_approved_at', sa.DateTime(), nullable=True),
-    sa.Column('based_on_plan_id', sa.Integer(), nullable=True),
-    sa.Column('created_at', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['based_on_plan_id'], ['support_plans.id'], ),
-    sa.ForeignKeyConstraint(['sabikan_approved_by_id'], ['supporters.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('support_plans', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_support_plans_user_id'), ['user_id'], unique=False)
 
     op.create_table('support_threads',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('status', sa.String(length=20), nullable=False),
+    sa.Column('issue_category_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.Column('updated_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['issue_category_id'], ['issue_category_master.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -702,6 +916,49 @@ def upgrade():
     with op.batch_alter_table('supporter_feedback_logs', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_supporter_feedback_logs_supporter_id'), ['supporter_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_supporter_feedback_logs_user_id'), ['user_id'], unique=False)
+
+    op.create_table('supporter_job_assignments',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('job_title_id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('start_date', sa.Date(), nullable=False),
+    sa.Column('end_date', sa.Date(), nullable=True),
+    sa.Column('assigned_minutes', sa.Integer(), nullable=False),
+    sa.Column('is_deemed_assignment', sa.Boolean(), nullable=True),
+    sa.Column('deemed_expiry_date', sa.Date(), nullable=True),
+    sa.ForeignKeyConstraint(['job_title_id'], ['job_title_master.id'], ),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('supporter_id', 'job_title_id', 'start_date', 'office_service_configuration_id', name='uq_supporter_job_assignment')
+    )
+    with op.batch_alter_table('supporter_job_assignments', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_job_title_id'), ['job_title_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_supporter_id'), ['supporter_id'], unique=False)
+
+    op.create_table('supporter_timecards',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('work_date', sa.Date(), nullable=False),
+    sa.Column('check_in', sa.DateTime(), nullable=True),
+    sa.Column('check_out', sa.DateTime(), nullable=True),
+    sa.Column('total_break_minutes', sa.Integer(), nullable=False),
+    sa.Column('scheduled_work_minutes', sa.Integer(), nullable=False),
+    sa.Column('is_absent', sa.Boolean(), nullable=True),
+    sa.Column('absence_type', sa.String(length=50), nullable=True),
+    sa.Column('deemed_work_minutes', sa.Integer(), nullable=True),
+    sa.Column('facility_out_minutes', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('supporter_timecards', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_supporter_timecards_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporter_timecards_supporter_id'), ['supporter_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_supporter_timecards_work_date'), ['work_date'], unique=False)
 
     op.create_table('user_attendance_correction_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -753,22 +1010,22 @@ def upgrade():
     op.create_table('user_pii',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('last_name', sa.String(length=50), nullable=True),
-    sa.Column('first_name', sa.String(length=50), nullable=True),
-    sa.Column('last_name_kana', sa.String(length=50), nullable=True),
-    sa.Column('first_name_kana', sa.String(length=50), nullable=True),
+    sa.Column('encrypted_certificate_number', sa.String(length=512), nullable=True),
+    sa.Column('encrypted_data_key', sa.String(length=512), nullable=True),
+    sa.Column('encrypted_last_name', sa.String(length=255), nullable=True),
+    sa.Column('encrypted_first_name', sa.String(length=255), nullable=True),
+    sa.Column('encrypted_last_name_kana', sa.String(length=255), nullable=True),
+    sa.Column('encrypted_first_name_kana', sa.String(length=255), nullable=True),
+    sa.Column('encrypted_address', sa.String(length=512), nullable=True),
     sa.Column('birth_date', sa.Date(), nullable=True),
-    sa.Column('gender_legal_id', sa.Integer(), nullable=True),
-    sa.Column('gender_identity', sa.String(length=100), nullable=True),
-    sa.Column('postal_code', sa.String(length=10), nullable=True),
-    sa.Column('address', sa.String(length=255), nullable=True),
     sa.Column('phone_number', sa.String(length=20), nullable=True),
     sa.Column('email', sa.String(length=120), nullable=True),
+    sa.Column('sns_account_id', sa.String(length=255), nullable=True),
+    sa.Column('sns_provider', sa.String(length=50), nullable=True),
     sa.Column('password_hash', sa.String(length=128), nullable=True),
     sa.Column('pin_hash', sa.String(length=128), nullable=True),
-    sa.Column('sns_provider', sa.String(length=50), nullable=True),
-    sa.Column('sns_account_id', sa.String(length=255), nullable=True),
-    sa.Column('encrypted_certificate_number', sa.String(length=512), nullable=True),
+    sa.Column('gender_legal_id', sa.Integer(), nullable=True),
+    sa.Column('gender_identity', sa.String(length=100), nullable=True),
     sa.Column('disability_type_id', sa.Integer(), nullable=True),
     sa.Column('disability_details', sa.Text(), nullable=True),
     sa.Column('support_needs', sa.Text(), nullable=True),
@@ -784,19 +1041,30 @@ def upgrade():
     )
     with op.batch_alter_table('user_pii', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_user_pii_email'), ['email'], unique=True)
-        batch_op.create_index(batch_op.f('ix_user_pii_first_name'), ['first_name'], unique=False)
-        batch_op.create_index(batch_op.f('ix_user_pii_first_name_kana'), ['first_name_kana'], unique=False)
-        batch_op.create_index(batch_op.f('ix_user_pii_last_name'), ['last_name'], unique=False)
-        batch_op.create_index(batch_op.f('ix_user_pii_last_name_kana'), ['last_name_kana'], unique=False)
+        batch_op.create_index(batch_op.f('ix_user_pii_phone_number'), ['phone_number'], unique=False)
         batch_op.create_index(batch_op.f('ix_user_pii_sns_account_id'), ['sns_account_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_user_pii_sns_provider'), ['sns_provider'], unique=False)
 
+    op.create_table('user_profiles',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('emergency_contact_notes', sa.Text(), nullable=True),
+    sa.Column('insurance_details', sa.Text(), nullable=True),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('user_id')
+    )
     op.create_table('user_requests',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('user_id', sa.Integer(), nullable=False),
     sa.Column('request_type', sa.String(length=50), nullable=False),
     sa.Column('details', sa.Text(), nullable=True),
     sa.Column('is_resolved', sa.Boolean(), nullable=True),
+    sa.Column('resolution_notes', sa.Text(), nullable=True),
+    sa.Column('resolved_at', sa.DateTime(), nullable=True),
+    sa.Column('resolved_by_supporter_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['resolved_by_supporter_id'], ['supporters.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -827,12 +1095,34 @@ def upgrade():
     sa.Column('deductions', sa.Numeric(precision=10, scale=2), nullable=True),
     sa.Column('net_payment_amount', sa.Numeric(precision=10, scale=2), nullable=False),
     sa.Column('payment_timestamp', sa.DateTime(), nullable=True),
+    sa.Column('recipient_receipt_url', sa.String(length=500), nullable=True),
+    sa.Column('receipt_signed_date', sa.Date(), nullable=True),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('user_wage_logs', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_user_wage_logs_calculation_month'), ['calculation_month'], unique=False)
         batch_op.create_index(batch_op.f('ix_user_wage_logs_user_id'), ['user_id'], unique=False)
+
+    op.create_table('agency_receipt_statements',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('billing_month', sa.Date(), nullable=False),
+    sa.Column('monthly_summary_id', sa.Integer(), nullable=False),
+    sa.Column('kokuhoren_payment_date', sa.Date(), nullable=False),
+    sa.Column('statement_pdf_url', sa.String(length=500), nullable=False),
+    sa.Column('receipt_confirmation_timestamp', sa.DateTime(), nullable=True),
+    sa.Column('handover_method', sa.String(length=30), nullable=True),
+    sa.Column('handover_supporter_id', sa.Integer(), nullable=True),
+    sa.ForeignKeyConstraint(['handover_supporter_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['monthly_summary_id'], ['monthly_billing_summary.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('monthly_summary_id')
+    )
+    with op.batch_alter_table('agency_receipt_statements', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_agency_receipt_statements_billing_month'), ['billing_month'], unique=False)
+        batch_op.create_index(batch_op.f('ix_agency_receipt_statements_user_id'), ['user_id'], unique=False)
 
     op.create_table('chat_messages',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -841,6 +1131,7 @@ def upgrade():
     sa.Column('sender_supporter_id', sa.Integer(), nullable=True),
     sa.Column('content', sa.Text(), nullable=False),
     sa.Column('timestamp', sa.DateTime(), nullable=False),
+    sa.Column('is_read', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['sender_supporter_id'], ['supporters.id'], ),
     sa.ForeignKeyConstraint(['sender_user_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['thread_id'], ['support_threads.id'], ),
@@ -869,6 +1160,7 @@ def upgrade():
     sa.Column('management_start_date', sa.Date(), nullable=False),
     sa.Column('management_end_date', sa.Date(), nullable=False),
     sa.Column('is_applicable', sa.Boolean(), nullable=False),
+    sa.Column('managing_office_number', sa.String(length=10), nullable=True),
     sa.Column('managing_office_name', sa.String(length=255), nullable=True),
     sa.ForeignKeyConstraint(['certificate_id'], ['service_certificates.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -908,18 +1200,6 @@ def upgrade():
     with op.batch_alter_table('job_retention_records', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_job_retention_records_contract_id'), ['contract_id'], unique=False)
 
-    op.create_table('long_term_goals',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('plan_id', sa.Integer(), nullable=False),
-    sa.Column('description', sa.Text(), nullable=False),
-    sa.Column('target_period_start', sa.Date(), nullable=True),
-    sa.Column('target_period_end', sa.Date(), nullable=True),
-    sa.ForeignKeyConstraint(['plan_id'], ['support_plans.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('long_term_goals', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_long_term_goals_plan_id'), ['plan_id'], unique=False)
-
     op.create_table('meal_addon_statuses',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('certificate_id', sa.Integer(), nullable=False),
@@ -932,12 +1212,85 @@ def upgrade():
     with op.batch_alter_table('meal_addon_statuses', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_meal_addon_statuses_certificate_id'), ['certificate_id'], unique=False)
 
+    op.create_table('staff_reflection_logs',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('supporter_id', sa.Integer(), nullable=False),
+    sa.Column('reflection_timestamp', sa.DateTime(), nullable=False),
+    sa.Column('context_log_type', sa.String(length=50), nullable=True),
+    sa.Column('context_log_id', sa.Integer(), nullable=True),
+    sa.Column('referenced_thread_id', sa.Integer(), nullable=True),
+    sa.Column('reflection_type', sa.String(length=50), nullable=False),
+    sa.Column('reflection_summary', sa.Text(), nullable=False),
+    sa.Column('personal_growth_plan', sa.Text(), nullable=True),
+    sa.Column('shared_insight', sa.Text(), nullable=True),
+    sa.Column('sharing_status', sa.String(length=30), nullable=False),
+    sa.Column('manager_review_status', sa.String(length=30), nullable=True),
+    sa.ForeignKeyConstraint(['referenced_thread_id'], ['support_threads.id'], ),
+    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('staff_reflection_logs', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_staff_reflection_logs_supporter_id'), ['supporter_id'], unique=False)
+
+    op.create_table('support_plans',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('user_id', sa.Integer(), nullable=False),
+    sa.Column('plan_version', sa.Integer(), nullable=False),
+    sa.Column('plan_status', sa.String(length=30), nullable=False),
+    sa.Column('sabikan_approved_by_id', sa.Integer(), nullable=True),
+    sa.Column('sabikan_approved_at', sa.DateTime(), nullable=True),
+    sa.Column('based_on_plan_id', sa.Integer(), nullable=True),
+    sa.Column('holistic_support_policy_id', sa.Integer(), nullable=True),
+    sa.Column('created_at', sa.DateTime(), nullable=True),
+    sa.ForeignKeyConstraint(['based_on_plan_id'], ['support_plans.id'], ),
+    sa.ForeignKeyConstraint(['holistic_support_policy_id'], ['holistic_support_policies.id'], ),
+    sa.ForeignKeyConstraint(['sabikan_approved_by_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('support_plans', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_support_plans_user_id'), ['user_id'], unique=False)
+
+    op.create_table('contract_report_details',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('granted_service_id', sa.Integer(), nullable=False),
+    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
+    sa.Column('contract_corporation_name', sa.String(length=100), nullable=True),
+    sa.Column('contract_office_name', sa.String(length=100), nullable=True),
+    sa.Column('contract_service_type', sa.String(length=50), nullable=True),
+    sa.Column('contract_granted_days', sa.Integer(), nullable=True),
+    sa.Column('contract_date', sa.Date(), nullable=True),
+    sa.Column('contract_document_url', sa.String(length=500), nullable=True),
+    sa.Column('important_matters_url', sa.String(length=500), nullable=True),
+    sa.ForeignKeyConstraint(['granted_service_id'], ['granted_services.id'], ),
+    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('contract_report_details', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_contract_report_details_granted_service_id'), ['granted_service_id'], unique=True)
+        batch_op.create_index(batch_op.f('ix_contract_report_details_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
+
+    op.create_table('long_term_goals',
+    sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('plan_id', sa.Integer(), nullable=False),
+    sa.Column('description', sa.Text(), nullable=False),
+    sa.Column('target_period_start', sa.Date(), nullable=True),
+    sa.Column('target_period_end', sa.Date(), nullable=True),
+    sa.ForeignKeyConstraint(['plan_id'], ['support_plans.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    with op.batch_alter_table('long_term_goals', schema=None) as batch_op:
+        batch_op.create_index(batch_op.f('ix_long_term_goals_plan_id'), ['plan_id'], unique=False)
+
     op.create_table('monitoring_reports',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('support_plan_id', sa.Integer(), nullable=False),
     sa.Column('supporter_id', sa.Integer(), nullable=False),
     sa.Column('report_date', sa.Date(), nullable=False),
     sa.Column('monitoring_summary', sa.Text(), nullable=False),
+    sa.Column('target_goal_progress_notes', sa.Text(), nullable=True),
+    sa.Column('contextual_analysis', sa.Text(), nullable=True),
+    sa.Column('document_url', sa.String(length=500), nullable=True),
     sa.ForeignKeyConstraint(['support_plan_id'], ['support_plans.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.PrimaryKeyConstraint('id')
@@ -945,24 +1298,6 @@ def upgrade():
     with op.batch_alter_table('monitoring_reports', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_monitoring_reports_support_plan_id'), ['support_plan_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_monitoring_reports_supporter_id'), ['supporter_id'], unique=False)
-
-    op.create_table('monthly_billing_summary',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
-    sa.Column('billing_month', sa.Date(), nullable=False),
-    sa.Column('total_units_claimed', sa.Integer(), nullable=False),
-    sa.Column('claim_amount', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('claim_status', sa.String(length=30), nullable=False),
-    sa.Column('lock_date', sa.DateTime(), nullable=True),
-    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('monthly_billing_summary', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_billing_month'), ['billing_month'], unique=False)
-        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_monthly_billing_summary_user_id'), ['user_id'], unique=False)
 
     op.create_table('plan_review_requests',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -982,29 +1317,12 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_plan_review_requests_support_plan_id'), ['support_plan_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_plan_review_requests_user_id'), ['user_id'], unique=False)
 
-    op.create_table('sales_invoices',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
-    sa.Column('vendor_id', sa.Integer(), nullable=False),
-    sa.Column('issue_date', sa.Date(), nullable=False),
-    sa.Column('due_date', sa.Date(), nullable=True),
-    sa.Column('total_amount', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('tax_amount', sa.Numeric(precision=10, scale=2), nullable=False),
-    sa.Column('invoice_status', sa.String(length=30), nullable=False),
-    sa.Column('payment_date', sa.Date(), nullable=True),
-    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
-    sa.ForeignKeyConstraint(['vendor_id'], ['vendor_master.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('sales_invoices', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_sales_invoices_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_sales_invoices_vendor_id'), ['vendor_id'], unique=False)
-
     op.create_table('support_conference_logs',
     sa.Column('id', sa.Integer(), nullable=False),
     sa.Column('plan_id', sa.Integer(), nullable=False),
     sa.Column('conference_date', sa.DateTime(), nullable=False),
     sa.Column('participant_user_flag', sa.Boolean(), nullable=True),
+    sa.Column('reason_for_user_absence', sa.Text(), nullable=True),
     sa.Column('minutes_content', sa.Text(), nullable=True),
     sa.Column('is_charge_meeting', sa.Boolean(), nullable=True),
     sa.Column('external_participant_id', sa.Integer(), nullable=True),
@@ -1015,102 +1333,6 @@ def upgrade():
     )
     with op.batch_alter_table('support_conference_logs', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_support_conference_logs_plan_id'), ['plan_id'], unique=False)
-
-    op.create_table('supporter_job_assignments',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('supporter_id', sa.Integer(), nullable=False),
-    sa.Column('job_title_id', sa.Integer(), nullable=False),
-    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
-    sa.Column('start_date', sa.Date(), nullable=False),
-    sa.Column('end_date', sa.Date(), nullable=True),
-    sa.Column('assigned_minutes', sa.Integer(), nullable=False),
-    sa.Column('is_deemed_assignment', sa.Boolean(), nullable=True),
-    sa.Column('deemed_document_url', sa.String(length=500), nullable=True),
-    sa.Column('deemed_expiry_date', sa.Date(), nullable=True),
-    sa.ForeignKeyConstraint(['job_title_id'], ['job_title_master.id'], ),
-    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
-    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('supporter_id', 'job_title_id', 'start_date', 'office_service_configuration_id', name='uq_supporter_job_assignment')
-    )
-    with op.batch_alter_table('supporter_job_assignments', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_job_title_id'), ['job_title_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_supporter_job_assignments_supporter_id'), ['supporter_id'], unique=False)
-
-    op.create_table('supporter_timecards',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('supporter_id', sa.Integer(), nullable=False),
-    sa.Column('office_service_configuration_id', sa.Integer(), nullable=False),
-    sa.Column('work_date', sa.Date(), nullable=False),
-    sa.Column('check_in', sa.DateTime(), nullable=True),
-    sa.Column('check_out', sa.DateTime(), nullable=True),
-    sa.Column('total_break_minutes', sa.Integer(), nullable=False),
-    sa.Column('scheduled_work_minutes', sa.Integer(), nullable=False),
-    sa.Column('is_absent', sa.Boolean(), nullable=True),
-    sa.Column('absence_type', sa.String(length=50), nullable=True),
-    sa.Column('deemed_work_minutes', sa.Integer(), nullable=True),
-    sa.Column('facility_out_minutes', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['office_service_configuration_id'], ['office_service_configurations.id'], ),
-    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('supporter_timecards', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_supporter_timecards_office_service_configuration_id'), ['office_service_configuration_id'], unique=False)
-        batch_op.create_index(batch_op.f('ix_supporter_timecards_supporter_id'), ['supporter_id'], unique=False)
-
-    op.create_table('training_logs',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('supporter_id', sa.Integer(), nullable=False),
-    sa.Column('office_training_event_id', sa.Integer(), nullable=True),
-    sa.Column('training_name', sa.String(length=255), nullable=False),
-    sa.Column('training_type', sa.String(length=50), nullable=False),
-    sa.Column('completion_date', sa.Date(), nullable=False),
-    sa.Column('duration_minutes', sa.Integer(), nullable=True),
-    sa.Column('document_url', sa.String(length=500), nullable=True),
-    sa.Column('summary_of_learning', sa.Text(), nullable=False),
-    sa.ForeignKeyConstraint(['office_training_event_id'], ['office_training_events.id'], ),
-    sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('training_logs', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_training_logs_supporter_id'), ['supporter_id'], unique=False)
-
-    op.create_table('agency_receipt_statements',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('user_id', sa.Integer(), nullable=False),
-    sa.Column('billing_month', sa.Date(), nullable=False),
-    sa.Column('monthly_summary_id', sa.Integer(), nullable=False),
-    sa.Column('kokuhoren_payment_date', sa.Date(), nullable=False),
-    sa.Column('statement_pdf_url', sa.String(length=500), nullable=False),
-    sa.Column('receipt_confirmation_timestamp', sa.DateTime(), nullable=True),
-    sa.Column('handover_method', sa.String(length=30), nullable=True),
-    sa.Column('handover_supporter_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['handover_supporter_id'], ['supporters.id'], ),
-    sa.ForeignKeyConstraint(['monthly_summary_id'], ['monthly_billing_summary.id'], ),
-    sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
-    sa.PrimaryKeyConstraint('id'),
-    sa.UniqueConstraint('monthly_summary_id')
-    )
-    with op.batch_alter_table('agency_receipt_statements', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_agency_receipt_statements_billing_month'), ['billing_month'], unique=False)
-        batch_op.create_index(batch_op.f('ix_agency_receipt_statements_user_id'), ['user_id'], unique=False)
-
-    op.create_table('contract_report_details',
-    sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('granted_service_id', sa.Integer(), nullable=False),
-    sa.Column('contract_corporation_name', sa.String(length=100), nullable=True),
-    sa.Column('contract_office_name', sa.String(length=100), nullable=True),
-    sa.Column('contract_service_type', sa.String(length=50), nullable=True),
-    sa.Column('contract_granted_days', sa.Integer(), nullable=True),
-    sa.Column('contract_date', sa.Date(), nullable=True),
-    sa.Column('contract_document_url', sa.String(length=500), nullable=True),
-    sa.Column('important_matters_url', sa.String(length=500), nullable=True),
-    sa.ForeignKeyConstraint(['granted_service_id'], ['granted_services.id'], ),
-    sa.PrimaryKeyConstraint('id')
-    )
-    with op.batch_alter_table('contract_report_details', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_contract_report_details_granted_service_id'), ['granted_service_id'], unique=True)
 
     op.create_table('short_term_goals',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1157,12 +1379,19 @@ def upgrade():
     sa.Column('daily_goal_commitment', sa.Text(), nullable=True),
     sa.Column('user_self_evaluation', sa.Text(), nullable=True),
     sa.Column('user_lifestyle_notes', sa.Text(), nullable=True),
+    sa.Column('staff_effectiveness_flag', sa.Boolean(), nullable=True),
+    sa.Column('user_effectiveness_flag', sa.Boolean(), nullable=True),
+    sa.Column('support_method', sa.String(length=50), nullable=True),
     sa.Column('support_content_notes', sa.Text(), nullable=False),
+    sa.Column('heartwarming_episode', sa.Text(), nullable=True),
+    sa.Column('failure_factor_id', sa.Integer(), nullable=True),
+    sa.Column('challenge_analysis_notes', sa.Text(), nullable=True),
     sa.Column('log_status', sa.String(length=30), nullable=False),
     sa.Column('approver_id', sa.Integer(), nullable=True),
     sa.Column('approved_at', sa.DateTime(), nullable=True),
     sa.Column('rejection_reason', sa.Text(), nullable=True),
     sa.ForeignKeyConstraint(['approver_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['failure_factor_id'], ['failure_factor_master.id'], ),
     sa.ForeignKeyConstraint(['goal_id'], ['individual_support_goals.id'], ),
     sa.ForeignKeyConstraint(['supporter_id'], ['supporters.id'], ),
     sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
@@ -1170,6 +1399,7 @@ def upgrade():
     )
     with op.batch_alter_table('daily_logs', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_daily_logs_goal_id'), ['goal_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_daily_logs_log_date'), ['log_date'], unique=False)
         batch_op.create_index(batch_op.f('ix_daily_logs_supporter_id'), ['supporter_id'], unique=False)
         batch_op.create_index(batch_op.f('ix_daily_logs_user_id'), ['user_id'], unique=False)
 
@@ -1209,9 +1439,11 @@ def upgrade():
     sa.Column('product_id', sa.Integer(), nullable=False),
     sa.Column('units_passed_inspection', sa.Integer(), nullable=True),
     sa.Column('units_rejected', sa.Integer(), nullable=True),
+    sa.Column('failure_factor_id', sa.Integer(), nullable=True),
     sa.Column('rejection_analysis_notes', sa.Text(), nullable=True),
     sa.Column('is_repaired', sa.Boolean(), nullable=True),
     sa.ForeignKeyConstraint(['daily_log_id'], ['daily_logs.id'], ),
+    sa.ForeignKeyConstraint(['failure_factor_id'], ['failure_factor_master.id'], ),
     sa.ForeignKeyConstraint(['product_id'], ['product_master.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
@@ -1239,6 +1471,7 @@ def downgrade():
     with op.batch_alter_table('daily_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_daily_logs_user_id'))
         batch_op.drop_index(batch_op.f('ix_daily_logs_supporter_id'))
+        batch_op.drop_index(batch_op.f('ix_daily_logs_log_date'))
         batch_op.drop_index(batch_op.f('ix_daily_logs_goal_id'))
 
     op.drop_table('daily_logs')
@@ -1250,63 +1483,41 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_short_term_goals_long_term_goal_id'))
 
     op.drop_table('short_term_goals')
-    with op.batch_alter_table('contract_report_details', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_contract_report_details_granted_service_id'))
-
-    op.drop_table('contract_report_details')
-    with op.batch_alter_table('agency_receipt_statements', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_agency_receipt_statements_user_id'))
-        batch_op.drop_index(batch_op.f('ix_agency_receipt_statements_billing_month'))
-
-    op.drop_table('agency_receipt_statements')
-    with op.batch_alter_table('training_logs', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_training_logs_supporter_id'))
-
-    op.drop_table('training_logs')
-    with op.batch_alter_table('supporter_timecards', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_supporter_timecards_supporter_id'))
-        batch_op.drop_index(batch_op.f('ix_supporter_timecards_office_service_configuration_id'))
-
-    op.drop_table('supporter_timecards')
-    with op.batch_alter_table('supporter_job_assignments', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_supporter_id'))
-        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_office_service_configuration_id'))
-        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_job_title_id'))
-
-    op.drop_table('supporter_job_assignments')
     with op.batch_alter_table('support_conference_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_support_conference_logs_plan_id'))
 
     op.drop_table('support_conference_logs')
-    with op.batch_alter_table('sales_invoices', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_sales_invoices_vendor_id'))
-        batch_op.drop_index(batch_op.f('ix_sales_invoices_office_service_configuration_id'))
-
-    op.drop_table('sales_invoices')
     with op.batch_alter_table('plan_review_requests', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_plan_review_requests_user_id'))
         batch_op.drop_index(batch_op.f('ix_plan_review_requests_support_plan_id'))
 
     op.drop_table('plan_review_requests')
-    with op.batch_alter_table('monthly_billing_summary', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_user_id'))
-        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_office_service_configuration_id'))
-        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_billing_month'))
-
-    op.drop_table('monthly_billing_summary')
     with op.batch_alter_table('monitoring_reports', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_monitoring_reports_supporter_id'))
         batch_op.drop_index(batch_op.f('ix_monitoring_reports_support_plan_id'))
 
     op.drop_table('monitoring_reports')
-    with op.batch_alter_table('meal_addon_statuses', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_meal_addon_statuses_certificate_id'))
-
-    op.drop_table('meal_addon_statuses')
     with op.batch_alter_table('long_term_goals', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_long_term_goals_plan_id'))
 
     op.drop_table('long_term_goals')
+    with op.batch_alter_table('contract_report_details', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_contract_report_details_office_service_configuration_id'))
+        batch_op.drop_index(batch_op.f('ix_contract_report_details_granted_service_id'))
+
+    op.drop_table('contract_report_details')
+    with op.batch_alter_table('support_plans', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_support_plans_user_id'))
+
+    op.drop_table('support_plans')
+    with op.batch_alter_table('staff_reflection_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_staff_reflection_logs_supporter_id'))
+
+    op.drop_table('staff_reflection_logs')
+    with op.batch_alter_table('meal_addon_statuses', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_meal_addon_statuses_certificate_id'))
+
+    op.drop_table('meal_addon_statuses')
     with op.batch_alter_table('job_retention_records', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_job_retention_records_contract_id'))
 
@@ -1329,6 +1540,11 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_chat_messages_sender_supporter_id'))
 
     op.drop_table('chat_messages')
+    with op.batch_alter_table('agency_receipt_statements', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_agency_receipt_statements_user_id'))
+        batch_op.drop_index(batch_op.f('ix_agency_receipt_statements_billing_month'))
+
+    op.drop_table('agency_receipt_statements')
     with op.batch_alter_table('user_wage_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_user_wage_logs_user_id'))
         batch_op.drop_index(batch_op.f('ix_user_wage_logs_calculation_month'))
@@ -1342,13 +1558,11 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_user_requests_user_id'))
 
     op.drop_table('user_requests')
+    op.drop_table('user_profiles')
     with op.batch_alter_table('user_pii', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_user_pii_sns_provider'))
         batch_op.drop_index(batch_op.f('ix_user_pii_sns_account_id'))
-        batch_op.drop_index(batch_op.f('ix_user_pii_last_name_kana'))
-        batch_op.drop_index(batch_op.f('ix_user_pii_last_name'))
-        batch_op.drop_index(batch_op.f('ix_user_pii_first_name_kana'))
-        batch_op.drop_index(batch_op.f('ix_user_pii_first_name'))
+        batch_op.drop_index(batch_op.f('ix_user_pii_phone_number'))
         batch_op.drop_index(batch_op.f('ix_user_pii_email'))
 
     op.drop_table('user_pii')
@@ -1365,6 +1579,18 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_user_attendance_correction_requests_user_id'))
 
     op.drop_table('user_attendance_correction_requests')
+    with op.batch_alter_table('supporter_timecards', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_supporter_timecards_work_date'))
+        batch_op.drop_index(batch_op.f('ix_supporter_timecards_supporter_id'))
+        batch_op.drop_index(batch_op.f('ix_supporter_timecards_office_service_configuration_id'))
+
+    op.drop_table('supporter_timecards')
+    with op.batch_alter_table('supporter_job_assignments', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_supporter_id'))
+        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_office_service_configuration_id'))
+        batch_op.drop_index(batch_op.f('ix_supporter_job_assignments_job_title_id'))
+
+    op.drop_table('supporter_job_assignments')
     with op.batch_alter_table('supporter_feedback_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_supporter_feedback_logs_user_id'))
         batch_op.drop_index(batch_op.f('ix_supporter_feedback_logs_supporter_id'))
@@ -1374,34 +1600,37 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_support_threads_user_id'))
 
     op.drop_table('support_threads')
-    with op.batch_alter_table('support_plans', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_support_plans_user_id'))
-
-    op.drop_table('support_plans')
     with op.batch_alter_table('service_certificates', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_service_certificates_user_id'))
+        batch_op.drop_index(batch_op.f('ix_service_certificates_office_service_configuration_id'))
         batch_op.drop_index(batch_op.f('ix_service_certificates_municipality_master_id'))
 
     op.drop_table('service_certificates')
     with op.batch_alter_table('schedule_participants', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_schedule_participants_user_id'))
         batch_op.drop_index(batch_op.f('ix_schedule_participants_supporter_id'))
+        batch_op.drop_index(batch_op.f('ix_schedule_participants_schedule_id'))
 
     op.drop_table('schedule_participants')
+    with op.batch_alter_table('sales_invoices', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_sales_invoices_vendor_id'))
+        batch_op.drop_index(batch_op.f('ix_sales_invoices_office_service_configuration_id'))
+
+    op.drop_table('sales_invoices')
     with op.batch_alter_table('post_transition_follow_ups', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_post_transition_follow_ups_user_id'))
 
     op.drop_table('post_transition_follow_ups')
-    with op.batch_alter_table('office_training_events', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_office_training_events_training_type'))
-        batch_op.drop_index(batch_op.f('ix_office_training_events_office_id'))
+    with op.batch_alter_table('office_additive_filings', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_office_additive_filings_office_service_configuration_id'))
 
-    op.drop_table('office_training_events')
-    with op.batch_alter_table('office_service_configurations', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_office_service_configurations_office_id'))
-        batch_op.drop_index(batch_op.f('ix_office_service_configurations_manager_supporter_id'))
+    op.drop_table('office_additive_filings')
+    with op.batch_alter_table('monthly_billing_summary', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_user_id'))
+        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_office_service_configuration_id'))
+        batch_op.drop_index(batch_op.f('ix_monthly_billing_summary_billing_month'))
 
-    op.drop_table('office_service_configurations')
+    op.drop_table('monthly_billing_summary')
     with op.batch_alter_table('monthly_attendance_plans', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_monthly_attendance_plans_user_id'))
         batch_op.drop_index(batch_op.f('ix_monthly_attendance_plans_target_month'))
@@ -1426,6 +1655,18 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_holistic_support_policies_user_id'))
 
     op.drop_table('holistic_support_policies')
+    with op.batch_alter_table('fee_calculation_decisions', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_fee_calculation_decisions_office_service_configuration_id'))
+
+    op.drop_table('fee_calculation_decisions')
+    with op.batch_alter_table('family_members', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_family_members_user_id'))
+
+    op.drop_table('family_members')
+    with op.batch_alter_table('emergency_contacts', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_emergency_contacts_user_id'))
+
+    op.drop_table('emergency_contacts')
     with op.batch_alter_table('document_consent_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_document_consent_logs_user_id'))
         batch_op.drop_index(batch_op.f('ix_document_consent_logs_document_id'))
@@ -1444,16 +1685,16 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_complaint_logs_complainant_user_id'))
 
     op.drop_table('complaint_logs')
-    with op.batch_alter_table('committee_activity_logs', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_committee_activity_logs_office_id'))
-        batch_op.drop_index(batch_op.f('ix_committee_activity_logs_committee_type_id'))
-
-    op.drop_table('committee_activity_logs')
     with op.batch_alter_table('client_invoices', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_client_invoices_user_id'))
         batch_op.drop_index(batch_op.f('ix_client_invoices_billing_month'))
 
     op.drop_table('client_invoices')
+    with op.batch_alter_table('case_conference_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_case_conference_logs_user_id'))
+        batch_op.drop_index(batch_op.f('ix_case_conference_logs_initiator_supporter_id'))
+
+    op.drop_table('case_conference_logs')
     with op.batch_alter_table('audit_action_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_audit_action_logs_user_id'))
         batch_op.drop_index(batch_op.f('ix_audit_action_logs_supporter_id'))
@@ -1475,26 +1716,32 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_users_display_name'))
 
     op.drop_table('users')
-    op.drop_table('training_prerequisite_master')
+    with op.batch_alter_table('training_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_training_logs_supporter_id'))
+
+    op.drop_table('training_logs')
     op.drop_table('supporter_role_link')
     with op.batch_alter_table('supporter_qualifications', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_supporter_qualifications_supporter_id'))
 
     op.drop_table('supporter_qualifications')
+    with op.batch_alter_table('supporter_pii', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_supporter_pii_email'))
+
+    op.drop_table('supporter_pii')
     with op.batch_alter_table('supporter_attendance_correction_requests', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_supporter_attendance_correction_requests_supporter_id'))
 
     op.drop_table('supporter_attendance_correction_requests')
-    with op.batch_alter_table('staff_reflection_logs', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_staff_reflection_logs_supporter_id'))
+    with op.batch_alter_table('staff_activity_allocation_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_staff_activity_allocation_logs_supporter_id'))
 
-    op.drop_table('staff_reflection_logs')
-    op.drop_table('role_permission_link')
-    with op.batch_alter_table('office_settings', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_office_settings_municipality_id'))
-        batch_op.drop_index(batch_op.f('ix_office_settings_corporation_id'))
+    op.drop_table('staff_activity_allocation_logs')
+    with op.batch_alter_table('office_service_configurations', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_office_service_configurations_office_id'))
+        batch_op.drop_index(batch_op.f('ix_office_service_configurations_manager_supporter_id'))
 
-    op.drop_table('office_settings')
+    op.drop_table('office_service_configurations')
     with op.batch_alter_table('job_development_logs', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_job_development_logs_supporter_id'))
         batch_op.drop_index(batch_op.f('ix_job_development_logs_employer_id'))
@@ -1504,12 +1751,40 @@ def downgrade():
         batch_op.drop_index(batch_op.f('ix_goal_assessments_goal_id'))
 
     op.drop_table('goal_assessments')
-    op.drop_table('vendor_master')
-    op.drop_table('system_logs')
+    with op.batch_alter_table('committee_activity_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_committee_activity_logs_office_id'))
+        batch_op.drop_index(batch_op.f('ix_committee_activity_logs_committee_type_id'))
+
+    op.drop_table('committee_activity_logs')
     with op.batch_alter_table('supporters', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_supporters_email'))
+        batch_op.drop_index(batch_op.f('ix_supporters_office_id'))
+        batch_op.drop_index(batch_op.f('ix_supporters_last_name'))
+        batch_op.drop_index(batch_op.f('ix_supporters_first_name'))
 
     op.drop_table('supporters')
+    with op.batch_alter_table('office_training_events', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_office_training_events_training_type_id'))
+        batch_op.drop_index(batch_op.f('ix_office_training_events_office_id'))
+
+    op.drop_table('office_training_events')
+    with op.batch_alter_table('office_operations_logs', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_office_operations_logs_office_id'))
+
+    op.drop_table('office_operations_logs')
+    with op.batch_alter_table('job_filing_records', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_job_filing_records_office_id'))
+
+    op.drop_table('job_filing_records')
+    op.drop_table('training_prerequisite_master')
+    op.drop_table('role_permission_link')
+    with op.batch_alter_table('office_settings', schema=None) as batch_op:
+        batch_op.drop_index(batch_op.f('ix_office_settings_municipality_id'))
+        batch_op.drop_index(batch_op.f('ix_office_settings_corporation_id'))
+
+    op.drop_table('office_settings')
+    op.drop_table('vendor_master')
+    op.drop_table('training_type_master')
+    op.drop_table('system_logs')
     op.drop_table('status_master')
     op.drop_table('staff_activity_master')
     op.drop_table('skill_master')
@@ -1529,7 +1804,10 @@ def downgrade():
     op.drop_table('organizations')
     op.drop_table('municipality_master')
     op.drop_table('job_title_master')
+    op.drop_table('issue_category_master')
+    op.drop_table('government_fee_master')
     op.drop_table('gender_legal_master')
+    op.drop_table('failure_factor_master')
     with op.batch_alter_table('employer_master', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_employer_master_company_name'))
 

@@ -2,19 +2,22 @@
 # アプリケーション全体に「app.models」という単一の窓口を提供する。
 
 # --- 1. masters パッケージ ---
-# ★ 修正: TrainingTypeMaster を追加
 from backend.app.models.masters.master_definitions import (
     StatusMaster, DisabilityTypeMaster, GenderLegalMaster, MunicipalityMaster,
     JobTitleMaster, ServiceTypeMaster, QualificationMaster, SkillMaster,
     TrainingPrerequisiteMaster, DocumentTypeMaster, CommitteeTypeMaster,
     StaffActivityMaster, ProductMaster, VendorMaster, RoleMaster, PermissionMaster,
-    TrainingTypeMaster
+    TrainingTypeMaster,
+    # ★ 追加: 失敗の財産化・ナレッジ共有のための新マスタ
+    FailureFactorMaster, IssueCategoryMaster
 )
 
 # --- 2. core パッケージ ---
 from backend.app.models.core.office import (
     Corporation, OfficeSetting, OfficeServiceConfiguration,
-    JobFilingRecord, OfficeAdditiveFiling
+    OfficeAdditiveFiling, JobFilingRecord,
+    # ★ 追加: 事業所運営会議
+    OfficeOperationsLog
 )
 from backend.app.models.core.supporter import (
     Supporter, SupporterTimecard, SupporterJobAssignment, 
@@ -23,6 +26,12 @@ from backend.app.models.core.supporter import (
 )
 from backend.app.models.core.user import (
     User, UserPII
+)
+from backend.app.models.core.user_profile import (
+    UserProfile, EmergencyContact, FamilyMember
+)
+from backend.app.models.core.user_documents import (
+    UserSkill, UserDocument
 )
 from backend.app.models.core.service_certificate import (
     ServiceCertificate, GrantedService, CopaymentLimit, 
@@ -67,6 +76,10 @@ from backend.app.models.support.crisis_plan import (
 from backend.app.models.support.attendance_workflow import (
     AttendanceRecord, UserAttendanceCorrectionRequest, 
     MonthlyAttendancePlan, AbsenceResponseLog
+)
+# ★ 追加: ケース会議
+from backend.app.models.support.case_management import (
+    CaseConferenceLog
 )
 
 # --- 4. finance パッケージ ---

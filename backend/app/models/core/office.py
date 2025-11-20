@@ -83,7 +83,7 @@ class OfficeSetting(db.Model):
     operations_logs = relationship('OfficeOperationsLog', back_populates='office', lazy='dynamic')
     
     # Supporterからの逆参照 (owned_offices)
-    owner_supporter = relationship('Supporter', back_populates='owned_offices', foreign_keys='Supporter.office_id')
+    staff_members = relationship('Supporter', back_populates='office', lazy='dynamic')
 
 
 # ====================================================================

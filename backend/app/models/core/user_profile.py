@@ -32,7 +32,7 @@ class FamilyMember(db.Model):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     
     name = Column(String(100), nullable=False)
-    relationship = Column(String(50)) # 続柄
+    relation = Column(String(50)) # 続柄
     phone_number = Column(String(20))
     is_main_contact = Column(Boolean, default=False) # メインの連絡先か
     
@@ -49,6 +49,6 @@ class EmergencyContact(db.Model):
     
     name = Column(String(100), nullable=False)
     phone_number = Column(String(20), nullable=False)
-    relationship = Column(String(50)) # 続柄
+    relation = Column(String(50)) # 続柄
 
     user = relationship('User', back_populates='emergency_contacts')

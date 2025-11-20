@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
@@ -32,11 +33,16 @@ class SalesInvoice(db.Model):
     invoice_status = Column(String(30), default='DRAFT', nullable=False)
     payment_date = Column(Date) # 入金確認日
     
+    # --- 領収書（★ NEW: 入金後の証憑） ---
+    # 取引先へ発行した領収書の控え
+    receipt_pdf_url = Column(String(500)) 
+    receipt_issued_at = Column(DateTime) 
+    
     service_config = relationship('OfficeServiceConfiguration')
-    vendor = relationship('VendorMaster')
+    vendor = relationship('VendorMaster', back_populates='invoices')
 
 # ====================================================================
-# 2. UserWageLog (利用者工賃記録 - 支払)
+# 2. UserWageLog (利用者工賃記録 - 支払と受取書)
 # ====================================================================
 class UserWageLog(db.Model):
     """
@@ -61,4 +67,33 @@ class UserWageLog(db.Model):
     
     payment_timestamp = Column(DateTime) # 支払日（証跡）
     
+    # --- 受取書（利用者発行領収書） ---
+    # 利用者が工賃を受け取ったことを証明する書類のURL
+    recipient_receipt_url = Column(String(500)) 
+    # 署名または受領確認が行われた日
+    receipt_signed_date = Column(Date)
+
     user = relationship('User')
+
+# ====================================================================
+# 3. FeeCalculationDecision (給付費算定決定)
+# ====================================================================
+class FeeCalculationDecision(db.Model):
+    """
+    給付費算定の決定履歴。
+    毎月の請求計算において、どの加算・減算が適用されたかの最終決定ログ。
+    """
+    __tablename__ = 'fee_calculation_decisions'
+    
+    id = Column(Integer, primary_key=True)
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=False, index=True)
+    
+    calculation_month = Column(Date, nullable=False)
+    
+    # 適用された加算・減算のリスト（JSONなどで保持）
+    applied_fees_json = Column(Text) 
+    
+    is_finalized = Column(Boolean, default=False)
+    finalized_at = Column(DateTime)
+    
+    service_config = relationship('OfficeServiceConfiguration', back_populates='fee_decisions')

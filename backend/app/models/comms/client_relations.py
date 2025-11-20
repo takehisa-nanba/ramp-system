@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -17,7 +18,7 @@ class Organization(db.Model):
     # 組織の基本情報
     organization_name = Column(String(255), nullable=False, index=True)
     
-    # (例: 'HOSPITAL', 'HELLO_WORK', 'CONSULTATION_OFFICE')
+    # (例: 'HOSPITAL', 'HELLO_WORK', 'CONSULTATION_OFFICE', 'SCHOOL')
     organization_type = Column(String(50), nullable=False, index=True)
     
     # 代表連絡先
@@ -50,9 +51,9 @@ class UserOrganizationLink(db.Model):
     responsible_person_name = Column(String(100)) 
     
     link_start_date = Column(Date, default=func.now())
-    link_end_date = Column(Date)
+    link_end_date = Column(Date) # 連携終了日 (NULLなら継続中)
     
-    is_primary_contact = Column(Boolean, default=False) # メインの連携先か
+    is_primary_contact = Column(Boolean, default=False) # メインの連携先か（例：計画相談先）
     
     # --- リレーションシップ ---
     user = relationship('User', back_populates='organization_links')

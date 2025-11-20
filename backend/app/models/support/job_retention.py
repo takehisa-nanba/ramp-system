@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -9,6 +10,7 @@ class JobRetentionContract(db.Model):
     """
     就労定着支援の契約情報（親モデル）。
     就職後6ヶ月経過後の、独立した請求サービス（原理3）の土台。
+    User.status_id = '定着支援中' の期間を管理する。
     """
     __tablename__ = 'job_retention_contracts'
     
@@ -21,6 +23,7 @@ class JobRetentionContract(db.Model):
     # 契約内容（支援頻度、費用など）の詳細情報
     contract_details = Column(Text)
     
+    # --- リレーションシップ ---
     user = relationship('User', back_populates='retention_contracts')
     retention_records = relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
 

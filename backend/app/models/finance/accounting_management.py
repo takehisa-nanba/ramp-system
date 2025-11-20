@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
@@ -35,12 +36,12 @@ class MonthlyBillingSummary(db.Model):
     agency_receipt = relationship('AgencyReceiptStatement', back_populates='billing_summary', uselist=False, cascade="all, delete-orphan")
 
 # ====================================================================
-# 2. ClientInvoice (利用者への自己負担請求書)
+# 2. ClientInvoice (利用者への自己負担請求書 & 領収証)
 # ====================================================================
 class ClientInvoice(db.Model):
     """
-    自己負担請求書（利用者への請求）。
-    未収金管理の土台となる（原理3）。
+    自己負担請求書（利用者への請求）および領収証。
+    未収金管理と入金後の証憑管理の土台となる（原理3）。
     """
     __tablename__ = 'client_invoices'
     
@@ -53,15 +54,20 @@ class ClientInvoice(db.Model):
     actual_cost_amount = Column(Numeric(precision=10, scale=2), nullable=False) # 食費などの実費額
     total_amount = Column(Numeric(precision=10, scale=2), nullable=False)
     
-    # --- 証憑と入金確認（原理1） ---
+    # --- 請求の証憑 ---
     invoice_pdf_url = Column(String(500)) # 発行した請求書のURL
     
+    # --- 入金確認（原理1） ---
     # (PENDING, PAID, OVERDUE)
     payment_status = Column(String(30), default='PENDING', nullable=False)
     payment_date = Column(Date) # 入金日
     payment_confirmed_by_id = Column(Integer, ForeignKey('supporters.id')) # 入金確認を行った職員
     
-    # --- 受領確認（原理1） ---
+    # --- 領収証（★ NEW: 入金後の証憑） ---
+    receipt_pdf_url = Column(String(500)) # 発行した領収証のURL
+    receipt_issued_at = Column(DateTime) # 領収証発行日時
+    
+    # --- 受領確認（原理1：請求書/領収証の受け渡し） ---
     receipt_confirmation_timestamp = Column(DateTime) # 確実に手渡した（またはOTL閲覧）日時
     handover_method = Column(String(30)) # (例: 'DIGITAL_VIEW', 'IN_PERSON_HANDOVER')
     handover_supporter_id = Column(Integer, ForeignKey('supporters.id')) # 手渡した職員
@@ -129,4 +135,9 @@ class DocumentConsentLog(db.Model):
 
     user = relationship('User')
     # SupportPlanへのリレーション (SupportPlan側で定義)
-    plan = relationship('SupportPlan', back_populates='consent_log', foreign_keys=[document_id]) # document_type == 'SUPPORT_PLAN' の場合
+    plan = relationship(
+        'SupportPlan', 
+        primaryjoin="and_(DocumentConsentLog.document_id == SupportPlan.id, DocumentConsentLog.document_type == 'SUPPORT_PLAN')",
+        foreign_keys="DocumentConsentLog.document_id",
+        back_populates='consent_log'
+    )

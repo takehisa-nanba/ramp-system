@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
@@ -23,6 +24,10 @@ class ContractReportDetail(db.Model):
         index=True
     )
     
+    # ★ 追加: 利用者の「在籍」を確定させるための紐づけ（原理3）
+    # これにより、「どの事業所（サービス）」の利用者かが確定する。
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=False, index=True)
+    
     # --- 事業所記入欄の情報（原理3：会計の正確性） ---
     contract_corporation_name = Column(String(100)) # 提供事業者（法人名）
     contract_office_name = Column(String(100))      # 提供事業所（事業所名）
@@ -39,7 +44,8 @@ class ContractReportDetail(db.Model):
     
     # --- リレーションシップ ---
     granted_service = relationship('GrantedService', back_populates='contract_detail')
-    
+    service_config = relationship('OfficeServiceConfiguration') # 在籍先
+
     def __repr__(self):
         return f'<ContractDetail for GrantedService {self.granted_service_id}>'
 
@@ -49,15 +55,15 @@ class ContractReportDetail(db.Model):
 class ComplianceEventLog(db.Model):
     """
     加算・減算・助成金など、会計に影響する事象の「期間」を管理するログ。
-    「フラグ」ではなく「期間」で管理し、ムダなズレ（原理3）を排除する。
+    送迎加算や初期加算の適用期間もここで管理する（原理3）。
     """
     __tablename__ = 'compliance_event_logs'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     
-    # どの事象か (例: '集中支援加算', '計画未作成減算', '自治体助成金A')
-    # 🚨 本来はマスター化すべきだが、運用柔軟性のためString型も可
+    # どの事象か (例: '集中支援加算', '計画未作成減算', '送迎加算', '特別地域加算')
+    # 運用柔軟性のためString型とするが、ロジック内で定数管理する
     event_type = Column(String(100), nullable=False, index=True) 
     
     # --- 法令遵守（原理1） ---
@@ -65,7 +71,7 @@ class ComplianceEventLog(db.Model):
     end_date = Column(Date, nullable=False) # 適用終了日
     
     # --- 証憑（原理1） ---
-    document_url = Column(String(500)) # 根拠となる届出書などのURL
+    document_url = Column(String(500)) # 根拠となる届出書や評価シートのURL
     notes = Column(Text) # 備考
     
-    user = relationship('User')
+    user = relationship('User', back_populates='compliance_events')

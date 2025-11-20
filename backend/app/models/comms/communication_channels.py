@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -17,9 +18,17 @@ class SupportThread(db.Model):
     # スレッドの状態（例: 'OPEN', 'CLOSED', 'ARCHIVED'）
     status = Column(String(20), default='OPEN', nullable=False)
     
+    # 問題の所在タグ (Knowledge Baseへの入り口)
+    # どのカテゴリの相談か (masters/master_definitions.py の IssueCategoryMaster を参照)
+    issue_category_id = Column(Integer, ForeignKey('issue_category_master.id'))
+
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
     # --- リレーションシップ ---
     user = relationship('User', back_populates='support_threads')
     messages = relationship('ChatMessage', back_populates='thread', lazy='dynamic', cascade="all, delete-orphan")
+    issue_category = relationship('IssueCategoryMaster')
 
 # ====================================================================
 # 2. ChatMessage (チャットメッセージ)
@@ -40,6 +49,9 @@ class ChatMessage(db.Model):
     content = Column(Text, nullable=False)
     timestamp = Column(DateTime, default=func.now(), nullable=False)
     
+    # 既読状態（オプション）
+    is_read = Column(Boolean, default=False)
+    
     # --- リレーションシップ ---
     thread = relationship('SupportThread', back_populates='messages')
     sender_user = relationship('User', foreign_keys=[sender_user_id])
@@ -49,14 +61,27 @@ class ChatMessage(db.Model):
 # 3. UserRequest (利用者からのリクエスト)
 # ====================================================================
 class UserRequest(db.Model):
-    """利用者からの構造化されたリクエスト（例: 欠席連絡、面談希望など）"""
+    """
+    利用者からの構造化されたリクエスト（例: 欠席連絡、面談希望など）。
+    チャットとは異なり、ステータス管理を伴うタスクとして扱う。
+    """
     __tablename__ = 'user_requests'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     
-    request_type = Column(String(50), nullable=False) # (例: 'ABSENCE_NOTIFICATION', 'INTERVIEW_REQUEST')
+    # (例: 'ABSENCE_NOTIFICATION', 'INTERVIEW_REQUEST', 'DOC_REQUEST')
+    request_type = Column(String(50), nullable=False) 
+    
     details = Column(Text)
+    
+    # 対応ステータス
     is_resolved = Column(Boolean, default=False)
+    resolution_notes = Column(Text) # 対応内容
+    resolved_at = Column(DateTime)
+    resolved_by_supporter_id = Column(Integer, ForeignKey('supporters.id'))
+    
+    created_at = Column(DateTime, default=func.now())
     
     user = relationship('User', back_populates='user_requests')
+    resolver = relationship('Supporter', foreign_keys=[resolved_by_supporter_id])

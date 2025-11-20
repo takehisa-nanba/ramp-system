@@ -54,6 +54,9 @@ class User(db.Model):
     holistic_policies = relationship('HolisticSupportPolicy', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     skills = relationship('UserSkill', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     documents = relationship('UserDocument', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    family_members = relationship('FamilyMember', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    emergency_contacts = relationship('EmergencyContact', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+
 
     # --- 支援プロセスの子テーブル ---
     support_plans = relationship('SupportPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
@@ -71,6 +74,16 @@ class User(db.Model):
     # --- 就労先の子テーブル ---
     job_placements = relationship('JobPlacementLog', back_populates='user', lazy='dynamic')
     
+    # --- ★ 追加: 危機対応計画 (今回のエラー原因) ---
+    crisis_plans = relationship('CrisisPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    # --- ★ 追加: 監査・コンプライアンス (これも抜けている可能性があります) ---
+    compliance_events = relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
+    # --- ★ 追加: インシデント・苦情 ---
+    incident_reports = relationship('IncidentReport', back_populates='user', lazy='dynamic')
+    # ComplaintLogは foreign_keys 指定が必要
+    complaints = relationship('ComplaintLog', foreign_keys='ComplaintLog.complainant_user_id', lazy='dynamic')
+    # --- ★ 追加: ケース会議 ---
+    case_conferences = relationship('CaseConferenceLog', back_populates='user', lazy='dynamic')
     # --- 監査・コンプライアンス ---
     compliance_events = relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
     

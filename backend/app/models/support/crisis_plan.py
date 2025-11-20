@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -20,7 +21,7 @@ class CrisisPlan(db.Model):
     effective_date = Column(Date, nullable=False) # 適用開始日
     review_date = Column(Date) # 次回レビュー予定日
     
-    # --- 主要なクライシス要素 ---
+    # --- 主要なクライシス要素（原理2：質の均一化） ---
     crisis_signs = Column(Text)      # 危機状態の兆候（何をサインと捉えるか）
     coping_strategies = Column(Text) # 対処方法（利用者、職員が取るべき行動）
     emergency_contacts_detail = Column(Text) # 緊急連絡先、医療機関情報など（Textで詳細を保持）

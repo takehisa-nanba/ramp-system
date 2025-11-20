@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
@@ -24,13 +25,19 @@ class MonitoringReport(db.Model):
     # --- 法令遵守（原理1） ---
     report_date = Column(Date, nullable=False) # モニタリング実施日
     
-    # --- 証憑（原理4） ---
-    # モニタリング結果のテキスト（システムがPDF化）
+    # --- 評価の内容（原理2：支援の質） ---
+    # 全体的なサマリー
     monitoring_summary = Column(Text, nullable=False) 
     
-    # --- 同意（原理1） ---
-    # このモニタリング報告書に対する同意ログ (DocumentConsentLogへ紐づく)
-    # consent_id = Column(Integer, ForeignKey('document_consent_logs.id'))
+    # 目標ごとの進捗所見 (定性評価)
+    target_goal_progress_notes = Column(Text)
+    
+    # 背景分析 (個人・環境・指導因子など、評価の「文脈」を記録)
+    contextual_analysis = Column(Text)
+    
+    # --- 証憑（原理1） ---
+    # 署名済みモニタリング報告書のPDF URL (電子署名またはスキャン)
+    document_url = Column(String(500)) 
     
     # --- リレーションシップ ---
     plan = relationship('SupportPlan')
