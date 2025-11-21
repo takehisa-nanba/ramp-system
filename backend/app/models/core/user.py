@@ -81,7 +81,12 @@ class User(db.Model):
     # --- ★ 追加: インシデント・苦情 ---
     incident_reports = relationship('IncidentReport', back_populates='user', lazy='dynamic')
     # ComplaintLogは foreign_keys 指定が必要
-    complaints = relationship('ComplaintLog', foreign_keys='ComplaintLog.complainant_user_id', lazy='dynamic')
+    complaints = relationship(
+        'ComplaintLog', 
+        foreign_keys='ComplaintLog.target_user_id', 
+        lazy='dynamic',
+        overlaps="user"
+    )
     # --- ★ 追加: ケース会議 ---
     case_conferences = relationship('CaseConferenceLog', back_populates='user', lazy='dynamic')
     # --- 監査・コンプライアンス ---

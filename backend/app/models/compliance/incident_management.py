@@ -54,16 +54,23 @@ class IncidentReport(db.Model):
 class ComplaintLog(db.Model):
     """
     苦情対応記録。
-    受付から解決までのプロセスを厳格に記録する（原理1, 6）。
+    「誰に関する苦情か（target_user）」を軸に管理し、関係機関との紐づけも辿れるようにする。
     """
     __tablename__ = 'complaint_logs'
     
     id = Column(Integer, primary_key=True)
     
-    # 苦情申立人（利用者、家族、外部機関など）
-    complainant_user_id = Column(Integer, ForeignKey('users.id'), index=True)
-    complainant_name = Column(String(100)) # 外部者の場合
-    complainant_type = Column(String(50), nullable=False) # (例: 'USER', 'FAMILY', 'ORGANIZATION')
+    # ★ 修正: 申立人IDではなく「対象利用者ID」とする
+    # NULLの場合は「事業所全体」または「特定個人ではない」苦情として扱う
+    target_user_id = Column(Integer, ForeignKey('users.id'), nullable=True, index=True)
+    
+    # 申立人の属性 (例: 'USER', 'FAMILY', 'RELATED_ORG', 'NEIGHBOR', 'ANONYMOUS')
+    complainant_type = Column(String(50), nullable=False) 
+    
+    # 申立人の詳細（名前や連絡先をテキストで記録）
+    # 関係機関の場合は「〇〇相談支援事業所 田中氏」のように記述
+    complainant_name = Column(String(100)) 
+    complainant_contact_info = Column(String(255)) 
     
     reception_timestamp = Column(DateTime, nullable=False, default=func.now()) # 受付日時
     complaint_summary = Column(Text, nullable=False) # 苦情概要 (NULL禁止)
@@ -79,5 +86,13 @@ class ComplaintLog(db.Model):
     closure_timestamp = Column(DateTime) # 最終解決日時
     responsible_supporter_id = Column(Integer, ForeignKey('supporters.id')) # 対応責任者
     
-    user = relationship('User', foreign_keys=[complainant_user_id])
+    # ★ 修正: overlapsを追加して警告を消す
+    # Userモデル側の 'complaints' との関係を整理
+    # target_user とすることで、Userモデルから見た「自分に関する苦情」として取得可能にする
+    target_user = relationship(
+        'User', 
+        foreign_keys=[target_user_id], 
+        overlaps="complaints"
+    )
+    
     responsible_supporter = relationship('Supporter', foreign_keys=[responsible_supporter_id])

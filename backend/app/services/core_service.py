@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from app...' を 'backend.app...' に修正
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     User, UserPII, Supporter, RoleMaster, PermissionMaster,
@@ -16,51 +16,49 @@ def get_corporation_id_for_user(user: User) -> int:
     """
     利用者(User)から、その利用者が「在籍」している法人(Corporation)のIDを
     「契約」を辿って特定する。
-    
-    [論理チェーン]
-    User -> ServiceCertificate -> GrantedService -> 
-    ContractReportDetail -> OfficeServiceConfiguration -> 
-    OfficeSetting -> Corporation
     """
     if not user:
-        raise ValueError("User object is required to find corporation ID.")
+        # ユーザーオブジェクトがない場合はデフォルトIDを返す（またはエラー）
+        return 1
         
     try:
-        # Userに紐づく最新の有効な（または最も最近の）契約を辿る
-        # 🚨 このクエリはシステムの「在籍」ロジックの核となる
-        
-        # 直近の受給者証を探す
+        # 1. 直近の受給者証を探す
         latest_cert = ServiceCertificate.query.filter_by(user_id=user.id)\
             .order_by(ServiceCertificate.certificate_issue_date.desc()).first()
             
         if not latest_cert:
-            # 契約がない場合はデフォルト法人(ID:1)またはエラー
-            # (初期登録時などを考慮し、暫定的に1を返す)
-            return 1
+            return 1 # 契約がない場合（デフォルト）
             
-        # 受給者証に紐づく支給決定を探す
+        # 2. 受給者証に紐づく最新の支給決定を探す
         latest_grant = GrantedService.query.filter_by(certificate_id=latest_cert.id)\
             .order_by(GrantedService.granted_start_date.desc()).first()
             
         if not latest_grant:
             return 1
             
-        # 支給決定に紐づく契約詳細を探す
+        # 3. 支給決定に紐づく契約詳細を探す
+        # ★ ここで変数名 'contract' を定義する
         contract = ContractReportDetail.query.filter_by(granted_service_id=latest_grant.id).first()
         
         if not contract:
             return 1
             
-        # 契約からサービス構成 -> 事業所 -> 法人 を辿る
-        service_config = OfficeServiceConfiguration.query.get(contract.office_service_configuration_id)
-        if service_config and service_config.office:
-            return service_config.office.corporation_id
+        # 4. 契約からサービス構成 -> 事業所 -> 法人 を辿る
+        # (SQLAlchemy 2.0 style: db.session.get)
+        service_config = db.session.get(OfficeServiceConfiguration, contract.office_service_configuration_id)
+        
+        if not service_config:
+            return 1
+
+        office = db.session.get(OfficeSetting, service_config.office_id)
+        
+        if office:
+            return office.corporation_id
             
         return 1 # フォールバック
 
     except Exception as e:
         print(f"WARNING: Failed to resolve Corporation ID for User {user.id}: {e}")
-        # 安全のためデフォルトまたはエラーを返す
         return 1
 
 
@@ -68,12 +66,10 @@ def get_corporation_kek(corporation_id: int) -> bytes:
     """
     【階層1】法人のマスターキー（KEK）を取得する。
     """
-    # 🚨 暫定的な実装:
-    # 本番環境では、KMSまたは安全なDBストアから法人IDに紐づくKEKを取得する。
-    # 今回は環境変数から共通のKEKを取得してシミュレートする。
+    # 🚨 暫定的な実装: 環境変数から共通キーを取得
     temp_key = os.environ.get('FERNET_ENCRYPTION_KEY')
     if not temp_key:
-        # 開発用デフォルトキー
+        # 開発用デフォルトキー (Base64 encoded 32 bytes)
         temp_key = b'gQfTq3-iJ4_1nZ-vY8-9jA_XyZ7_aB_C-dE_fG_hI_k='
         
     return temp_key if isinstance(temp_key, bytes) else temp_key.encode('utf-8')
@@ -85,7 +81,7 @@ def get_system_pii_key() -> bytes:
     """
     key = os.environ.get('PII_ENCRYPTION_KEY')
     if not key:
-        print("CRITICAL WARNING: PII_ENCRYPTION_KEY is not set. Using insecure default key.")
+        # 開発用デフォルトキー
         key = b'bA-sTq-mG8_dK9-7_wN-xZ_yB_vC-1D-2E_fG_hI_j='
     return key if isinstance(key, bytes) else key.encode('utf-8')
 
@@ -96,17 +92,18 @@ def get_system_pii_key() -> bytes:
 
 def authenticate_supporter(email, password):
     """職員のログイン認証"""
-    supporter = Supporter.query.filter_by(email=email).first()
-    if supporter and supporter.check_password(password):
+    # Supporter -> SupporterPII を結合して検索
+    supporter = Supporter.query.join(Supporter.pii).filter(SupporterPII.email == email).first()
+    
+    if supporter and supporter.pii and supporter.pii.check_password(password):
         return supporter
     return None
 
 def check_permission(supporter_id, permission_name):
     """
     職員が特定の権限(Permission)を持っているか確認する。
-    Supporter -> Roles -> Permissions の多対多リレーションを解決する。
     """
-    supporter = Supporter.query.get(supporter_id)
+    supporter = db.session.get(Supporter, supporter_id)
     if not supporter:
         return False
     

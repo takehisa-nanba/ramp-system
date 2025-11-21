@@ -50,9 +50,19 @@ class Schedule(db.Model):
     # --- リレーションシップ (多対多) ---
     
     # このスケジュールに参加する「利用者」
-    # (Userモデルの backref='user_schedules' で逆参照可能)
-    participants_user = db.relationship('User', secondary=schedule_participants, backref='user_schedules')
+    # ★ 修正: overlapsを追加
+    participants_user = db.relationship(
+        'User', 
+        secondary=schedule_participants, 
+        backref='user_schedules',
+        overlaps="participants_supporter" 
+    )
     
     # このスケジュールに参加する「職員」
-    # (Supporterモデルの backref='supporter_schedules' で逆参照可能)
-    participants_supporter = db.relationship('Supporter', secondary=schedule_participants, backref='supporter_schedules')
+    # ★ 修正: overlapsを追加
+    participants_supporter = db.relationship(
+        'Supporter', 
+        secondary=schedule_participants, 
+        backref='supporter_schedules',
+        overlaps="participants_user"
+    )

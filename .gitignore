@@ -17,6 +17,14 @@ __pycache__/
 # IDEやエディタの設定ファイル
 backend/scripts/
 
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# テスト用の一時DBなど（もし生成されるなら）
+backend/tests/*.db
+
 # --------------------------
 # 2. フロントエンド (Node.js/Vite)
 # --------------------------

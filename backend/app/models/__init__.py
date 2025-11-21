@@ -20,7 +20,7 @@ from backend.app.models.core.office import (
     OfficeOperationsLog
 )
 from backend.app.models.core.supporter import (
-    Supporter, SupporterTimecard, SupporterJobAssignment, 
+    Supporter, SupporterPII, SupporterTimecard, SupporterJobAssignment, 
     SupporterQualification, AttendanceCorrectionRequest,
     StaffActivityAllocationLog
 )
