@@ -1,8 +1,8 @@
-"""V2.2 - Finalized Architecture
+"""V2.3 - Finalized Architecture with 7 Principles
 
-Revision ID: 4fc6ace55584
+Revision ID: 56ae7526946c
 Revises: 
-Create Date: 2025-11-21 07:44:56.092505
+Create Date: 2025-11-21 20:45:19.268703
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '4fc6ace55584'
+revision = '56ae7526946c'
 down_revision = None
 branch_labels = None
 depends_on = None
@@ -591,9 +591,10 @@ def upgrade():
 
     op.create_table('complaint_logs',
     sa.Column('id', sa.Integer(), nullable=False),
-    sa.Column('complainant_user_id', sa.Integer(), nullable=True),
-    sa.Column('complainant_name', sa.String(length=100), nullable=True),
+    sa.Column('target_user_id', sa.Integer(), nullable=True),
     sa.Column('complainant_type', sa.String(length=50), nullable=False),
+    sa.Column('complainant_name', sa.String(length=100), nullable=True),
+    sa.Column('complainant_contact_info', sa.String(length=255), nullable=True),
     sa.Column('reception_timestamp', sa.DateTime(), nullable=False),
     sa.Column('complaint_summary', sa.Text(), nullable=False),
     sa.Column('investigation_details', sa.Text(), nullable=True),
@@ -601,12 +602,12 @@ def upgrade():
     sa.Column('complaint_status', sa.String(length=30), nullable=False),
     sa.Column('closure_timestamp', sa.DateTime(), nullable=True),
     sa.Column('responsible_supporter_id', sa.Integer(), nullable=True),
-    sa.ForeignKeyConstraint(['complainant_user_id'], ['users.id'], ),
     sa.ForeignKeyConstraint(['responsible_supporter_id'], ['supporters.id'], ),
+    sa.ForeignKeyConstraint(['target_user_id'], ['users.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     with op.batch_alter_table('complaint_logs', schema=None) as batch_op:
-        batch_op.create_index(batch_op.f('ix_complaint_logs_complainant_user_id'), ['complainant_user_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_complaint_logs_target_user_id'), ['target_user_id'], unique=False)
 
     op.create_table('compliance_event_logs',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -1682,7 +1683,7 @@ def downgrade():
 
     op.drop_table('compliance_event_logs')
     with op.batch_alter_table('complaint_logs', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_complaint_logs_complainant_user_id'))
+        batch_op.drop_index(batch_op.f('ix_complaint_logs_target_user_id'))
 
     op.drop_table('complaint_logs')
     with op.batch_alter_table('client_invoices', schema=None) as batch_op:

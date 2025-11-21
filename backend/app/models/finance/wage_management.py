@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
 # ====================================================================
@@ -38,8 +37,8 @@ class SalesInvoice(db.Model):
     receipt_pdf_url = Column(String(500)) 
     receipt_issued_at = Column(DateTime) 
     
-    service_config = relationship('OfficeServiceConfiguration')
-    vendor = relationship('VendorMaster', back_populates='invoices')
+    service_config = db.relationship('OfficeServiceConfiguration')
+    vendor = db.relationship('VendorMaster', back_populates='invoices')
 
 # ====================================================================
 # 2. UserWageLog (利用者工賃記録 - 支払と受取書)
@@ -73,7 +72,7 @@ class UserWageLog(db.Model):
     # 署名または受領確認が行われた日
     receipt_signed_date = Column(Date)
 
-    user = relationship('User')
+    user = db.relationship('User')
 
 # ====================================================================
 # 3. FeeCalculationDecision (給付費算定決定)
@@ -96,4 +95,4 @@ class FeeCalculationDecision(db.Model):
     is_finalized = Column(Boolean, default=False)
     finalized_at = Column(DateTime)
     
-    service_config = relationship('OfficeServiceConfiguration', back_populates='fee_decisions')
+    service_config = db.relationship('OfficeServiceConfiguration', back_populates='fee_decisions')

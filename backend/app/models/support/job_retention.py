@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -24,8 +23,8 @@ class JobRetentionContract(db.Model):
     contract_details = Column(Text)
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='retention_contracts')
-    retention_records = relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
+    user = db.relationship('User', back_populates='retention_contracts')
+    retention_records = db.relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
 
 # ====================================================================
 # 2. JobRetentionRecord (就労定着支援 - 実施記録)
@@ -52,5 +51,5 @@ class JobRetentionRecord(db.Model):
     document_url = Column(String(500)) # 詳細な面談記録票や確認書などのファイルURL
     
     # --- リレーションシップ ---
-    contract = relationship('JobRetentionContract', back_populates='retention_records')
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    contract = db.relationship('JobRetentionContract', back_populates='retention_records')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])

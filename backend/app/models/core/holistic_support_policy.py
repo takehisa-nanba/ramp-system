@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -29,4 +28,4 @@ class HolisticSupportPolicy(db.Model):
     created_at = Column(DateTime, default=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='holistic_policies')
+    user = db.relationship('User', back_populates='holistic_policies')

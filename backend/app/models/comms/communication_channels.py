@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -26,9 +25,9 @@ class SupportThread(db.Model):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='support_threads')
-    messages = relationship('ChatMessage', back_populates='thread', lazy='dynamic', cascade="all, delete-orphan")
-    issue_category = relationship('IssueCategoryMaster')
+    user = db.relationship('User', back_populates='support_threads')
+    messages = db.relationship('ChatMessage', back_populates='thread', lazy='dynamic', cascade="all, delete-orphan")
+    issue_category = db.relationship('IssueCategoryMaster')
 
 # ====================================================================
 # 2. ChatMessage (チャットメッセージ)
@@ -53,9 +52,9 @@ class ChatMessage(db.Model):
     is_read = Column(Boolean, default=False)
     
     # --- リレーションシップ ---
-    thread = relationship('SupportThread', back_populates='messages')
-    sender_user = relationship('User', foreign_keys=[sender_user_id])
-    sender_supporter = relationship('Supporter', foreign_keys=[sender_supporter_id])
+    thread = db.relationship('SupportThread', back_populates='messages')
+    sender_user = db.relationship('User', foreign_keys=[sender_user_id])
+    sender_supporter = db.relationship('Supporter', foreign_keys=[sender_supporter_id])
 
 # ====================================================================
 # 3. UserRequest (利用者からのリクエスト)
@@ -83,5 +82,5 @@ class UserRequest(db.Model):
     
     created_at = Column(DateTime, default=func.now())
     
-    user = relationship('User', back_populates='user_requests')
-    resolver = relationship('Supporter', foreign_keys=[resolved_by_supporter_id])
+    user = db.relationship('User', back_populates='user_requests')
+    resolver = db.relationship('Supporter', foreign_keys=[resolved_by_supporter_id])

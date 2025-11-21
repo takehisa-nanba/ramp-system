@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -36,18 +35,18 @@ class SupportPlan(db.Model):
     created_at = Column(DateTime, default=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='support_plans')
+    user = db.relationship('User', back_populates='support_plans')
     
     # 根拠となる方針へのリレーション
-    holistic_policy = relationship('HolisticSupportPolicy')
+    holistic_policy = db.relationship('HolisticSupportPolicy')
     
     # 自己参照リレーション
-    draft_plan = relationship('SupportPlan', remote_side=[id], foreign_keys=[based_on_plan_id])
-    finalized_plan = relationship('SupportPlan', back_populates='draft_plan', remote_side=[based_on_plan_id])
+    draft_plan = db.relationship('SupportPlan', remote_side=[id], foreign_keys=[based_on_plan_id])
+    finalized_plan = db.relationship('SupportPlan', back_populates='draft_plan', remote_side=[based_on_plan_id])
 
-    long_term_goals = relationship('LongTermGoal', back_populates='plan', cascade="all, delete-orphan")
-    conferences = relationship('SupportConferenceLog', back_populates='plan', lazy='dynamic', cascade="all, delete-orphan")
-    consent_log = relationship(
+    long_term_goals = db.relationship('LongTermGoal', back_populates='plan', cascade="all, delete-orphan")
+    conferences = db.relationship('SupportConferenceLog', back_populates='plan', lazy='dynamic', cascade="all, delete-orphan")
+    consent_log = db.relationship(
         'DocumentConsentLog',
         primaryjoin="and_(DocumentConsentLog.document_id == SupportPlan.id, DocumentConsentLog.document_type == 'SUPPORT_PLAN')",
         foreign_keys="DocumentConsentLog.document_id",
@@ -55,7 +54,7 @@ class SupportPlan(db.Model):
         lazy='dynamic'
     )    
     # 見直し申請からの逆参照
-    review_requests = relationship('PlanReviewRequest', back_populates='plan', lazy='dynamic')
+    review_requests = db.relationship('PlanReviewRequest', back_populates='plan', lazy='dynamic')
 
 # ====================================================================
 # 2. LongTermGoal (長期目標)
@@ -70,8 +69,8 @@ class LongTermGoal(db.Model):
     target_period_start = Column(Date)
     target_period_end = Column(Date)
     
-    plan = relationship('SupportPlan', back_populates='long_term_goals')
-    short_term_goals = relationship('ShortTermGoal', back_populates='long_term_goal', cascade="all, delete-orphan")
+    plan = db.relationship('SupportPlan', back_populates='long_term_goals')
+    short_term_goals = db.relationship('ShortTermGoal', back_populates='long_term_goal', cascade="all, delete-orphan")
 
 # ====================================================================
 # 3. ShortTermGoal (短期目標 / 見直し期限)
@@ -91,8 +90,8 @@ class ShortTermGoal(db.Model):
     # 次回見直し予定日 (減算リスク回避の核)
     next_review_date = Column(Date) 
     
-    long_term_goal = relationship('LongTermGoal', back_populates='short_term_goals')
-    individual_goals = relationship('IndividualSupportGoal', back_populates='short_term_goal', cascade="all, delete-orphan")
+    long_term_goal = db.relationship('LongTermGoal', back_populates='short_term_goals')
+    individual_goals = db.relationship('IndividualSupportGoal', back_populates='short_term_goal', cascade="all, delete-orphan")
 
 # ====================================================================
 # 4. IndividualSupportGoal (支援の最小単位 / ガードレール)
@@ -121,7 +120,7 @@ class IndividualSupportGoal(db.Model):
     # 就労準備加算対象の活動か
     is_work_preparation_positioning = Column(Boolean, default=False, nullable=False)
     
-    short_term_goal = relationship('ShortTermGoal', back_populates='individual_goals')
+    short_term_goal = db.relationship('ShortTermGoal', back_populates='individual_goals')
 
 # ====================================================================
 # 5. SupportConferenceLog (支援会議ログ / 議事録)
@@ -149,7 +148,7 @@ class SupportConferenceLog(db.Model):
     external_participant_id = Column(Integer, ForeignKey('organizations.id')) 
     external_participant_signature_url = Column(String(500)) 
     
-    plan = relationship('SupportPlan', back_populates='conferences')
+    plan = db.relationship('SupportPlan', back_populates='conferences')
 
 # ====================================================================
 # 6. PlanReviewRequest (計画見直し申請)
@@ -171,9 +170,9 @@ class PlanReviewRequest(db.Model):
     requested_at = Column(DateTime, default=func.now())
     approver_id = Column(Integer, ForeignKey('supporters.id')) 
     
-    user = relationship('User')
-    plan = relationship('SupportPlan', back_populates='review_requests')
-    approver = relationship('Supporter')
+    user = db.relationship('User')
+    plan = db.relationship('SupportPlan', back_populates='review_requests')
+    approver = db.relationship('Supporter')
 
 # ====================================================================
 # 7. AssessorType & GoalAssessment (多角評価)
@@ -184,7 +183,7 @@ class AssessorType(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(50), unique=True, nullable=False) # 例: 'サービス管理責任者', '利用者本人', '支援員'
     
-    goal_assessments = relationship('GoalAssessment', back_populates='assessor_type', lazy='dynamic')
+    goal_assessments = db.relationship('GoalAssessment', back_populates='assessor_type', lazy='dynamic')
 
 class GoalAssessment(db.Model):
     """目標（長期、短期、個別）に対する多角評価ログ"""
@@ -202,5 +201,5 @@ class GoalAssessment(db.Model):
     # 評価結果（定性的評価を重視）
     comment = Column(Text) 
     
-    assessor_type = relationship('AssessorType', back_populates='goal_assessments')
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    assessor_type = db.relationship('AssessorType', back_populates='goal_assessments')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])

@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -27,7 +26,7 @@ class AttendanceRecord(db.Model):
     # 承認ワークフロー
     is_confirmed = Column(Boolean, default=False) # 職員による確認・承認
     
-    user = relationship('User')
+    user = db.relationship('User')
 
 # ====================================================================
 # 2. UserAttendanceCorrectionRequest (利用者による勤怠修正申請)
@@ -54,8 +53,8 @@ class UserAttendanceCorrectionRequest(db.Model):
     approver_id = Column(Integer, ForeignKey('supporters.id')) # 承認した職員
     processed_at = Column(DateTime)
     
-    user = relationship('User', foreign_keys=[user_id])
-    approver = relationship('Supporter', foreign_keys=[approver_id])
+    user = db.relationship('User', foreign_keys=[user_id])
+    approver = db.relationship('Supporter', foreign_keys=[approver_id])
 
 # ====================================================================
 # 3. MonthlyAttendancePlan (月次出席予定)
@@ -82,8 +81,8 @@ class MonthlyAttendancePlan(db.Model):
     confirmed_at = Column(DateTime) # 職員による予定確定日時（ロック）
     confirmed_by_id = Column(Integer, ForeignKey('supporters.id'))
     
-    user = relationship('User')
-    confirmer = relationship('Supporter', foreign_keys=[confirmed_by_id])
+    user = db.relationship('User')
+    confirmer = db.relationship('Supporter', foreign_keys=[confirmed_by_id])
 
 # ====================================================================
 # 4. AbsenceResponseLog (欠席時対応ログ)
@@ -110,6 +109,6 @@ class AbsenceResponseLog(db.Model):
     response_method = Column(String(50), nullable=False)
     response_summary = Column(Text, nullable=False) # 対応内容 (NULL禁止)
     
-    user = relationship('User')
-    daily_log = relationship('DailyLog')
-    supporter = relationship('Supporter', foreign_keys=[response_supporter_id])
+    user = db.relationship('User')
+    daily_log = db.relationship('DailyLog')
+    supporter = db.relationship('Supporter', foreign_keys=[response_supporter_id])

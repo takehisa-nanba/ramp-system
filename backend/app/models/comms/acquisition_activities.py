@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -35,6 +34,6 @@ class AcquisitionActivityLog(db.Model):
     activity_summary = Column(Text) # 活動概要
     
     # --- リレーションシップ ---
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
-    organization = relationship('Organization', foreign_keys=[organization_id])
-    prospect_user = relationship('User', foreign_keys=[prospect_user_id])
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
+    organization = db.relationship('Organization', foreign_keys=[organization_id])
+    prospect_user = db.relationship('User', foreign_keys=[prospect_user_id])

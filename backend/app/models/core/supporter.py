@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
 
 # 🚨 修正点: rbac_links を絶対参照でインポート
@@ -43,15 +42,15 @@ class Supporter(db.Model):
     # --- リレーションシップ ---
     
     # PII（機密情報）保管庫への1対1リレーション
-    pii = relationship('SupporterPII', back_populates='supporter', uselist=False, cascade="all, delete-orphan")
+    pii = db.relationship('SupporterPII', back_populates='supporter', uselist=False, cascade="all, delete-orphan")
     
     # 子テーブル
-    timecards = relationship('SupporterTimecard', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
-    job_assignments = relationship('SupporterJobAssignment', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
-    qualifications = relationship('SupporterQualification', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
+    timecards = db.relationship('SupporterTimecard', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
+    job_assignments = db.relationship('SupporterJobAssignment', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
+    qualifications = db.relationship('SupporterQualification', back_populates='supporter', lazy='dynamic', cascade="all, delete-orphan")
     
     # 活動配分ログ（あいまい回避のため foreign_keys を明示）
-    activity_allocations = relationship(
+    activity_allocations = db.relationship(
         'StaffActivityAllocationLog', 
         back_populates='supporter', 
         foreign_keys='StaffActivityAllocationLog.supporter_id', 
@@ -60,7 +59,7 @@ class Supporter(db.Model):
     )
     
     # 勤怠修正申請（あいまい回避のため foreign_keys を明示）
-    attendance_correction_requests = relationship(
+    attendance_correction_requests = db.relationship(
         'AttendanceCorrectionRequest', 
         back_populates='supporter',
         foreign_keys='AttendanceCorrectionRequest.supporter_id', 
@@ -68,22 +67,22 @@ class Supporter(db.Model):
     )
     
     # ★ RBAC（役割）へのリレーションシップ
-    roles = relationship('RoleMaster', secondary=supporter_role_link, back_populates='supporters')
+    roles = db.relationship('RoleMaster', secondary=supporter_role_link, back_populates='supporters')
     
     # 逆参照 (User)
-    primary_users = relationship('User', back_populates='primary_supporter', lazy='dynamic')
+    primary_users = db.relationship('User', back_populates='primary_supporter', lazy='dynamic')
     
     # 逆参照 (Office - 管理者など)
     # ※ owned_offices は削除しました（OfficeSetting側のカラム削除に伴い）
     
     # サービス管理責任者としての担当サービス
-    managed_services = relationship('OfficeServiceConfiguration', back_populates='manager_supporter', foreign_keys='OfficeServiceConfiguration.manager_supporter_id')
+    managed_services = db.relationship('OfficeServiceConfiguration', back_populates='manager_supporter', foreign_keys='OfficeServiceConfiguration.manager_supporter_id')
     
     # 内省ログ
-    reflection_logs = relationship('StaffReflectionLog', back_populates='supporter', lazy='dynamic')
+    reflection_logs = db.relationship('StaffReflectionLog', back_populates='supporter', lazy='dynamic')
     
     # ★ 追加: 所属事業所へのリレーション
-    office = relationship('OfficeSetting', back_populates='staff_members', foreign_keys=[office_id])
+    office = db.relationship('OfficeSetting', back_populates='staff_members', foreign_keys=[office_id])
     
     def __repr__(self):
         return f'<Supporter {self.id}: {self.last_name} {self.first_name}>'
@@ -115,7 +114,7 @@ class SupporterPII(db.Model):
     encrypted_employment_contract_url = Column(String(500)) # 雇用契約書URL
     encrypted_resume_url = Column(String(500)) # 履歴書URL
     
-    supporter = relationship('Supporter', back_populates='pii', uselist=False)
+    supporter = db.relationship('Supporter', back_populates='pii', uselist=False)
 
     # === 暗号化プロパティ ===
     
@@ -191,8 +190,8 @@ class SupporterTimecard(db.Model):
     # 施設外就労の担当時間 (日次人員配置チェック用)
     facility_out_minutes = Column(Integer, default=0)
     
-    supporter = relationship('Supporter', back_populates='timecards')
-    service_config = relationship('OfficeServiceConfiguration')
+    supporter = db.relationship('Supporter', back_populates='timecards')
+    service_config = db.relationship('OfficeServiceConfiguration')
 
 
 # ====================================================================
@@ -222,8 +221,8 @@ class SupporterJobAssignment(db.Model):
     is_deemed_assignment = Column(Boolean, default=False) # みなし配置フラグ
     deemed_expiry_date = Column(Date) # みなし期限
     
-    supporter = relationship('Supporter', back_populates='job_assignments')
-    job_title = relationship('JobTitleMaster', back_populates='assignments')
+    supporter = db.relationship('Supporter', back_populates='job_assignments')
+    job_title = db.relationship('JobTitleMaster', back_populates='assignments')
     
     __table_args__ = (
         UniqueConstraint('supporter_id', 'job_title_id', 'start_date', 'office_service_configuration_id', name='uq_supporter_job_assignment'),
@@ -252,8 +251,8 @@ class SupporterQualification(db.Model):
     # 'PUBLIC', 'MANAGERS_ONLY', 'PRIVATE'
     visibility_scope = Column(String(20), default='PUBLIC', nullable=False)
     
-    supporter = relationship('Supporter', back_populates='qualifications')
-    qualification_master = relationship('QualificationMaster', back_populates='supporter_qualifications')
+    supporter = db.relationship('Supporter', back_populates='qualifications')
+    qualification_master = db.relationship('QualificationMaster', back_populates='supporter_qualifications')
 
 
 # ====================================================================
@@ -281,9 +280,9 @@ class StaffActivityAllocationLog(db.Model):
     # --- 承認 ---
     approver_id = Column(Integer, ForeignKey('supporters.id'))
     
-    supporter = relationship('Supporter', foreign_keys=[supporter_id], back_populates='activity_allocations')
-    activity_type = relationship('StaffActivityMaster', back_populates='logs')
-    approver = relationship('Supporter', foreign_keys=[approver_id])
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id], back_populates='activity_allocations')
+    activity_type = db.relationship('StaffActivityMaster', back_populates='logs')
+    approver = db.relationship('Supporter', foreign_keys=[approver_id])
 
 
 # ====================================================================
@@ -306,5 +305,5 @@ class AttendanceCorrectionRequest(db.Model):
     approver_id = Column(Integer, ForeignKey('supporters.id'))
     processed_at = Column(DateTime)
     
-    supporter = relationship('Supporter', foreign_keys=[supporter_id], back_populates='attendance_correction_requests')
-    approver = relationship('Supporter', foreign_keys=[approver_id])
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id], back_populates='attendance_correction_requests')
+    approver = db.relationship('Supporter', foreign_keys=[approver_id])

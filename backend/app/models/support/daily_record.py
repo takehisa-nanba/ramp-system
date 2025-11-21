@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
 # ====================================================================
@@ -64,18 +63,18 @@ class DailyLog(db.Model):
     rejection_reason = Column(Text) 
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='daily_logs')
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
-    approver = relationship('Supporter', foreign_keys=[approver_id])
-    goal = relationship('IndividualSupportGoal')
+    user = db.relationship('User', back_populates='daily_logs')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
+    approver = db.relationship('Supporter', foreign_keys=[approver_id])
+    goal = db.relationship('IndividualSupportGoal')
     
     # 失敗要因マスタへのリレーション
-    failure_factor = relationship('FailureFactorMaster')
+    failure_factor = db.relationship('FailureFactorMaster')
     
     # 子テーブル
-    break_records = relationship('BreakRecord', back_populates='daily_log', cascade="all, delete-orphan")
-    productivity_logs = relationship('DailyProductivityLog', back_populates='daily_log', cascade="all, delete-orphan")
-    absence_response = relationship('AbsenceResponseLog', back_populates='daily_log', uselist=False)
+    break_records = db.relationship('BreakRecord', back_populates='daily_log', cascade="all, delete-orphan")
+    productivity_logs = db.relationship('DailyProductivityLog', back_populates='daily_log', cascade="all, delete-orphan")
+    absence_response = db.relationship('AbsenceResponseLog', back_populates='daily_log', uselist=False)
 
 
 # ====================================================================
@@ -90,7 +89,7 @@ class BreakRecord(db.Model):
     break_start_time = Column(DateTime, nullable=False)
     break_end_time = Column(DateTime)
     
-    daily_log = relationship('DailyLog', back_populates='break_records')
+    daily_log = db.relationship('DailyLog', back_populates='break_records')
 
 
 # ====================================================================
@@ -118,6 +117,6 @@ class DailyProductivityLog(db.Model):
     rejection_analysis_notes = Column(Text) 
     is_repaired = Column(Boolean, default=False) 
     
-    daily_log = relationship('DailyLog', back_populates='productivity_logs')
-    product = relationship('ProductMaster')
-    failure_factor = relationship('FailureFactorMaster')
+    daily_log = db.relationship('DailyLog', back_populates='productivity_logs')
+    product = db.relationship('ProductMaster')
+    failure_factor = db.relationship('FailureFactorMaster')

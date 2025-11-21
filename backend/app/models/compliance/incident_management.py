@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -43,10 +42,10 @@ class IncidentReport(db.Model):
     approver_id = Column(Integer, ForeignKey('supporters.id')) # 管理者承認
     approved_at = Column(DateTime) # ロック日時
     
-    user = relationship('User')
-    reporting_staff = relationship('Supporter', foreign_keys=[reporting_staff_id])
-    approver = relationship('Supporter', foreign_keys=[approver_id])
-    issue_category = relationship('IssueCategoryMaster')
+    user = db.relationship('User')
+    reporting_staff = db.relationship('Supporter', foreign_keys=[reporting_staff_id])
+    approver = db.relationship('Supporter', foreign_keys=[approver_id])
+    issue_category = db.relationship('IssueCategoryMaster')
 
 # ====================================================================
 # 2. ComplaintLog (苦情対応記録)
@@ -89,10 +88,10 @@ class ComplaintLog(db.Model):
     # ★ 修正: overlapsを追加して警告を消す
     # Userモデル側の 'complaints' との関係を整理
     # target_user とすることで、Userモデルから見た「自分に関する苦情」として取得可能にする
-    target_user = relationship(
+    target_user = db.relationship(
         'User', 
         foreign_keys=[target_user_id], 
         overlaps="complaints"
     )
     
-    responsible_supporter = relationship('Supporter', foreign_keys=[responsible_supporter_id])
+    responsible_supporter = db.relationship('Supporter', foreign_keys=[responsible_supporter_id])

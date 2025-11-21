@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -63,6 +62,6 @@ class CaseConferenceLog(db.Model):
     created_at = Column(DateTime, default=func.now())
 
     # リレーション定義
-    initiator = relationship('Supporter', foreign_keys=[initiator_supporter_id])
-    user = relationship('User', back_populates='case_conferences')
-    issue_category = relationship('IssueCategoryMaster')
+    initiator = db.relationship('Supporter', foreign_keys=[initiator_supporter_id])
+    user = db.relationship('User', back_populates='case_conferences')
+    issue_category = db.relationship('IssueCategoryMaster')

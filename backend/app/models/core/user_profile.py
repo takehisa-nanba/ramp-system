@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Text
 
 # ====================================================================
@@ -20,7 +19,7 @@ class UserProfile(db.Model):
     insurance_details = Column(Text) # 健康保険情報など
     
     # Userモデルへのリレーション (1対1)
-    user = relationship('User', back_populates='profile', uselist=False)
+    user = db.relationship('User', back_populates='profile', uselist=False)
 
 # ====================================================================
 # 2. FamilyMember (家族構成)
@@ -36,7 +35,7 @@ class FamilyMember(db.Model):
     phone_number = Column(String(20))
     is_main_contact = Column(Boolean, default=False) # メインの連絡先か
     
-    user = relationship('User', back_populates='family_members')
+    user = db.relationship('User', back_populates='family_members')
 
 # ====================================================================
 # 3. EmergencyContact (緊急連絡先)
@@ -51,4 +50,4 @@ class EmergencyContact(db.Model):
     phone_number = Column(String(20), nullable=False)
     relation = Column(String(50)) # 続柄
 
-    user = relationship('User', back_populates='emergency_contacts')
+    user = db.relationship('User', back_populates='emergency_contacts')

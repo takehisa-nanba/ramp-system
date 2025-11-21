@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -40,5 +39,5 @@ class MonitoringReport(db.Model):
     document_url = Column(String(500)) 
     
     # --- リレーションシップ ---
-    plan = relationship('SupportPlan')
-    supporter = relationship('Supporter')
+    plan = db.relationship('SupportPlan')
+    supporter = db.relationship('Supporter')

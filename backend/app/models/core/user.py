@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, UniqueConstraint, CheckConstraint, func
 
 # 🚨 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
@@ -40,62 +39,58 @@ class User(db.Model):
     # --- リレーションシップ ---
     
     # PII（個人特定可能情報＆認証）保管庫への1対1リレーション
-    pii = relationship('UserPII', back_populates='user', uselist=False, cascade="all, delete-orphan")
+    pii = db.relationship('UserPII', back_populates='user', uselist=False, cascade="all, delete-orphan")
     
     # マスター関連 (mastersパッケージのモデルを参照)
-    status = relationship('StatusMaster', foreign_keys=[status_id], back_populates='users')
+    status = db.relationship('StatusMaster', foreign_keys=[status_id], back_populates='users')
     
     # Supporter関連 (core/supporter.py の Supporter モデルを参照)
-    primary_supporter = relationship('Supporter', back_populates='primary_users', foreign_keys=[primary_supporter_id])
+    primary_supporter = db.relationship('Supporter', back_populates='primary_users', foreign_keys=[primary_supporter_id])
     
     # --- 利用者の中核的な子テーブル ---
-    certificates = relationship('ServiceCertificate', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    profile = relationship('UserProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
-    holistic_policies = relationship('HolisticSupportPolicy', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    skills = relationship('UserSkill', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    documents = relationship('UserDocument', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    family_members = relationship('FamilyMember', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    emergency_contacts = relationship('EmergencyContact', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    certificates = db.relationship('ServiceCertificate', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    profile = db.relationship('UserProfile', back_populates='user', uselist=False, cascade="all, delete-orphan")
+    holistic_policies = db.relationship('HolisticSupportPolicy', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    skills = db.relationship('UserSkill', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    documents = db.relationship('UserDocument', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    family_members = db.relationship('FamilyMember', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    emergency_contacts = db.relationship('EmergencyContact', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
 
 
     # --- 支援プロセスの子テーブル ---
-    support_plans = relationship('SupportPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    daily_logs = relationship('DailyLog', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    support_plans = db.relationship('SupportPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    daily_logs = db.relationship('DailyLog', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     
     # --- コミュニケーションの子テーブル ---
-    support_threads = relationship('SupportThread', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    user_requests = relationship('UserRequest', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    organization_links = relationship('UserOrganizationLink', back_populates='user', lazy='dynamic')
+    support_threads = db.relationship('SupportThread', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    user_requests = db.relationship('UserRequest', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    organization_links = db.relationship('UserOrganizationLink', back_populates='user', lazy='dynamic')
     
     # --- 定着支援の子テーブル ---
-    retention_contracts = relationship('JobRetentionContract', back_populates='user', lazy='dynamic')
-    follow_ups = relationship('PostTransitionFollowUp', back_populates='user', lazy='dynamic')
+    retention_contracts = db.relationship('JobRetentionContract', back_populates='user', lazy='dynamic')
+    follow_ups = db.relationship('PostTransitionFollowUp', back_populates='user', lazy='dynamic')
     
     # --- 就労先の子テーブル ---
-    job_placements = relationship('JobPlacementLog', back_populates='user', lazy='dynamic')
+    job_placements = db.relationship('JobPlacementLog', back_populates='user', lazy='dynamic')
     
     # --- ★ 追加: 危機対応計画 (今回のエラー原因) ---
-    crisis_plans = relationship('CrisisPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    crisis_plans = db.relationship('CrisisPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     # --- ★ 追加: 監査・コンプライアンス (これも抜けている可能性があります) ---
-    compliance_events = relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
+    compliance_events = db.relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
     # --- ★ 追加: インシデント・苦情 ---
-    incident_reports = relationship('IncidentReport', back_populates='user', lazy='dynamic')
+    incident_reports = db.relationship('IncidentReport', back_populates='user', lazy='dynamic')
     # ComplaintLogは foreign_keys 指定が必要
-    complaints = relationship(
+    # ★ 修正: 参照先カラム名を 'target_user_id' に変更
+    complaints = db.relationship(
         'ComplaintLog', 
-        foreign_keys='ComplaintLog.target_user_id', 
+        foreign_keys='ComplaintLog.target_user_id', # ここを修正
         lazy='dynamic',
-        overlaps="user"
-    )
-    # --- ★ 追加: ケース会議 ---
-    case_conferences = relationship('CaseConferenceLog', back_populates='user', lazy='dynamic')
+        overlaps="target_user" # 相手側のリレーション名に合わせる
+    )    # --- ★ 追加: ケース会議 ---
+    case_conferences = db.relationship('CaseConferenceLog', back_populates='user', lazy='dynamic')
     # --- 監査・コンプライアンス ---
-    compliance_events = relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
+    compliance_events = db.relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
     
-    # --- インシデント・苦情 ---
-    incident_reports = relationship('IncidentReport', back_populates='user', lazy='dynamic')
-    complaints = relationship('ComplaintLog', foreign_keys='ComplaintLog.complainant_user_id', lazy='dynamic')
-
     def __repr__(self):
         return f'<User {self.id}: {self.display_name}>'
 
@@ -147,9 +142,9 @@ class UserPII(db.Model):
     is_handbook_certified = Column(Boolean, default=False, nullable=False)
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='pii', uselist=False)
-    gender_legal = relationship('GenderLegalMaster', foreign_keys=[gender_legal_id])
-    disability_type = relationship('DisabilityTypeMaster', foreign_keys=[disability_type_id])
+    user = db.relationship('User', back_populates='pii', uselist=False)
+    gender_legal = db.relationship('GenderLegalMaster', foreign_keys=[gender_legal_id])
+    disability_type = db.relationship('DisabilityTypeMaster', foreign_keys=[disability_type_id])
 
     # === プロパティ（ゲッター/セッター）による暗号化の抽象化 ===
     

@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func, JSON
 
 # 🚨 修正点: マスタへの参照を追加
@@ -33,7 +32,7 @@ class Corporation(db.Model):
     kek_reference_id = Column(String(255)) 
     
     # OfficeSettingからの逆参照
-    office_settings = relationship('OfficeSetting', back_populates='corporation', lazy='dynamic')
+    office_settings = db.relationship('OfficeSetting', back_populates='corporation', lazy='dynamic')
 
 # ====================================================================
 # 2. OfficeSetting (事業所基本情報 / 常勤換算の分母)
@@ -68,22 +67,22 @@ class OfficeSetting(db.Model):
     bcp_document_url = Column(String(500)) 
     
     # --- リレーションシップ ---
-    corporation = relationship('Corporation', back_populates='office_settings')
-    municipality_area = relationship('MunicipalityMaster', back_populates='offices_located_here')
+    corporation = db.relationship('Corporation', back_populates='office_settings')
+    municipality_area = db.relationship('MunicipalityMaster', back_populates='offices_located_here')
     
     # 子テーブル（サービス構成）
-    service_configs = relationship('OfficeServiceConfiguration', back_populates='office', lazy='dynamic', cascade="all, delete-orphan")
+    service_configs = db.relationship('OfficeServiceConfiguration', back_populates='office', lazy='dynamic', cascade="all, delete-orphan")
     
     # 監査ログ（コンプライアンスパッケージ）
-    job_filings = relationship('JobFilingRecord', back_populates='office', lazy='dynamic', cascade="all, delete-orphan")
-    committee_logs = relationship('CommitteeActivityLog', back_populates='office', lazy='dynamic')
-    training_events = relationship('OfficeTrainingEvent', back_populates='office', lazy='dynamic')
+    job_filings = db.relationship('JobFilingRecord', back_populates='office', lazy='dynamic', cascade="all, delete-orphan")
+    committee_logs = db.relationship('CommitteeActivityLog', back_populates='office', lazy='dynamic')
+    training_events = db.relationship('OfficeTrainingEvent', back_populates='office', lazy='dynamic')
     
     # 運営会議ログ
-    operations_logs = relationship('OfficeOperationsLog', back_populates='office', lazy='dynamic')
+    operations_logs = db.relationship('OfficeOperationsLog', back_populates='office', lazy='dynamic')
     
     # Supporterからの逆参照 (owned_offices)
-    staff_members = relationship('Supporter', back_populates='office', lazy='dynamic')
+    staff_members = db.relationship('Supporter', back_populates='office', lazy='dynamic')
 
 
 # ====================================================================
@@ -115,12 +114,12 @@ class OfficeServiceConfiguration(db.Model):
     operational_regulations_url = Column(String(500)) 
     
     # --- リレーションシップ ---
-    office = relationship('OfficeSetting', back_populates='service_configs')
-    manager_supporter = relationship('Supporter', foreign_keys=[manager_supporter_id], back_populates='managed_services')
+    office = db.relationship('OfficeSetting', back_populates='service_configs')
+    manager_supporter = db.relationship('Supporter', foreign_keys=[manager_supporter_id], back_populates='managed_services')
     
     # financeパッケージからの逆参照
-    additive_filings = relationship('OfficeAdditiveFiling', back_populates='service_config', lazy='dynamic', cascade="all, delete-orphan")
-    fee_decisions = relationship('FeeCalculationDecision', back_populates='service_config', lazy='dynamic', cascade="all, delete-orphan")
+    additive_filings = db.relationship('OfficeAdditiveFiling', back_populates='service_config', lazy='dynamic', cascade="all, delete-orphan")
+    fee_decisions = db.relationship('FeeCalculationDecision', back_populates='service_config', lazy='dynamic', cascade="all, delete-orphan")
 
 # ====================================================================
 # 4. OfficeAdditiveFiling (加算届出状況)
@@ -145,8 +144,8 @@ class OfficeAdditiveFiling(db.Model):
     effective_start_date = Column(Date)
     effective_end_date = Column(Date)
     
-    service_config = relationship('OfficeServiceConfiguration', back_populates='additive_filings')
-    fee_master = relationship('GovernmentFeeMaster', back_populates='office_filings')
+    service_config = db.relationship('OfficeServiceConfiguration', back_populates='additive_filings')
+    fee_master = db.relationship('GovernmentFeeMaster', back_populates='office_filings')
 
 # ====================================================================
 # 5. JobFilingRecord (職務の行政届出履歴の証拠)
@@ -170,8 +169,8 @@ class JobFilingRecord(db.Model):
     document_url = Column(String(500), nullable=True) # 届出書類の証憑URL
     
     # リレーションシップ
-    office = relationship('OfficeSetting', back_populates='job_filings')
-    job_title = relationship('JobTitleMaster', back_populates='filing_history')
+    office = db.relationship('OfficeSetting', back_populates='job_filings')
+    job_title = db.relationship('JobTitleMaster', back_populates='filing_history')
 
 # ====================================================================
 # 6. OfficeOperationsLog (事業所運営会議ログ) ★新規追加
@@ -199,4 +198,4 @@ class OfficeOperationsLog(db.Model):
     # --- 証憑 ---
     minutes_file_url = Column(String(500)) # 手書き議事録のスキャンなど
     
-    office = relationship('OfficeSetting', back_populates='operations_logs')
+    office = db.relationship('OfficeSetting', back_populates='operations_logs')

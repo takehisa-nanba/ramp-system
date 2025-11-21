@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -21,8 +20,8 @@ class EmployerMaster(db.Model):
     contact_number = Column(String(20))
     
     # 逆参照
-    placements = relationship('JobPlacementLog', back_populates='employer', lazy='dynamic')
-    development_logs = relationship('JobDevelopmentLog', back_populates='employer', lazy='dynamic')
+    placements = db.relationship('JobPlacementLog', back_populates='employer', lazy='dynamic')
+    development_logs = db.relationship('JobDevelopmentLog', back_populates='employer', lazy='dynamic')
 
 # ====================================================================
 # 2. JobPlacementLog (就労・定着ログ / 復職支援)
@@ -54,8 +53,8 @@ class JobPlacementLog(db.Model):
     separation_date = Column(Date) # 離職日 (NULLの場合は在職中)
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='job_placements')
-    employer = relationship('EmployerMaster', back_populates='placements')
+    user = db.relationship('User', back_populates='job_placements')
+    employer = db.relationship('EmployerMaster', back_populates='placements')
 
 # ====================================================================
 # 3. JobDevelopmentLog (企業開拓ログ)
@@ -80,5 +79,5 @@ class JobDevelopmentLog(db.Model):
     activity_summary = Column(Text, nullable=False) # 活動概要 (NULL禁止)
     
     # --- リレーションシップ ---
-    supporter = relationship('Supporter')
-    employer = relationship('EmployerMaster', back_populates='development_logs')
+    supporter = db.relationship('Supporter')
+    employer = db.relationship('EmployerMaster', back_populates='development_logs')

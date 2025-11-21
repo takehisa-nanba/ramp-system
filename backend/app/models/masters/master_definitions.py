@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text, Numeric
 
 # 🚨 修正点: 'backend.app.models.core.rbac_links' (絶対参照)
@@ -17,7 +16,7 @@ class StatusMaster(db.Model):
     name = Column(String(50), unique=True, nullable=False)
     description = Column(Text)
     sort_order = Column(Integer, default=0)
-    users = relationship('User', back_populates='status', lazy='dynamic') 
+    users = db.relationship('User', back_populates='status', lazy='dynamic') 
 
 class DisabilityTypeMaster(db.Model):
     """障害の種別（精神、知的、身体など）"""
@@ -25,7 +24,7 @@ class DisabilityTypeMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(50), unique=True, nullable=False)
     # 参照先はUserPII
-    users = relationship('UserPII', back_populates='disability_type', lazy='dynamic')
+    users = db.relationship('UserPII', back_populates='disability_type', lazy='dynamic')
 
 class GenderLegalMaster(db.Model):
     """戸籍上の性別（男性/女性）"""
@@ -33,7 +32,7 @@ class GenderLegalMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(20), unique=True, nullable=False)
     # 参照先はUserPII
-    users = relationship('UserPII', back_populates='gender_legal', lazy='dynamic')
+    users = db.relationship('UserPII', back_populates='gender_legal', lazy='dynamic')
     
 class MunicipalityMaster(db.Model):
     """発行自治体情報（請求先コード、自治体名など）"""
@@ -41,8 +40,8 @@ class MunicipalityMaster(db.Model):
     id = Column(Integer, primary_key=True)
     municipality_code = Column(String(10), unique=True, nullable=False)
     name = Column(String(100), nullable=False)
-    certificates = relationship('ServiceCertificate', back_populates='issuance_municipality', lazy='dynamic')
-    offices_located_here = relationship('OfficeSetting', back_populates='municipality_area', lazy='dynamic')
+    certificates = db.relationship('ServiceCertificate', back_populates='issuance_municipality', lazy='dynamic')
+    offices_located_here = db.relationship('OfficeSetting', back_populates='municipality_area', lazy='dynamic')
     
 class JobTitleMaster(db.Model):
     """職員の行政上の職務・役職のマスターデータ"""
@@ -51,8 +50,8 @@ class JobTitleMaster(db.Model):
     title_name = Column(String(100), unique=True, nullable=False) # 例: サービス管理責任者
     is_management_role = Column(Boolean, default=False) # 管理職フラグ
     is_qualified_role = Column(Boolean, default=False) # 資格必須職務フラグ
-    assignments = relationship('SupporterJobAssignment', back_populates='job_title', lazy='dynamic')
-    filing_history = relationship('JobFilingRecord', back_populates='job_title', lazy='dynamic')
+    assignments = db.relationship('SupporterJobAssignment', back_populates='job_title', lazy='dynamic')
+    filing_history = db.relationship('JobFilingRecord', back_populates='job_title', lazy='dynamic')
 
 class ServiceTypeMaster(db.Model):
     """サービス種別（就労移行, B型など）と法定見直し頻度"""
@@ -61,7 +60,7 @@ class ServiceTypeMaster(db.Model):
     name = Column(String(100), nullable=False)
     service_code = Column(String(20), unique=True, nullable=False)
     required_review_months = Column(Integer)
-    granted_services = relationship('GrantedService', back_populates='service_type', lazy='dynamic')
+    granted_services = db.relationship('GrantedService', back_populates='service_type', lazy='dynamic')
 
 class QualificationMaster(db.Model):
     """職員の保有資格（法令・民間）マスター"""
@@ -70,14 +69,14 @@ class QualificationMaster(db.Model):
     name = Column(String(100), nullable=False)
     is_legal_mandate = Column(Boolean, default=False) # 法令上の必須資格か
     specialty_domain = Column(String(100)) # 得意分野タグ
-    supporter_qualifications = relationship('SupporterQualification', back_populates='qualification_master', lazy='dynamic')
+    supporter_qualifications = db.relationship('SupporterQualification', back_populates='qualification_master', lazy='dynamic')
 
 class SkillMaster(db.Model):
     """利用者スキル（Excel, コミュニケーションなど）を定義するマスター"""
     __tablename__ = 'skill_master'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
-    user_skills = relationship('UserSkill', back_populates='skill_master', lazy='dynamic')
+    user_skills = db.relationship('UserSkill', back_populates='skill_master', lazy='dynamic')
 
 class TrainingPrerequisiteMaster(db.Model):
     """サビ管研修などの受講要件を法令に基づき定義（法令要件マップ）"""
@@ -95,7 +94,7 @@ class DocumentTypeMaster(db.Model):
     name = Column(String(100), nullable=False) # 例: 履歴書, 実務経験証明書, 委任状
     # ★ 機密フラグ (原理6: 受給者証写し等の保護)
     is_confidential = Column(Boolean, default=False)
-    user_documents = relationship('UserDocument', back_populates='document_type_master', lazy='dynamic')
+    user_documents = db.relationship('UserDocument', back_populates='document_type_master', lazy='dynamic')
     
 class CommitteeTypeMaster(db.Model):
     """委員会活動の種別マスター（虐待防止、感染予防など）"""
@@ -103,7 +102,7 @@ class CommitteeTypeMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     required_frequency_months = Column(Integer) # 法令上の開催頻度
-    logs = relationship('CommitteeActivityLog', back_populates='committee_type', lazy='dynamic')
+    logs = db.relationship('CommitteeActivityLog', back_populates='committee_type', lazy='dynamic')
 
 # ★ NEW: 研修・訓練種別マスタ (TrainingTypeMaster)
 class TrainingTypeMaster(db.Model):
@@ -112,7 +111,7 @@ class TrainingTypeMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False)
     required_frequency_months = Column(Integer) # 法令上の実施頻度
-    events = relationship('OfficeTrainingEvent', back_populates='training_type', lazy='dynamic')
+    events = db.relationship('OfficeTrainingEvent', back_populates='training_type', lazy='dynamic')
 
 # ★ NEW: 失敗原因マスタ (FailureFactorMaster) - 失敗の財産化
 class FailureFactorMaster(db.Model):
@@ -121,7 +120,7 @@ class FailureFactorMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False, unique=True) # 例: 個人要因, 環境要因, 指導要因
     description = Column(Text)
-    productivity_logs = relationship('DailyProductivityLog', back_populates='failure_factor', lazy='dynamic')
+    productivity_logs = db.relationship('DailyProductivityLog', back_populates='failure_factor', lazy='dynamic')
     
 # ★ NEW: 問題の所在マスタ (IssueCategoryMaster) - ナレッジ共有用
 class IssueCategoryMaster(db.Model):
@@ -153,7 +152,7 @@ class GovernmentFeeMaster(db.Model):
     calculation_type = Column(String(20), nullable=False)
     logic_key = Column(String(50)) 
     
-    office_filings = relationship('OfficeAdditiveFiling', back_populates='fee_master', lazy='dynamic')
+    office_filings = db.relationship('OfficeAdditiveFiling', back_populates='fee_master', lazy='dynamic')
 
 
 class StaffActivityMaster(db.Model):
@@ -161,7 +160,7 @@ class StaffActivityMaster(db.Model):
     __tablename__ = 'staff_activity_master'
     id = Column(Integer, primary_key=True)
     activity_name = Column(String(100), nullable=False) # 例: 個別支援, 企業開拓, 事務作業, 休憩
-    logs = relationship('StaffActivityAllocationLog', back_populates='activity_type', lazy='dynamic')
+    logs = db.relationship('StaffActivityAllocationLog', back_populates='activity_type', lazy='dynamic')
     
 class ProductMaster(db.Model):
     """A型・B型で提供する生産活動のアイテムマスター"""
@@ -170,7 +169,7 @@ class ProductMaster(db.Model):
     product_name = Column(String(100), nullable=False)
     unit_of_measure = Column(String(20)) # 単位（例：個、セット、時間）
     standard_wage_rate = Column(Numeric(precision=10, scale=2)) # 標準工賃単価
-    logs = relationship('DailyProductivityLog', back_populates='product', lazy='dynamic')
+    logs = db.relationship('DailyProductivityLog', back_populates='product', lazy='dynamic')
     
 class VendorMaster(db.Model):
     """A型・B型の取引先企業（仕入先・販売先）"""
@@ -179,7 +178,7 @@ class VendorMaster(db.Model):
     company_name = Column(String(255), nullable=False)
     industry_type = Column(String(100))
     contact_person = Column(String(100))
-    invoices = relationship('SalesInvoice', back_populates='vendor', lazy='dynamic')
+    invoices = db.relationship('SalesInvoice', back_populates='vendor', lazy='dynamic')
 
 # ====================================================================
 # 4. RBAC (ロールと権限)
@@ -191,12 +190,12 @@ class RoleMaster(db.Model):
     name = Column(String(50), nullable=False, unique=True)
     role_scope = Column(String(20), nullable=False) # JOB, CORPORATE, SYSTEM
     sort_order = Column(Integer, default=0)
-    supporters = relationship('Supporter', secondary=supporter_role_link, back_populates='roles')
-    permissions = relationship('PermissionMaster', secondary=role_permission_link, back_populates='roles')
+    supporters = db.relationship('Supporter', secondary=supporter_role_link, back_populates='roles')
+    permissions = db.relationship('PermissionMaster', secondary=role_permission_link, back_populates='roles')
 
 class PermissionMaster(db.Model):
     """システムのアクション権限の最小単位（RBAC）"""
     __tablename__ = 'permission_master'
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False, unique=True) # 例: APPROVE_LOG, VIEW_PII
-    roles = relationship('RoleMaster', secondary=role_permission_link, back_populates='permissions')
+    roles = db.relationship('RoleMaster', secondary=role_permission_link, back_populates='permissions')

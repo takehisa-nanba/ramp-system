@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
 # ====================================================================
@@ -43,8 +42,8 @@ class ContractReportDetail(db.Model):
     important_matters_url = Column(String(500))
     
     # --- リレーションシップ ---
-    granted_service = relationship('GrantedService', back_populates='contract_detail')
-    service_config = relationship('OfficeServiceConfiguration') # 在籍先
+    granted_service = db.relationship('GrantedService', back_populates='contract_detail')
+    service_config = db.relationship('OfficeServiceConfiguration') # 在籍先
 
     def __repr__(self):
         return f'<ContractDetail for GrantedService {self.granted_service_id}>'
@@ -74,4 +73,4 @@ class ComplianceEventLog(db.Model):
     document_url = Column(String(500)) # 根拠となる届出書や評価シートのURL
     notes = Column(Text) # 備考
     
-    user = relationship('User', back_populates='compliance_events')
+    user = db.relationship('User', back_populates='compliance_events')

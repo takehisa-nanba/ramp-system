@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
 # ====================================================================
@@ -35,15 +34,15 @@ class ServiceCertificate(db.Model):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='certificates')
-    issuance_municipality = relationship('MunicipalityMaster', back_populates='certificates')
-    managing_service = relationship('OfficeServiceConfiguration') 
+    user = db.relationship('User', back_populates='certificates')
+    issuance_municipality = db.relationship('MunicipalityMaster', back_populates='certificates')
+    managing_service = db.relationship('OfficeServiceConfiguration') 
     
     # 子テーブル (期間管理が独立しているもの)
-    granted_services = relationship('GrantedService', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
-    copayment_limits = relationship('CopaymentLimit', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
-    meal_addon_statuses = relationship('MealAddonStatus', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
-    copayment_management = relationship('CopaymentManagement', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
+    granted_services = db.relationship('GrantedService', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
+    copayment_limits = db.relationship('CopaymentLimit', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
+    meal_addon_statuses = db.relationship('MealAddonStatus', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
+    copayment_management = db.relationship('CopaymentManagement', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
     
     # 🚨 削除: 送迎加算と特別地域加算は、受給者証記載事項ではないためここからは削除。
     # Financeパッケージの ComplianceEventLog で管理する。
@@ -66,10 +65,10 @@ class GrantedService(db.Model):
     
     service_type_master_id = Column(Integer, ForeignKey('service_type_master.id'), nullable=False)
     
-    certificate = relationship('ServiceCertificate', back_populates='granted_services')
-    service_type = relationship('ServiceTypeMaster', back_populates='granted_services')
+    certificate = db.relationship('ServiceCertificate', back_populates='granted_services')
+    service_type = db.relationship('ServiceTypeMaster', back_populates='granted_services')
     
-    contract_detail = relationship('ContractReportDetail', back_populates='granted_service', uselist=False, cascade="all, delete-orphan")
+    contract_detail = db.relationship('ContractReportDetail', back_populates='granted_service', uselist=False, cascade="all, delete-orphan")
 
 
 # ====================================================================
@@ -84,7 +83,7 @@ class CopaymentLimit(db.Model):
     limit_end_date = Column(Date, nullable=False) 
     limit_amount = Column(Numeric(precision=10, scale=2), nullable=False, default=0) 
 
-    certificate = relationship('ServiceCertificate', back_populates='copayment_limits')
+    certificate = db.relationship('ServiceCertificate', back_populates='copayment_limits')
 
 
 # ====================================================================
@@ -99,7 +98,7 @@ class MealAddonStatus(db.Model):
     meal_addon_end_date = Column(Date, nullable=False) 
     is_applicable = Column(Boolean, nullable=False) 
 
-    certificate = relationship('ServiceCertificate', back_populates='meal_addon_statuses')
+    certificate = db.relationship('ServiceCertificate', back_populates='meal_addon_statuses')
 
 
 # ====================================================================
@@ -124,4 +123,4 @@ class CopaymentManagement(db.Model):
     # 他事業所が管理する場合の事業所名
     managing_office_name = Column(String(255))
     
-    certificate = relationship('ServiceCertificate', back_populates='copayment_management')
+    certificate = db.relationship('ServiceCertificate', back_populates='copayment_management')

@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
 # ====================================================================
@@ -29,11 +28,11 @@ class MonthlyBillingSummary(db.Model):
     claim_status = Column(String(30), default='PENDING', nullable=False)
     lock_date = Column(DateTime) # 請求提出日（ロック日時）
     
-    user = relationship('User')
-    service_config = relationship('OfficeServiceConfiguration')
+    user = db.relationship('User')
+    service_config = db.relationship('OfficeServiceConfiguration')
     
     # このサマリーに対応する代理受領書
-    agency_receipt = relationship('AgencyReceiptStatement', back_populates='billing_summary', uselist=False, cascade="all, delete-orphan")
+    agency_receipt = db.relationship('AgencyReceiptStatement', back_populates='billing_summary', uselist=False, cascade="all, delete-orphan")
 
 # ====================================================================
 # 2. ClientInvoice (利用者への自己負担請求書 & 領収証)
@@ -72,9 +71,9 @@ class ClientInvoice(db.Model):
     handover_method = Column(String(30)) # (例: 'DIGITAL_VIEW', 'IN_PERSON_HANDOVER')
     handover_supporter_id = Column(Integer, ForeignKey('supporters.id')) # 手渡した職員
     
-    user = relationship('User')
-    payment_confirmer = relationship('Supporter', foreign_keys=[payment_confirmed_by_id])
-    handover_supporter = relationship('Supporter', foreign_keys=[handover_supporter_id])
+    user = db.relationship('User')
+    payment_confirmer = db.relationship('Supporter', foreign_keys=[payment_confirmed_by_id])
+    handover_supporter = db.relationship('Supporter', foreign_keys=[handover_supporter_id])
 
 # ====================================================================
 # 3. AgencyReceiptStatement (代理受領書)
@@ -103,9 +102,9 @@ class AgencyReceiptStatement(db.Model):
     handover_method = Column(String(30))
     handover_supporter_id = Column(Integer, ForeignKey('supporters.id'))
     
-    user = relationship('User')
-    billing_summary = relationship('MonthlyBillingSummary', back_populates='agency_receipt')
-    handover_supporter = relationship('Supporter', foreign_keys=[handover_supporter_id])
+    user = db.relationship('User')
+    billing_summary = db.relationship('MonthlyBillingSummary', back_populates='agency_receipt')
+    handover_supporter = db.relationship('Supporter', foreign_keys=[handover_supporter_id])
 
 # ====================================================================
 # 4. DocumentConsentLog (同意証跡ログ / OTL対応)
@@ -133,9 +132,9 @@ class DocumentConsentLog(db.Model):
     # 同意がなされた時点での、システム自動生成された証憑PDFのURL
     generated_document_url = Column(String(500)) 
 
-    user = relationship('User')
+    user = db.relationship('User')
     # SupportPlanへのリレーション (SupportPlan側で定義)
-    plan = relationship(
+    plan = db.relationship(
         'SupportPlan', 
         primaryjoin="and_(DocumentConsentLog.document_id == SupportPlan.id, DocumentConsentLog.document_type == 'SUPPORT_PLAN')",
         foreign_keys="DocumentConsentLog.document_id",

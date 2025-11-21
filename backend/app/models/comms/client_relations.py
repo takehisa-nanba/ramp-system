@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -27,7 +26,7 @@ class Organization(db.Model):
     main_address = Column(String(255))
     
     # 逆参照
-    user_links = relationship('UserOrganizationLink', back_populates='organization', lazy='dynamic')
+    user_links = db.relationship('UserOrganizationLink', back_populates='organization', lazy='dynamic')
     
     def __repr__(self):
         return f'<Organization {self.id}: {self.organization_name}>'
@@ -56,5 +55,5 @@ class UserOrganizationLink(db.Model):
     is_primary_contact = Column(Boolean, default=False) # メインの連携先か（例：計画相談先）
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='organization_links')
-    organization = relationship('Organization', back_populates='user_links')
+    user = db.relationship('User', back_populates='organization_links')
+    organization = db.relationship('Organization', back_populates='user_links')

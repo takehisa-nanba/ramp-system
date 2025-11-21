@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -34,8 +33,8 @@ class CrisisPlan(db.Model):
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='crisis_plans')
-    creator = relationship('Supporter', foreign_keys=[created_by_supporter_id])
+    user = db.relationship('User', back_populates='crisis_plans')
+    creator = db.relationship('Supporter', foreign_keys=[created_by_supporter_id])
     
     # 監査ログ（`compliance`パッケージ）への逆参照
-    # crisis_logs = relationship('CrisisLog', back_populates='plan', cascade="all, delete-orphan")
+    # crisis_logs = db.relationship('CrisisLog', back_populates='plan', cascade="all, delete-orphan")

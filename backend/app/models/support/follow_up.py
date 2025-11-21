@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -32,5 +31,5 @@ class PostTransitionFollowUp(db.Model):
     created_at = Column(DateTime, default=func.now())
     
     # --- リレーションシップ ---
-    user = relationship('User', back_populates='follow_ups')
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    user = db.relationship('User', back_populates='follow_ups')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])

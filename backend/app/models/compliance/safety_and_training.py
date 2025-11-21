@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -31,9 +30,9 @@ class CommitteeActivityLog(db.Model):
     
     manager_id = Column(Integer, ForeignKey('supporters.id')) # 承認した管理者
     
-    office = relationship('OfficeSetting')
-    committee_type = relationship('CommitteeTypeMaster')
-    manager = relationship('Supporter', foreign_keys=[manager_id])
+    office = db.relationship('OfficeSetting')
+    committee_type = db.relationship('CommitteeTypeMaster')
+    manager = db.relationship('Supporter', foreign_keys=[manager_id])
 
 # ====================================================================
 # 2. OfficeTrainingEvent (事業所研修イベント)
@@ -57,11 +56,11 @@ class OfficeTrainingEvent(db.Model):
     duration_minutes = Column(Integer) # 研修時間（分）
     instructor = Column(String(100)) # 講師名
     
-    office = relationship('OfficeSetting')
+    office = db.relationship('OfficeSetting')
     # 研修種別へのリレーション
-    training_type = relationship('TrainingTypeMaster', back_populates='events')
+    training_type = db.relationship('TrainingTypeMaster', back_populates='events')
     
-    attendee_logs = relationship('TrainingLog', back_populates='office_event', lazy='dynamic')
+    attendee_logs = db.relationship('TrainingLog', back_populates='office_event', lazy='dynamic')
 
 # ====================================================================
 # 3. TrainingLog (職員研修記録)
@@ -94,8 +93,8 @@ class TrainingLog(db.Model):
     document_url = Column(String(500)) # 修了証のURL
     summary_of_learning = Column(Text, nullable=False) # 学習内容の要約 (NULL禁止)
     
-    supporter = relationship('Supporter')
-    office_event = relationship('OfficeTrainingEvent', back_populates='attendee_logs')
+    supporter = db.relationship('Supporter')
+    office_event = db.relationship('OfficeTrainingEvent', back_populates='attendee_logs')
 
 # ====================================================================
 # 4. SupporterFeedbackLog (利用者からの職員評価 / 相互成長)
@@ -116,8 +115,8 @@ class SupporterFeedbackLog(db.Model):
     narrative_feedback = Column(Text, nullable=False) # 自由記述 (NULL禁止)
     is_anonymous = Column(Boolean, default=True) # 匿名フラグ
     
-    user = relationship('User')
-    supporter = relationship('Supporter')
+    user = db.relationship('User')
+    supporter = db.relationship('Supporter')
 
 # ====================================================================
 # 5. StaffReflectionLog (職員の内省ログ / 失敗の財産化と景色の共有)
@@ -160,5 +159,5 @@ class StaffReflectionLog(db.Model):
     # 'PENDING', 'SAFE', 'RISK_SUSPECTED', 'HIDDEN'
     manager_review_status = Column(String(30), default='PENDING')
     
-    supporter = relationship('Supporter')
-    referenced_thread = relationship('SupportThread', foreign_keys=[referenced_thread_id])
+    supporter = db.relationship('Supporter')
+    referenced_thread = db.relationship('SupportThread', foreign_keys=[referenced_thread_id])

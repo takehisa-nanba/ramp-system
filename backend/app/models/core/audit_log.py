@@ -1,6 +1,5 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy.orm import relationship
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
 # ====================================================================
@@ -37,5 +36,5 @@ class AuditActionLog(db.Model):
     timestamp = Column(DateTime, default=func.now(), nullable=False)
     
     # リレーションシップ
-    user = relationship('User', foreign_keys=[user_id])
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    user = db.relationship('User', foreign_keys=[user_id])
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
