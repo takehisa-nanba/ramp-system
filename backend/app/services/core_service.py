@@ -1,3 +1,6 @@
+# backend/app/services/core_service.py
+
+from flask import current_app # ★この行をインポートに追加★
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
@@ -74,22 +77,28 @@ def get_corporation_kek(corporation_id: int) -> bytes:
     """【階層1】法人のマスターキー（KEK）を取得する。"""
     logger.debug(f"🔑 Retrieving KEK for Corporation {corporation_id}...")
     
-    temp_key = os.environ.get('FERNET_ENCRYPTION_KEY')
-    if not temp_key:
+    # ★ 修正: os.environ -> current_app.config から読み込む
+    temp_key = current_app.config.get('FERNET_ENCRYPTION_KEY')
+
+    # FERNET_ENCRYPTION_KEYが設定されていない（FALLBACK_キーが使われている）場合は警告
+    if not temp_key or temp_key.startswith('FALLBACK_'):
         logger.warning("⚠️ FERNET_ENCRYPTION_KEY not set. Using insecure default key.")
-        temp_key = b'sTqmG8dK97wNxZyBvC1D2EfGhIjK3L4M5N6O7P8Q9R0='
+        temp_key = b'sTqmG8dK97wNxZyBvC1D2EfGhIjK3L4M5N6O7P8Q9R0='  # テスト用のデフォルトキー
         
     return temp_key if isinstance(temp_key, bytes) else temp_key.encode('utf-8')
 
 
 def get_system_pii_key() -> bytes:
     """【階層2】システム共通鍵（DEK）を取得する。"""
-    key = os.environ.get('PII_ENCRYPTION_KEY')
-    if not key:
+    # ★ 修正: os.environ -> current_app.config から読み込む
+    key = current_app.config.get('PII_ENCRYPTION_KEY')
+    
+    # PII_ENCRYPTION_KEYが設定されていない（FALLBACK_キーが使われている）場合はCRITICAL警告
+    if not key or key.startswith('FALLBACK_'):
         logger.critical("🔥 PII_ENCRYPTION_KEY is not set! Security compromised.")
-        key = b'XyZ7aBCdEfGhIjKlMnOpQrStUvWxYz0123456789Abc='
-    return key if isinstance(key, bytes) else key.encode('utf-8')
+        key = b'XyZ7aBCdEfGhIjKlMnOpQrStUvWxYz0123456789Abc=' # テスト用のデフォルトキー
 
+    return key if isinstance(key, bytes) else key.encode('utf-8')
 
 # ====================================================================
 # 2. 認証・権限サービス (Auth & RBAC)
