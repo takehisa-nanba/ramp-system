@@ -1,15 +1,27 @@
 import os
-# 🚨 修正点: すべてのインポートを 'backend' 起点に統一
+import sys
+
+# -------------------------------------------------------------------
+# パス解決のロジック（重要）
+# -------------------------------------------------------------------
+# このファイルの場所: .../backend/run.py
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# 親ディレクトリ: .../ramp-system (ここをルートとして認識させる)
+project_root = os.path.dirname(current_dir)
+
+# sys.pathの先頭に追加
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+# -------------------------------------------------------------------
+# アプリケーションのインポート
+# -------------------------------------------------------------------
 from backend.app import create_app, db
 from backend.app import models 
-# ★ 追加: Configクラスを直接インポート
 from backend.config import Config
 
-# 修正前 (NG): 文字列 'default' を渡していた
-# config_name = os.getenv('FLASK_CONFIG') or 'default'
-# app = create_app(config_name)
-
-# ★ 修正後 (OK): Configクラスそのものを渡す
+# どの設定で起動するかを決定 (環境変数から)
+config_name = os.getenv('FLASK_CONFIG') or 'default'
 app = create_app(Config)
 
 @app.shell_context_processor
@@ -23,4 +35,5 @@ def make_shell_context():
     return context
 
 if __name__ == '__main__':
+    # デバッグモードで起動
     app.run(debug=True)

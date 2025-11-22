@@ -1,8 +1,7 @@
 import os
+from datetime import timedelta # ★ 追加
 
 # データベースのURIを環境変数から取得（なければデフォルトのSQLite）
-# 船長の環境に合わせて、PostgreSQLの接続文字列を環境変数 'DATABASE_URL' に設定してください
-#例: postgresql://user:password@localhost/ramp_db
 basedir = os.path.abspath(os.path.dirname(__file__))
 DATABASE_URL = os.environ.get('DATABASE_URL') or \
     'sqlite:///' + os.path.join(basedir, 'app.db')
@@ -15,12 +14,14 @@ class Config:
     # --- 必須設定 ---
     
     # セキュリティキー (Flaskのセッション管理などに必須)
-    # 🚨 本番環境では、これは必ず環境変数から読み込む強力なキーに変更してください
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key-that-you-should-change'
     
     # SQLAlchemyの設定
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # --- その他の設定（必要に応じて追加） ---
-    # (例: JWT, CORS, Mailなど)
+    # --- JWT設定 (Auth) ★ 追加 ---
+    # 🚨 本番では必ず強力なランダム文字列に変更すること
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'super-secret-jwt-key-change-this'
+    # トークンの有効期限 (例: 12時間)
+    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=12)
