@@ -1,9 +1,9 @@
 import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
 import Cookies from 'js-cookie';
 
-// バックエンドのベースURL
-// Viteの環境変数 VITE_API_BASE_URL を使用することを想定
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+// ★修正: VITE環境変数のチェックを削除し、Viteプロキシ設定に合わせる
+// BASE_URL は Vite のプロキシ設定に合うように '/api' に統一
+const BASE_URL = '/api'; 
 
 /**
  * 認証情報（Cookie）を伴う API リクエストクライアント
