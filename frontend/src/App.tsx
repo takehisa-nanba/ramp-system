@@ -1,16 +1,10 @@
 import { useState, FormEvent } from 'react';
 import './App.css'; 
+// ★修正: AuthContextをインポート
+import { useAuth } from './context/AuthContext'; 
+
 // Tailwind CSS を利用してモダンなデザインを作成します
 const API_BASE_URL = 'http://localhost:5000/api'; // FlaskサーバーのデフォルトURLを想定
-
-// ユーザー情報と認証状態を保持する型定義
-type AuthState = {
-  isLoggedIn: boolean;
-  token: string | null;
-  supporterName: string | null;
-  role: string | null;
-  error: string | null;
-};
 
 // ログイン画面のコンポーネント
 // ★修正: props ではなく useAuth フックを使用するように変更

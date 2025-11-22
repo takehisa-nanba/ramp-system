@@ -1,13 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
-import './index.css'; // Tailwind CSS をインポート
-// ★修正: AuthProviderをインポート
+import './index.css'; 
+
+// AuthProviderをインポート
 import { AuthProvider } from './context/AuthContext.tsx'; 
 
+// Reactアプリケーションをルート要素にレンダリング
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    {/* ★修正: AppコンポーネントをAuthProviderで囲む★ */}
+    {/* AppコンポーネントをAuthProviderで囲む */}
     <AuthProvider>
       <App />
     </AuthProvider>

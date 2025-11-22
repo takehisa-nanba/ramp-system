@@ -38,8 +38,8 @@ export const logout = async (): Promise<void> => {
     // ログアウトAPIをコール
     await apiClient.post('/auth/logout');
   } catch (error) {
+    // エラー処理（ここではログアウト失敗時でも強制的にクライアント側をログアウト状態にする方が安全）
     console.error('ログアウトAPIコール中にエラー:', error);
-    // ログアウトAPIが失敗しても、クライアント状態は強制的にリセットする方が安全
     throw new Error('ログアウト処理中にエラーが発生しました。');
   }
 };
