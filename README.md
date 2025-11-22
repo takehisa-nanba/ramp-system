@@ -5,7 +5,8 @@
 
 ## 📚 開発ガイドライン
 開発に参加する際は、必ず以下の命名規則とルールブックを参照してください。
-- [📏 命名規則と予約語 (NAMING_CONVENTIONS.md)](backend/NAMING_CONVENTIONS.md)
+- [📏 命名規則と予約語 (NAMING_CONVENTIONS.md)](backend/docs/NAMING_CONVENTIONS.md)
+- [📏 バージョン管理とコミットルール (NAMING_CONVENTIONS.md)](backend/docs/CONTRIBUTING.md)
 
 ## 技術スタック
 
