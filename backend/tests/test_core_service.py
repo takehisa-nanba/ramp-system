@@ -1,4 +1,5 @@
 import pytest
+import logging
 from datetime import date
 from backend.app import db
 from backend.app.models import (

@@ -24,7 +24,7 @@ coverage.xml
 
 # テスト用の一時DBなど（もし生成されるなら）
 backend/tests/*.db
-
+backend/tests/pytest.log
 # --------------------------
 # 2. フロントエンド (Node.js/Vite)
 # --------------------------
@@ -52,7 +52,7 @@ yarn-error.log*
 # 開発補助のドキュメントや一時ファイル
 tree.txt
 *.txt
-
+MARKDOWN_CHEAT_SHEET.md
 ---
 
 # --------------------------

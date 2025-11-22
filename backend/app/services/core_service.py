@@ -7,6 +7,10 @@ from backend.app.models import (
 )
 from sqlalchemy.orm import joinedload
 import os
+import logging
+
+# ★ ロガーの取得
+logger = logging.getLogger(__name__)
 
 # ====================================================================
 # 1. 鍵取得ロジック（暗号化の土台）
@@ -18,70 +22,72 @@ def get_corporation_id_for_user(user: User) -> int:
     「契約」を辿って特定する。
     """
     if not user:
-        # ユーザーオブジェクトがない場合はデフォルトIDを返す（またはエラー）
-        return 1
+        logger.error("❌ get_corporation_id_for_user called with None user.")
+        raise ValueError("User object is required to find corporation ID.")
         
     try:
+        logger.debug(f"🔍 Resolving Corporation ID for User {user.id}...")
+
         # 1. 直近の受給者証を探す
         latest_cert = ServiceCertificate.query.filter_by(user_id=user.id)\
             .order_by(ServiceCertificate.certificate_issue_date.desc()).first()
             
         if not latest_cert:
-            return 1 # 契約がない場合（デフォルト）
+            logger.warning(f"⚠️ User {user.id} has no ServiceCertificate. Using default Corp ID: 1.")
+            return 1 
             
         # 2. 受給者証に紐づく最新の支給決定を探す
         latest_grant = GrantedService.query.filter_by(certificate_id=latest_cert.id)\
             .order_by(GrantedService.granted_start_date.desc()).first()
             
         if not latest_grant:
+            logger.warning(f"⚠️ User {user.id} has Certificate {latest_cert.id} but no GrantedService.")
             return 1
             
         # 3. 支給決定に紐づく契約詳細を探す
-        # ★ ここで変数名 'contract' を定義する
         contract = ContractReportDetail.query.filter_by(granted_service_id=latest_grant.id).first()
         
         if not contract:
+            logger.warning(f"⚠️ User {user.id} has Grant {latest_grant.id} but no ContractReportDetail.")
             return 1
             
         # 4. 契約からサービス構成 -> 事業所 -> 法人 を辿る
-        # (SQLAlchemy 2.0 style: db.session.get)
         service_config = db.session.get(OfficeServiceConfiguration, contract.office_service_configuration_id)
         
         if not service_config:
+            logger.error(f"❌ Contract {contract.id} points to invalid ServiceConfig {contract.office_service_configuration_id}.")
             return 1
 
         office = db.session.get(OfficeSetting, service_config.office_id)
         
         if office:
+            logger.info(f"✅ User {user.id} belongs to Corporation {office.corporation_id} (via Office {office.id}).")
             return office.corporation_id
             
-        return 1 # フォールバック
+        return 1
 
     except Exception as e:
-        print(f"WARNING: Failed to resolve Corporation ID for User {user.id}: {e}")
+        logger.exception(f"🔥 CRITICAL: Failed to resolve Corporation ID for User {user.id}: {e}")
         return 1
 
 
 def get_corporation_kek(corporation_id: int) -> bytes:
-    """
-    【階層1】法人のマスターキー（KEK）を取得する。
-    """
-    # 🚨 暫定的な実装: 環境変数から共通キーを取得
+    """【階層1】法人のマスターキー（KEK）を取得する。"""
+    logger.debug(f"🔑 Retrieving KEK for Corporation {corporation_id}...")
+    
     temp_key = os.environ.get('FERNET_ENCRYPTION_KEY')
     if not temp_key:
-        # 開発用デフォルトキー (Base64 encoded 32 bytes)
+        logger.warning("⚠️ FERNET_ENCRYPTION_KEY not set. Using insecure default key.")
         temp_key = b'gQfTq3-iJ4_1nZ-vY8-9jA_XyZ7_aB_C-dE_fG_hI_k='
         
     return temp_key if isinstance(temp_key, bytes) else temp_key.encode('utf-8')
 
 
 def get_system_pii_key() -> bytes:
-    """
-    【階層2】システム共通鍵（DEK）を取得する。
-    """
+    """【階層2】システム共通鍵（DEK）を取得する。"""
     key = os.environ.get('PII_ENCRYPTION_KEY')
     if not key:
-        # 開発用デフォルトキー
+        logger.critical("🔥 PII_ENCRYPTION_KEY is not set! Security compromised.")
         key = b'bA-sTq-mG8_dK9-7_wN-xZ_yB_vC-1D-2E_fG_hI_j='
     return key if isinstance(key, bytes) else key.encode('utf-8')
 
@@ -92,25 +98,27 @@ def get_system_pii_key() -> bytes:
 
 def authenticate_supporter(email, password):
     """職員のログイン認証"""
-    # Supporter -> SupporterPII を結合して検索
+    logger.info(f"🔐 Auth attempt for: {email}")
     supporter = Supporter.query.join(Supporter.pii).filter(SupporterPII.email == email).first()
     
     if supporter and supporter.pii and supporter.pii.check_password(password):
+        logger.info(f"✅ Auth success: Supporter {supporter.id}")
         return supporter
+    
+    logger.warning(f"⛔ Auth failed for: {email}")
     return None
 
 def check_permission(supporter_id, permission_name):
-    """
-    職員が特定の権限(Permission)を持っているか確認する。
-    """
+    """職員が特定の権限(Permission)を持っているか確認する。"""
     supporter = db.session.get(Supporter, supporter_id)
     if not supporter:
         return False
     
-    # 職員が持つ全てのロールから、権限セットを収集
     for role in supporter.roles:
         for perm in role.permissions:
             if perm.name == permission_name:
+                # logger.debug(f"✅ Permission granted: {permission_name} for Supporter {supporter_id}")
                 return True
     
+    # logger.debug(f"⛔ Permission denied: {permission_name} for Supporter {supporter_id}")
     return False
