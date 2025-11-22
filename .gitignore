@@ -51,7 +51,8 @@ yarn-error.log*
 # --------------------------
 # 開発補助のドキュメントや一時ファイル
 tree.txt
-*.txt
+/backend/**/*.txt
+!requirements.txt
 MARKDOWN_CHEAT_SHEET.md
 GIT_CHEAT_SHEET.md
 ---

@@ -2,6 +2,7 @@ import pytest
 import sys
 import os
 import logging  # ★ 追加
+from dotenv import load_dotenv
 
 # -------------------------------------------------------------------
 # パス解決のロジック
@@ -9,6 +10,14 @@ import logging  # ★ 追加
 current_dir = os.path.dirname(os.path.abspath(__file__))
 backend_dir = os.path.dirname(current_dir)
 project_root = os.path.dirname(backend_dir)
+
+# ★★★ ここにコードを追加してください ★★★
+# .env ファイルのパスを特定し、強制的にロードする
+dotenv_path = os.path.join(backend_dir, '.env')
+if os.path.exists(dotenv_path):
+    # ★ 修正: override=True を追加して、既存の環境変数を強制的に上書きする
+    load_dotenv(dotenv_path, override=True)
+# ★★★ ここまで ★★★
 
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
