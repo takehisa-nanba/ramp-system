@@ -1,3 +1,4 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     IncidentReport, ComplaintLog, 
@@ -5,7 +6,8 @@ from backend.app.models import (
     Supporter, CommitteeTypeMaster
 )
 from sqlalchemy import func
-from datetime import datetime
+# ★ 修正: timezone をインポート
+from datetime import datetime, timezone
 
 class ComplianceService:
     """
@@ -40,13 +42,14 @@ class ComplianceService:
         """
         Finalizes an incident report, locking it for audit.
         """
-        report = IncidentReport.query.get(report_id)
+        report = db.session.get(IncidentReport, report_id)
         if not report:
             raise ValueError("Incident report not found.")
             
         report.report_status = 'FINALIZED'
         report.approver_id = approver_id
-        report.approved_at = datetime.utcnow()
+        # ★ 修正: utcnow() -> now(timezone.utc)
+        report.approved_at = datetime.now(timezone.utc)
         
         db.session.commit()
         return report
@@ -60,7 +63,7 @@ class ComplianceService:
         Checks if the mandatory committee meetings have been held within
         the required frequency (Principle 1).
         """
-        committee_type = CommitteeTypeMaster.query.get(committee_type_id)
+        committee_type = db.session.get(CommitteeTypeMaster, committee_type_id)
         if not committee_type or not committee_type.required_frequency_months:
             return {"status": "UNKNOWN", "message": "No frequency defined."}
             
@@ -73,8 +76,15 @@ class ComplianceService:
         if not last_log:
             return {"status": "NON_COMPLIANT", "message": "No record found."}
             
-        # Calculate months since last meeting
-        months_since = (datetime.utcnow() - last_log.meeting_timestamp).days / 30
+        # ★ 修正: タイムゾーン対応 (Naive vs Aware の比較問題を回避)
+        now = datetime.now(timezone.utc)
+        last_meeting = last_log.meeting_timestamp
+        
+        # DBから来た日時がNaive(タイムゾーンなし)の場合、UTCとして扱う
+        if last_meeting.tzinfo is None:
+            last_meeting = last_meeting.replace(tzinfo=timezone.utc)
+            
+        months_since = (now - last_meeting).days / 30
         
         if months_since > committee_type.required_frequency_months:
              return {"status": "NON_COMPLIANT", "message": f"Overdue by {months_since - committee_type.required_frequency_months:.1f} months."}

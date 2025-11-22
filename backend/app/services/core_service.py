@@ -1,11 +1,10 @@
 # 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
-    User, UserPII, Supporter, RoleMaster, PermissionMaster,
+    User, UserPII, Supporter, SupporterPII, RoleMaster, PermissionMaster,
     Corporation, ServiceCertificate, GrantedService, 
     ContractReportDetail, OfficeServiceConfiguration, OfficeSetting
 )
-from sqlalchemy.orm import joinedload
 import os
 import logging
 
@@ -78,7 +77,7 @@ def get_corporation_kek(corporation_id: int) -> bytes:
     temp_key = os.environ.get('FERNET_ENCRYPTION_KEY')
     if not temp_key:
         logger.warning("⚠️ FERNET_ENCRYPTION_KEY not set. Using insecure default key.")
-        temp_key = b'gQfTq3-iJ4_1nZ-vY8-9jA_XyZ7_aB_C-dE_fG_hI_k='
+        temp_key = b'sTqmG8dK97wNxZyBvC1D2EfGhIjK3L4M5N6O7P8Q9R0='
         
     return temp_key if isinstance(temp_key, bytes) else temp_key.encode('utf-8')
 
@@ -88,7 +87,7 @@ def get_system_pii_key() -> bytes:
     key = os.environ.get('PII_ENCRYPTION_KEY')
     if not key:
         logger.critical("🔥 PII_ENCRYPTION_KEY is not set! Security compromised.")
-        key = b'bA-sTq-mG8_dK9-7_wN-xZ_yB_vC-1D-2E_fG_hI_j='
+        key = b'XyZ7aBCdEfGhIjKlMnOpQrStUvWxYz0123456789Abc='
     return key if isinstance(key, bytes) else key.encode('utf-8')
 
 
@@ -99,6 +98,8 @@ def get_system_pii_key() -> bytes:
 def authenticate_supporter(email, password):
     """職員のログイン認証"""
     logger.info(f"🔐 Auth attempt for: {email}")
+    # Supporter -> SupporterPII を結合して検索
+    # (SupporterPIIをインポート済みなので直接フィルタ可能)
     supporter = Supporter.query.join(Supporter.pii).filter(SupporterPII.email == email).first()
     
     if supporter and supporter.pii and supporter.pii.check_password(password):
@@ -114,11 +115,10 @@ def check_permission(supporter_id, permission_name):
     if not supporter:
         return False
     
+    # 職員が持つ全てのロールから、権限セットを収集
     for role in supporter.roles:
         for perm in role.permissions:
             if perm.name == permission_name:
-                # logger.debug(f"✅ Permission granted: {permission_name} for Supporter {supporter_id}")
                 return True
     
-    # logger.debug(f"⛔ Permission denied: {permission_name} for Supporter {supporter_id}")
     return False

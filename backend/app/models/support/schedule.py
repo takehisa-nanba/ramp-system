@@ -49,19 +49,17 @@ class Schedule(db.Model):
     # --- リレーションシップ (多対多) ---
     
     # このスケジュールに参加する「利用者」
-    # ★ 修正: overlapsを追加
+    # ★ 修正: backref を廃止し、back_populates と overlaps を使用
     participants_user = db.relationship(
         'User', 
         secondary=schedule_participants, 
-        backref='user_schedules',
-        overlaps="participants_supporter" 
+        back_populates='user_schedules',
+        overlaps="participants_supporter, supporter_schedules" # 競合を許容
     )
     
-    # このスケジュールに参加する「職員」
-    # ★ 修正: overlapsを追加
     participants_supporter = db.relationship(
         'Supporter', 
         secondary=schedule_participants, 
-        backref='supporter_schedules',
-        overlaps="participants_user"
+        back_populates='supporter_schedules',
+        overlaps="participants_user, user_schedules" # 競合を許容
     )

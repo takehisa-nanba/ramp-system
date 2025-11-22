@@ -90,7 +90,15 @@ class User(db.Model):
     case_conferences = db.relationship('CaseConferenceLog', back_populates='user', lazy='dynamic')
     # --- 監査・コンプライアンス ---
     compliance_events = db.relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
-    
+    # ★ 追加: スケジュールへの明示的なリレーション
+    # (secondaryは文字列で指定して循環参照を回避)
+    user_schedules = db.relationship(
+        'Schedule', 
+        secondary='schedule_participants', 
+        back_populates='participants_user',
+        overlaps="participants_supporter, supporter_schedules" # ★ ここ！
+    )
+
     def __repr__(self):
         return f'<User {self.id}: {self.display_name}>'
 

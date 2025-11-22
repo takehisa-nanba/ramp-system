@@ -1,10 +1,11 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     User, Supporter, SupportThread, ChatMessage,
     DocumentConsentLog, Organization, UserOrganizationLink
 )
 from sqlalchemy import func
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 import secrets
 import string
 
@@ -21,7 +22,6 @@ class CommsService:
     def get_or_create_thread(self, user_id: int) -> SupportThread:
         """
         Gets the active chat thread for a user, or creates one if it doesn't exist.
-        Ensures continuity even if the user status changes (Principle 5).
         """
         thread = SupportThread.query.filter_by(user_id=user_id, status='OPEN').first()
         
@@ -35,7 +35,6 @@ class CommsService:
     def post_message(self, thread_id: int, content: str, sender_type: str, sender_id: int) -> ChatMessage:
         """
         Posts a message to a thread.
-        Records the sender type ('USER' or 'SUPPORTER') for audit trails.
         """
         if not content:
             raise ValueError("Message content cannot be empty.")
@@ -43,7 +42,8 @@ class CommsService:
         message = ChatMessage(
             thread_id=thread_id,
             content=content,
-            timestamp=datetime.utcnow()
+            # ★ 修正: Timezone Aware
+            timestamp=datetime.now(timezone.utc)
         )
         
         if sender_type == 'USER':
@@ -59,45 +59,24 @@ class CommsService:
         return message
 
     # ====================================================================
-    # 2. ワンタイムURL (OTL) 発行 (Principle 1: Auditability / Principle 4: No Waste)
+    # 2. ワンタイムURL (OTL) 発行 (Principle 1: Auditability)
     # ====================================================================
 
     def generate_otl_token(self, document_type: str, document_id: int, user_id: int, expiration_minutes: int = 1440) -> str:
         """
         Generates a secure One-Time Link (OTL) token for external consent.
-        Instead of forcing external users to login (Waste), we verify identity via token.
-        
-        Args:
-            document_type: 'SUPPORT_PLAN', 'AGENCY_RECEIPT', etc.
-            document_id: ID of the document to be signed.
-            expiration_minutes: Token validity duration (default 24h).
         """
-        
         # 1. Generate a secure random token
         alphabet = string.ascii_letters + string.digits
         token = ''.join(secrets.choice(alphabet) for i in range(32))
         
-        # 2. Create a log entry (Pending Consent)
-        # 実際には、このトークンを一時的なストア（Redisや専用テーブル）に保存し、
-        # 有効期限と紐づける必要があります。
-        # ここでは、DocumentConsentLogを 'PENDING' 状態で作成する簡易実装とします。
-        
-        # (実装イメージ: OTL管理テーブルへの保存)
-        # otl_record = OTLRecord(token=token, user_id=user_id, doc_type=..., expires_at=...)
-        # db.session.add(otl_record)
+        # 2. 本来はRedis等に保存するが、ここでは簡易的にトークン生成のみを行う
+        # (実運用では有効期限管理が必要)
         
         return token
 
     def verify_otl_token(self, token: str) -> dict:
         """
-        Verifies the OTL token and returns the associated context (user_id, document_id).
-        Returns None if invalid or expired.
+        Verifies the OTL token.
         """
-        # (実装イメージ: OTL管理テーブルからの検索と検証)
-        # record = OTLRecord.query.filter_by(token=token).first()
-        # if not record or record.expires_at < datetime.utcnow():
-        #     return None
-        
-        # return {'user_id': record.user_id, 'document_id': record.document_id, ...}
-        
         return {} # Placeholder

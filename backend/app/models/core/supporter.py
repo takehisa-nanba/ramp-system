@@ -83,6 +83,13 @@ class Supporter(db.Model):
     
     # ★ 追加: 所属事業所へのリレーション
     office = db.relationship('OfficeSetting', back_populates='staff_members', foreign_keys=[office_id])
+    # ★ 追加: スケジュールへの明示的なリレーション
+    supporter_schedules = db.relationship(
+        'Schedule', 
+        secondary='schedule_participants', 
+        back_populates='participants_supporter',
+        overlaps="participants_user, user_schedules" # ★ ここ！
+    )
     
     def __repr__(self):
         return f'<Supporter {self.id}: {self.last_name} {self.first_name}>'

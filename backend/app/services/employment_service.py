@@ -1,10 +1,16 @@
+# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     JobPlacementLog, JobDevelopmentLog, EmployerMaster,
     User, JobRetentionRecord
 )
 from sqlalchemy import func
-from datetime import datetime, timedelta
+# ★ 修正: timezone
+from datetime import datetime, timezone
+import logging
+
+# ★ ロガーの取得
+logger = logging.getLogger(__name__)
 
 class EmploymentService:
     """
@@ -21,6 +27,7 @@ class EmploymentService:
         Registers a new job placement or return-to-work event.
         """
         if scenario not in ['NEW_PLACEMENT', 'RETURN_TO_WORK']:
+            logger.error(f"❌ Invalid scenario: {scenario}")
             raise ValueError("Invalid support scenario.")
             
         placement = JobPlacementLog(
@@ -32,6 +39,8 @@ class EmploymentService:
         
         db.session.add(placement)
         db.session.commit()
+        
+        logger.info(f"🎉 Job Placement Registered: User {user_id} at Employer {employer_id} ({scenario})")
         return placement
 
     def check_retention_status(self, user_id: int) -> dict:
@@ -42,10 +51,17 @@ class EmploymentService:
         placement = JobPlacementLog.query.filter_by(user_id=user_id).order_by(JobPlacementLog.placement_date.desc()).first()
         
         if not placement or placement.separation_date:
-            return {"status": "NOT_employed", "months": 0}
+            return {"status": "NOT_EMPLOYED", "months": 0, "milestone_reached": False}
             
-        months_employed = (datetime.utcnow().date() - placement.placement_date).days / 30
+        # ★ 修正: utcnow().date() -> now(timezone.utc).date()
+        today = datetime.now(timezone.utc).date()
+        
+        # 単純な月数計算 (実際はもう少し厳密な計算が必要な場合もあるが、目安として30日区切り)
+        days_employed = (today - placement.placement_date).days
+        months_employed = days_employed / 30
         is_milestone_reached = months_employed >= 6
+        
+        logger.debug(f"🔍 Retention Check User {user_id}: {days_employed} days ({months_employed:.1f} months). Milestone: {is_milestone_reached}")
         
         return {
             "status": "EMPLOYED",
@@ -66,9 +82,14 @@ class EmploymentService:
             employer_id=employer_id, # NULL if it's a new prospect
             activity_type=activity_type,
             activity_summary=summary,
-            activity_timestamp=datetime.utcnow()
+            # ★ 修正: utcnow() -> now(timezone.utc)
+            activity_timestamp=datetime.now(timezone.utc)
         )
         
         db.session.add(log)
         db.session.commit()
+        
+        target = f"Employer {employer_id}" if employer_id else "New Prospect"
+        logger.info(f"📢 Development Activity Logged: {activity_type} -> {target}")
+        
         return log
