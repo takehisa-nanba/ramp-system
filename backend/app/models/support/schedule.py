@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/support/schedule.py
 from backend.app.extensions import db
 from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime
 

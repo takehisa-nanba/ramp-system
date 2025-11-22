@@ -1,7 +1,14 @@
+# backend/tests/conftest.py
+
 import pytest
 import sys
 import os
 import logging  # ★ 追加
+
+# --- ロギングシステムの基本的な設定（必須） ---
+# これにより、どのファイルからでもログレベル DEBUG 以上のメッセージが処理対象となる。
+logging.basicConfig(level=logging.DEBUG) 
+# ---------------------------------------------
 
 # -------------------------------------------------------------------
 # パス解決のロジック
@@ -24,7 +31,7 @@ class TestConfig(Config):
     TESTING = True
     SQLALCHEMY_DATABASE_URI = 'sqlite:///:memory:'
 
-@pytest.fixture
+@pytest.fixture(scope="module")
 def app():
     """テスト用のアプリケーションを作成する"""
     logger.info("🛠️ SETUP: テスト用アプリケーションを初期化しています...") # ★ ログ

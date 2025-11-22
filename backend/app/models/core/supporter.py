@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/supporter.py
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
 
@@ -32,6 +32,8 @@ class Supporter(db.Model):
     
     # (例: 'FULL_TIME', 'SHORTENED_FT', 'PART_TIME')
     employment_type = Column(String(50), nullable=False) 
+    # 社員番号・職員番号など
+    employee_id = Column(String(20), unique=True, nullable=True, index=True) 
     
     # 個人の週所定労働時間（分）。常勤/非常勤の判定に使用
     weekly_scheduled_minutes = Column(Integer, nullable=False) 

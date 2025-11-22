@@ -1,4 +1,5 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/services/compliance_service.py
+
 from backend.app.extensions import db
 from backend.app.models import (
     IncidentReport, ComplaintLog, 

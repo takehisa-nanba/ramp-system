@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/user.py
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, UniqueConstraint, CheckConstraint, func
 

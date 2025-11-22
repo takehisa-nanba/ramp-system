@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/services/core_service.py
 from backend.app.extensions import db
 from backend.app.models import (
     User, UserPII, Supporter, SupporterPII, RoleMaster, PermissionMaster,
@@ -95,6 +95,16 @@ def get_system_pii_key() -> bytes:
 # 2. 認証・権限サービス (Auth & RBAC)
 # ====================================================================
 
+def get_supporter_by_id(supporter_id: int):
+    """
+    [データアクセス] IDに基づいて職員（Supporter）オブジェクトを取得する。
+    """
+    # Supporter モデルは、このファイルの先頭でインポートされているはずです。
+    from backend.app.models import Supporter
+    
+    # db.session.get() は ID によるプライマリキー検索に最適な方法です
+    return db.session.get(Supporter, supporter_id)
+
 def authenticate_supporter(email, password):
     """職員のログイン認証"""
     logger.info(f"🔐 Auth attempt for: {email}")
@@ -122,3 +132,19 @@ def check_permission(supporter_id, permission_name):
                 return True
     
     return False
+
+def get_all_users_lite():
+    """
+    [データアクセス] 全利用者リストを返す（一覧表示用、PIIは含まず）。
+    """
+    # この関数内で User.query.all() を実行します。
+    # from backend.app.models import User
+    return User.query.all()
+
+def get_user_by_id(user_id: int):
+    """
+    [データアクセス] IDに基づいて利用者（User）オブジェクトを取得する。
+    """
+    # この関数内で db.session.get(User, user_id) を実行します。
+    # from backend.app.models import User
+    return db.session.get(User, user_id)

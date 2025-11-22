@@ -1,5 +1,6 @@
 # 🚨 修正点: 'backend.app.models' への依存（インポート）を「すべて削除」
 from backend.app.extensions import db, bcrypt
+import cryptography
 from cryptography.fernet import Fernet, InvalidToken
 import os
 import functools
