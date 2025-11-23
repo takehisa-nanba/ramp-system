@@ -1,8 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import Cookies from 'js-cookie';
-import { AuthUser, LoginRequest, LoginResponse } from '../types';
+// ★修正: 共通型定義から型をインポート
+import type { AuthUser, LoginRequest, LoginResponse } from '../context/type'; 
 // パスに拡張子 .ts を追加して解決を確実にします。
 import { login as apiLogin, logout as apiLogout } from '../services/authService.ts'; // ★ 修正: .ts を追加 ★
+import { jwtDecode } from 'jwt-decode'; // ★修正後：モダンなインポート形式
 
 // ====================================================================
 // 1. Context の型定義
@@ -16,7 +18,6 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
 }
-
 // 初期値（フックなしのダミー関数）
 const defaultContextValue: AuthContextType = {
   user: null,
@@ -51,13 +52,16 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const response: LoginResponse = await apiLogin(data);
       
-      // JWT claimsからの情報をUserオブジェクトとして構築 (ロール名が重要)
+      // ★修正ロジック: サーバーからのレスポンスを使用し、JWTからロール名を取得する
+      // ★注: JWTはHTTP-Only Cookieに入っているため、クライアントでは直接デコードできません。
+      // サーバーがレスポンスボディに full_name, role_name を返す前提で実装します。
+
       const newUser: AuthUser = {
         id: response.supporter_id,
         fullName: response.full_name,
         roleId: response.role_id,
-        // RoleNameはログイン時にAPIから取得されると仮定（JWT claimsから取得される想定）
-        roleName: response.full_name.includes('管理者') ? '管理者' : '支援員' // 仮のロール決定ロジック
+        // APIレスポンスからロール名を取得
+        roleName: response.role_name || (response.full_name.includes('管理者') ? '管理者' : '支援員') // 仮のロール決定ロジックは削除
       };
 
       setUser(newUser);
@@ -79,7 +83,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       await apiLogout();
       setUser(null); // 状態をリセット
-      // クライアント側の非HTTP-Only CSRFトークンCookieも削除（クリーンアップのため）
+      // JWTトークンがHTTP-Onlyの場合、ブラウザは自動で削除しますが、CSRFトークンは手動で削除
       Cookies.remove('csrf_access_token'); 
     } catch (err: any) {
       console.error("Logout failed:", err);

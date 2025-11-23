@@ -1,4 +1,7 @@
-import axios, { AxiosInstance, AxiosRequestConfig } from 'axios';
+// frontend/src/services/apiClient.ts
+
+import axios from 'axios'; // 値（axios.create）のみをインポート
+import type { AxiosInstance, AxiosRequestConfig } from 'axios'; // 型（Type）のみをインポート
 import Cookies from 'js-cookie';
 
 // バックエンドのベースURL
@@ -20,6 +23,7 @@ const apiClient: AxiosInstance = axios.create({
  * CSRF保護を伴うリクエストのインターセプター
  * POST, PUT, DELETE リクエストに X-CSRF-TOKEN ヘッダーを自動で付与します。
  */
+// 🚨 修正: config の型注釈はそのまま使用できます
 apiClient.interceptors.request.use((config: AxiosRequestConfig) => {
   // CSRF保護が有効な場合、Cookieからトークンを取得し、ヘッダーに設定
   if (config.method && ['post', 'put', 'delete', 'patch'].includes(config.method.toLowerCase())) {

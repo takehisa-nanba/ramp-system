@@ -1,6 +1,9 @@
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_migrate import Migrate
+from flask_jwt_extended import JWTManager # ★追加
+from flask_cors import CORS # ★追加
+
 # 🚨 将来の認証機能(API)のためにJWTもここで定義
 # from flask_jwt_extended import JWTManager
 # 🚨 将来のフロントエンド連携(CORS)のためにここで定義
@@ -25,7 +28,7 @@ bcrypt = Bcrypt()
 migrate = Migrate()
 
 # 将来の認証(JWT)オブジェクト
-# jwt = JWTManager()
+jwt = JWTManager() 
 
 # 将来のCORSオブジェクト
-# cors = CORS()
+cors = CORS()
