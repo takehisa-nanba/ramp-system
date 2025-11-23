@@ -1,5 +1,5 @@
 import os
-# 🚨 修正点: すべてのインポートを 'backend' 起点に統一
+#  修正点: すべてのインポートを 'backend' 起点に統一
 from backend.app import create_app, db
 from backend.app import models 
 # ★ 追加: Configクラスを直接インポート

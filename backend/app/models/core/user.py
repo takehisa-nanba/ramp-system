@@ -1,9 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/user.py
+
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, UniqueConstraint, CheckConstraint, func
 
-# 🚨 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
-#    各メソッド内で実行時にインポートします。
+# 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
+# 各メソッド内で実行時にインポートします。
 import datetime
 
 # ====================================================================
@@ -160,7 +161,7 @@ class UserPII(db.Model):
         """
         このPIIが属する「法人ID」を取得する。
         """
-        # 🚨 暫定的なフォールバック（本来は契約情報から取得）
+        #  暫定的なフォールバック（本来は契約情報から取得）
         return 1 
 
     # --- 階層1：受給者証番号 (エンベロープ暗号化) ---

@@ -1,8 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/masters/master_definitions.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text, Numeric
 
-# 🚨 修正点: 'backend.app.models.core.rbac_links' (絶対参照)
+#  修正点: 'backend.app.models.core.rbac_links' (絶対参照)
 from backend.app.models.core.rbac_links import supporter_role_link, role_permission_link
 
 # ====================================================================

@@ -1,8 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/office.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func, JSON
 
-# 🚨 修正点: マスタへの参照を追加
+# 修正点: マスタへの参照を追加
 from backend.app.models.masters.master_definitions import JobTitleMaster, GovernmentFeeMaster
 
 # ====================================================================

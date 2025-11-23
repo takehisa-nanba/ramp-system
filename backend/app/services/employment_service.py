@@ -1,4 +1,4 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+#  修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     JobPlacementLog, JobDevelopmentLog, EmployerMaster,

@@ -2,7 +2,7 @@ import pytest
 import logging
 from cryptography.fernet import Fernet
 
-# 🚨 修正点: 責務分離に合わせてインポート元を変更
+#  修正点: 責務分離に合わせてインポート元を変更
 # 1. 暗号化ロジック（道具）
 from backend.app.services.security_service import (
     encrypt_data_pii, decrypt_data_pii,

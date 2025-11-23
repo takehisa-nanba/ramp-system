@@ -1,7 +1,6 @@
 # backend/app/services/core_service.py
 
 from flask import current_app # ★この行をインポートに追加★
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     User, UserPII, Supporter, SupporterPII, RoleMaster, PermissionMaster,
@@ -131,3 +130,34 @@ def check_permission(supporter_id, permission_name):
                 return True
     
     return False
+
+def authenticate_supporter_by_code(staff_code, password):
+    """職員コードとパスワードによるログイン認証（クイック認証用）"""
+    logger.info(f"🔐 Quick Auth attempt for Staff Code: {staff_code}")
+    
+    # Supporter モデルを staff_code で検索
+    supporter = Supporter.query.filter_by(staff_code=staff_code).first()
+    
+    if supporter and supporter.pii and supporter.pii.check_password(password):
+        logger.info(f"✅ Quick Auth success: Supporter {supporter.id}")
+        # 認証成功の場合、Supporterオブジェクトを返す
+        return supporter
+    
+    logger.warning(f"⛔ Quick Auth failed for code: {staff_code}")
+    return None
+
+def check_pii_access(supporter_id: int) -> bool:
+    """
+    【PII アクセス防御壁】
+    職員が利用者PIIを閲覧・操作する権限（ロール）を持っているか確認する。
+    """
+    # 監査上、PIIアクセスは特別な権限（例: 'VIEW_PII'）でのみ許可
+    # 権限マスターが存在しない場合はFalseを返す（セーフティロック）
+    has_pii_permission = check_permission(supporter_id, "VIEW_PII")
+    
+    if not has_pii_permission:
+        logger.warning(f"🚫 Supporter {supporter_id} attempted PII access without VIEW_PII permission.")
+        return False
+    
+    logger.debug(f"✅ Supporter {supporter_id} has PII access.")
+    return True

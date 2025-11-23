@@ -1,4 +1,5 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/services/comms_service.py
+
 from backend.app.extensions import db
 from backend.app.models import (
     User, Supporter, SupportThread, ChatMessage,
@@ -6,13 +7,14 @@ from backend.app.models import (
 )
 from sqlalchemy import func
 from datetime import datetime, timezone
+from typing import Optional 
 import secrets
 import string
 
 class CommsService:
     """
-    Handles communication channels (Chat) and external coordination (OTL).
-    Prioritizes seamless communication (Principle 5) and audit trails (Principle 1).
+    コミュニケーションチャネル（チャット）および外部連携（OTL）を処理します。
+    シームレスなコミュニケーション（原理5）と監査証跡（原理1）を優先します。
     """
 
     # ====================================================================
@@ -57,6 +59,26 @@ class CommsService:
         db.session.commit()
         
         return message
+    
+    def get_thread_id_by_user(self, user_id: int) -> Optional[int]:
+        """
+        利用者のアクティブなチャットスレッドのIDを返す。
+        （スレッドへのリンク用）
+        """
+        thread = SupportThread.query.filter_by(user_id=user_id, status='OPEN').first()
+        
+        if thread:
+            return thread.id
+        else:
+            # スレッドが存在しない場合、自動作成するロジックを呼ぶことも可能だが、
+            # ここでは参照に特化し、Noneを返す
+            return None 
+
+    def get_message_by_id(self, message_id: int) -> Optional[ChatMessage]:
+        """
+        特定のメッセージを取得する（監査ログからメッセージ詳細へ飛ぶことを想定）。
+        """
+        return db.session.get(ChatMessage, message_id)
 
     # ====================================================================
     # 2. ワンタイムURL (OTL) 発行 (Principle 1: Auditability)

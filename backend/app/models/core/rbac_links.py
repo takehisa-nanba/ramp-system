@@ -1,3 +1,5 @@
+# backend/app/models/core/rbac_links.py
+
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, ForeignKey, Table
 

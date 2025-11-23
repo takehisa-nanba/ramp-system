@@ -4,9 +4,9 @@ from flask_migrate import Migrate
 from flask_jwt_extended import JWTManager # ★追加
 from flask_cors import CORS # ★追加
 
-# 🚨 将来の認証機能(API)のためにJWTもここで定義
+#  将来の認証機能(API)のためにJWTもここで定義
 # from flask_jwt_extended import JWTManager
-# 🚨 将来のフロントエンド連携(CORS)のためにここで定義
+#  将来のフロントエンド連携(CORS)のためにここで定義
 # from flask_cors import CORS
 
 # ====================================================================

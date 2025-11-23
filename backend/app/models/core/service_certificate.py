@@ -1,4 +1,6 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/service_certificate.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
@@ -44,7 +46,7 @@ class ServiceCertificate(db.Model):
     meal_addon_statuses = db.relationship('MealAddonStatus', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
     copayment_management = db.relationship('CopaymentManagement', back_populates='certificate', lazy='dynamic', cascade="all, delete-orphan")
     
-    # 🚨 削除: 送迎加算と特別地域加算は、受給者証記載事項ではないためここからは削除。
+    #  削除: 送迎加算と特別地域加算は、受給者証記載事項ではないためここからは削除。
     # Financeパッケージの ComplianceEventLog で管理する。
 
 # ====================================================================

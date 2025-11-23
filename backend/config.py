@@ -21,7 +21,7 @@ class Config:
     # --- 必須設定 ---
     
     # セキュリティキー (Flaskのセッション管理などに必須)
-    # 🚨 本番環境では、これは必ず環境変数から読み込む強力なキーに変更してください
+    #  本番環境では、これは必ず環境変数から読み込む強力なキーに変更してください
     SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key-that-you-should-change'
     
     # SQLAlchemyの設定

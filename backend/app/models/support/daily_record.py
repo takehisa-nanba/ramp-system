@@ -1,4 +1,6 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/support/daily_record.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 
@@ -16,6 +18,11 @@ class DailyLog(db.Model):
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     log_date = Column(Date, nullable=False, index=True)
+    
+    # --- ★ NEW: 場所の厳格な分離（Ghost Recording防止） ★ ---
+    # ('ON_SITE', 'OFF_SITE_USER_HOME', 'OFF_SITE_EXTERNAL')
+    location_type = Column(String(50), nullable=False) 
+    external_location_detail = Column(Text) # 事業所外活動の具体的な場所
     
     # ★ Plan-Activity ガードレールの核
     goal_id = Column(Integer, ForeignKey('individual_support_goals.id'), nullable=False, index=True) 

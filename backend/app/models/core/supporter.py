@@ -1,8 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/supporter.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
 
-# 🚨 修正点: rbac_links を絶対参照でインポート
+#  修正点: rbac_links を絶対参照でインポート
 from backend.app.models.core.rbac_links import supporter_role_link
 
 # ====================================================================
@@ -16,6 +18,9 @@ class Supporter(db.Model):
     __tablename__ = 'supporters'
     
     id = Column(Integer, primary_key=True)
+    
+    # ★ NEW: 職員コード (Quick Authentication/Business Key)
+    staff_code = Column(String(20), nullable=False, unique=True, index=True)
     
     # --- 基本情報 (平文・業務上必須) ---
     last_name = Column(String(50), nullable=False, index=True)
