@@ -1,17 +1,15 @@
-/* ---------------------------------------------------- 
-// Tailwind CSS Base Directives (Required for functionality) // 
----------------------------------------------------- */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind CSS v4 のインポート */
+@import "tailwindcss";
 
-/* ---------------------------------------------------- 
-// Global Styles //
- ---------------------------------------------------- */
- body {
+@theme {
+  /* カスタムテーマ設定があればここに記述 */
+}
+
+body {
   font-family: 'Inter', sans-serif;
   margin: 0;
   padding: 0;
+  background-color: var(--color-slate-50); 
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

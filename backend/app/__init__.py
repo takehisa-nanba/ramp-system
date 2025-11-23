@@ -23,12 +23,15 @@ def create_app(config_class=Config): # ★ 引数名を変更し、クラスを�
     # --- 2. モデルを読み込む（DBのスキーマを認識させるため） ---
     with app.app_context():
         # 🚨 修正点: '.models' を 'backend.app.models' に修正
-        from backend.app import models
-    
-    # --- 3. ブループリント（APIルート）の登録 ---
-    from backend.app.api import ALL_BLUEPRINTS # ★ALL_BLUEPRINTSだけをインポート
-    
-    for bp in ALL_BLUEPRINTS:
-        app.register_blueprint(bp, url_prefix=f'/api/{bp.name}') # ルートの自動解決も可能
+        from backend.app import models    
+        # --- 3. ブループリント（APIルート）の登録 ---
+        from backend.app.api import ALL_BLUEPRINTS # ★ALL_BLUEPRINTSだけをインポート
+        
+        for bp in ALL_BLUEPRINTS:
+            # url_prefixは各Blueprint定義内ですでに設定されていますが、
+            # ここで明示的に上書き・統一することも可能です。
+            # 今回はBlueprint側で '/api/auth' 等と定義しているため、そのまま登録します。
+            # もし '/api/{bp.name}' というルールで強制したい場合は url_prefix を指定してください。
+            app.register_blueprint(bp) 
     
     return app
