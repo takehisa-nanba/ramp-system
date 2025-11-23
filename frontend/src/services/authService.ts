@@ -1,6 +1,8 @@
+// frontend/src/services/authService.ts
+
 import apiClient from './apiClient';
 import axios from 'axios';
-import { LoginRequest, LoginResponse } from '../context/type'; // 共通型定義をインポート
+import type { LoginRequest, LoginResponse } from '../context/type'; // 共通型定義をインポート
 
 // ====================================================================
 // 認証サービス

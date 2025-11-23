@@ -34,5 +34,15 @@ class Config:
     FERNET_ENCRYPTION_KEY = os.environ.get('FERNET_ENCRYPTION_KEY') or 'FALLBACK_FERNET_KEY_FOR_TESTS_ONLY'
     # ★★★ ここまで ★★★
     
+    # --- JWT-Extended 設定 (NEW) --- ★追加
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'a-default-jwt-secret-for-testing'
+    # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）
+    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_COOKIE_SECURE = False # 開発中はFalse (HTTPS不要)
+    JWT_COOKIE_SAMESITE = 'Lax'
+    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_CSRF_CHECK_FOR_FORM_FIELDS = False
+    # --- JWT設定ここまで ---
+
     # --- その他の設定（必要に応じて追加） ---
-    # (例: JWT, CORS, Mailなど)
+    # (例: CORS, Mailなど)

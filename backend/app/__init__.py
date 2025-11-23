@@ -11,12 +11,14 @@ def create_app(config_class=Config): # ★ 引数名を変更し、クラスを�
     # 渡された設定クラス（本番ならConfig、テストならTestConfig）を適用
     app.config.from_object(config_class)
 
+    cors.init_app(app, resources={r"/api/*": {"origins": "*", "supports_credentials": True}})
+
     # --- 1. 拡張機能の初期化 ---
     db.init_app(app)
     bcrypt.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app) # ★追加
-    cors.init_app(app, supports_credentials=True) # ★追加 (Cookie連携を許可)
+    # cors.init_app(app, supports_credentials=True) # ★追加 (Cookie連携を許可)
 
     # --- 2. モデルを読み込む（DBのスキーマを認識させるため） ---
     with app.app_context():

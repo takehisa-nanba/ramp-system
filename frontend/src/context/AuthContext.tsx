@@ -1,9 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import Cookies from 'js-cookie';
 // ★修正: 共通型定義から型をインポート
-import { AuthUser, LoginRequest, LoginResponse } from './type'; 
+import type { AuthUser, LoginRequest, LoginResponse } from '../context/type'; 
 // パスに拡張子 .ts を追加して解決を確実にします。
-import { login as apiLogin, logout as apiLogout } from '../services/authService'; // ★修正: .tsを削除し、ViteのmoduleResolutionに任せる ★
+import { login as apiLogin, logout as apiLogout } from '../services/authService.ts'; // ★ 修正: .ts を追加 ★
 import { jwtDecode } from 'jwt-decode'; // ★修正後：モダンなインポート形式
 
 // ====================================================================
@@ -18,7 +18,6 @@ interface AuthContextType {
   isLoading: boolean;
   error: string | null;
 }
-
 // 初期値（フックなしのダミー関数）
 const defaultContextValue: AuthContextType = {
   user: null,
