@@ -152,10 +152,14 @@ class ComplianceService:
         
         if not ratio_met:
             logger.warning(f"⚠️ Daily ratio NON-COMPLIANT ({actual_ratio:.1f}:1) on {target_date}.")
-            return {"status": "NON_COMPLIANT", "message": f"日次人員配置基準（{actual_ratio:.1f}:1）違反。オンサイトの職員を増やす必要があります。"}
+            return {
+                "status": "NON_COMPLIANT", 
+                "message": f"日次人員配置基準（{actual_ratio:.1f}:1）違反。オンサイトの職員を増やす必要があります。",
+                "ratio": f"{actual_ratio:.1f}:1" # ★ 修正: ratio キーを追加
+            }
         
         return {"status": "COMPLIANT", "ratio": f"{actual_ratio:.1f}:1"}
-
+    
 
     # ====================================================================
     # 4. 減算リスクの監査ログ記録 (Deduction Audit Log)
