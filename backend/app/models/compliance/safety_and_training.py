@@ -163,3 +163,33 @@ class StaffReflectionLog(db.Model):
     
     supporter = db.relationship('Supporter')
     referenced_thread = db.relationship('SupportThread', foreign_keys=[referenced_thread_id])
+
+# ====================================================================
+# 6. StaffWellnessLog (職員安心感ログ / 主観的評価)
+# ====================================================================
+class StaffWellnessLog(db.Model):
+    """
+    職員の安心感（SWL）や法令インパクト（LIT）の主観的評価ログ。
+    組織の改善のための任意かつ匿名データ（心理的対称性）。
+    """
+    __tablename__ = 'staff_wellness_logs'
+    
+    id = Column(Integer, primary_key=True)
+    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False, index=True)
+    
+    # 評価種別 (例: 'SWL_RATING', 'WORKLOAD_IMPACT', 'LIT_SCORE')
+    log_type = Column(String(50), nullable=False)
+    
+    # 定量評価（スコア）
+    rating_score = Column(Integer)
+    
+    # 定性評価（自由記述）
+    narrative_notes = Column(Text)
+    
+    # 匿名フラグ（Trueの場合、管理職も個人を特定できない）
+    is_anonymous = Column(Boolean, default=False, nullable=False) 
+    
+    logged_at = Column(DateTime, default=func.now(), nullable=False)
+
+    # リレーションシップ
+    supporter = db.relationship('Supporter')

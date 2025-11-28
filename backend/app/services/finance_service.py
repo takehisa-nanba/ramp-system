@@ -1,3 +1,5 @@
+# backend/app/services/finance_service.py
+
 from backend.app.extensions import db
 from backend.app.models import (
     Supporter, 

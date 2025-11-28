@@ -2,6 +2,7 @@
 
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, DateTime, Text, func
+from sqlalchemy.schema import UniqueConstraint
 
 class SharedNote(db.Model):
     """
