@@ -2,7 +2,8 @@
 
 # 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text, Numeric
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text, Numeric, DateTime
+from sqlalchemy.sql import func
 
 #  修正点: 'backend.app.models.core.rbac_links' (絶対参照)
 from backend.app.models.core.rbac_links import supporter_role_link, role_permission_link
@@ -123,6 +124,7 @@ class FailureFactorMaster(db.Model):
     name = Column(String(100), nullable=False, unique=True) # 例: 個人要因, 環境要因, 指導要因
     description = Column(Text)
     productivity_logs = db.relationship('DailyProductivityLog', back_populates='failure_factor', lazy='dynamic')
+    daily_logs = db.relationship('DailyLog', back_populates='failure_factor', lazy='dynamic')
     
 # ★ NEW: 問題の所在マスタ (IssueCategoryMaster) - ナレッジ共有用
 class IssueCategoryMaster(db.Model):
@@ -131,6 +133,25 @@ class IssueCategoryMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(100), nullable=False, unique=True) # 例: 本人因子, 環境因子
     # SupportThreadやIncidentReportからの逆参照を想定(Many-to-Many)
+
+class ServiceUnitMaster(db.Model):
+    """
+    サービスの請求単位と単価を定義するマスタ。
+    追記型台帳モデルを採用し、遡及変更を禁止する（不変性）。
+    """
+    __tablename__ = 'service_unit_master'
+    id = Column(Integer, primary_key=True)
+    
+    service_type = Column(String(50), nullable=False) 
+    unit_count = Column(Integer, default=0)       
+    unit_price = Column(Numeric(10, 4), default=0.0)
+    
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    
+    # トレーサビリティの強制
+    responsible_id = Column(Integer, nullable=False) 
+    commit_timestamp = Column(DateTime, default=func.now(), nullable=False)
 
 # ★ NEW: 報酬・加算マスタ (GovernmentFeeMaster) - 3階層フィルター
 class GovernmentFeeMaster(db.Model):
@@ -148,7 +169,7 @@ class GovernmentFeeMaster(db.Model):
     # 3階層フィルター制御フラグ
     needs_office_filing = Column(Boolean, default=False)
     needs_user_eligibility = Column(Boolean, default=False)
-    needs_daily_record = Column(Boolean, default=False)
+    needs_daily_logs = Column(Boolean, default=False)
     
     # 計算タイプ (ADD_TO_BASE, PER_ACTION, SUBTRACTION)
     calculation_type = Column(String(20), nullable=False)

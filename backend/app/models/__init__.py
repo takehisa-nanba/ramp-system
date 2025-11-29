@@ -9,7 +9,8 @@ from backend.app.models.masters.master_definitions import (
     StaffActivityMaster, ProductMaster, VendorMaster, RoleMaster, PermissionMaster,
     TrainingTypeMaster,
     # ★ 追加: 失敗の財産化・ナレッジ共有のための新マスタ
-    FailureFactorMaster, IssueCategoryMaster
+    FailureFactorMaster, IssueCategoryMaster,
+    ServiceUnitMaster
 )
 
 # --- 2. core パッケージ (SessionLockの追加) ---
@@ -56,10 +57,12 @@ from backend.app.models.core.rbac_links import (
 # --- 3. support パッケージ ---
 from backend.app.models.support.support_plan import (
     SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
-    SupportConferenceLog, PlanReviewRequest, AssessorType, GoalAssessment
+    SupportConferenceLog, PlanReviewRequest, AssessorType, GoalAssessment,
+    ISP_Continuity_Gap_Log, GapReasonType # Enumもインポート
+
 )
-from backend.app.models.support.daily_record import (
-    DailyLog, BreakRecord, DailyProductivityLog
+from backend.app.models.support.daily_log import (
+    DailyLog, DailyLogActivity, BreakRecord, DailyProductivityLog
 )
 from backend.app.models.support.schedule import (
     Schedule
@@ -88,6 +91,9 @@ from backend.app.models.support.case_management import (
 # --- 4. finance パッケージ ---
 from backend.app.models.finance.billing_compliance import (
     ContractReportDetail, ComplianceEventLog
+)
+from backend.app.models.finance.billing_data import (
+    BillingData
 )
 from backend.app.models.finance.accounting_management import (
     MonthlyBillingSummary, ClientInvoice, AgencyReceiptStatement, DocumentConsentLog,

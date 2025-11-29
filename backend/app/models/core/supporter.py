@@ -191,11 +191,9 @@ class SupporterTimecard(db.Model):
     check_in = Column(DateTime) 
     check_out = Column(DateTime)
     total_break_minutes = Column(Integer, default=0, nullable=False)
-    
-    # --- 常勤換算と法令遵守（みなし時間） ---
-    scheduled_work_minutes = Column(Integer, default=0, nullable=False)
-    
-    is_absent = Column(Boolean, default=False)
+    # 【新規追加】職員がその日に勤務を予定されていた分数（FTE換算ロジックの安定化）
+    scheduled_work_minutes = Column(Integer, default=0, nullable=False) 
+    is_absent = Column(Boolean, default=False)    
     absence_type = Column(String(50)) # 'PAID_LEAVE', 'TRAINING', etc.
     deemed_work_minutes = Column(Integer, default=0) # 有給などのみなし時間
     

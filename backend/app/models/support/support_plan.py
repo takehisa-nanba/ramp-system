@@ -1,8 +1,12 @@
 # backend/app/models/support/support_plan.py
 
-# 修正点: 'from backend.app.extensions' (絶対参照)
+import uuid
+from datetime import datetime, date, timedelta # timedeltaを追加し、日付計算のムダを排除
+from enum import Enum as PyEnum
+
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, Enum # Enumを統合
+from sqlalchemy.dialects.postgresql import UUID # PostgreSQL環境を想定
 
 # ====================================================================
 # 1. SupportPlan (個別支援計画 - 親)
@@ -21,6 +25,9 @@ class SupportPlan(db.Model):
     
     # ワークフローの状態 (DRAFT, PENDING_CONFERENCE, PENDING_CONSENT, ACTIVE, ARCHIVED_DRAFT, ARCHIVED)
     plan_status = Column(String(30), nullable=False, default='DRAFT')
+    
+    plan_start_date = Column(Date, nullable=True) # 原案段階ではNULL許容, 成案化時に確定
+    plan_end_date = Column(Date, nullable=True) # 法定期間に基づき設定
     
     # --- 監査証跡（原理1） ---
     # サビ管の最終承認（必須）
@@ -45,6 +52,15 @@ class SupportPlan(db.Model):
     # 自己参照リレーション
     draft_plan = db.relationship('SupportPlan', remote_side=[id], foreign_keys=[based_on_plan_id])
     finalized_plan = db.relationship('SupportPlan', back_populates='draft_plan', remote_side=[based_on_plan_id])
+    # 【新規】連続性ギャップログへのリレーションシップ (片方向参照: ムダの排除)
+    continuities = db.relationship(
+        'ISP_Continuity_Gap_Log',
+        primaryjoin="and_(ISP_Continuity_Gap_Log.Previous_Plan_ID == SupportPlan.id)",
+        foreign_keys="[ISP_Continuity_Gap_Log.Previous_Plan_ID]",
+        back_populates='previous_plan', # 新規モデル側で定義を想定
+        lazy='dynamic'
+    )
+    billings = db.relationship('BillingData', back_populates='support_plan', lazy='dynamic', cascade="all, delete-orphan")
 
     long_term_goals = db.relationship('LongTermGoal', back_populates='plan', cascade="all, delete-orphan")
     conferences = db.relationship('SupportConferenceLog', back_populates='plan', lazy='dynamic', cascade="all, delete-orphan")
@@ -123,6 +139,8 @@ class IndividualSupportGoal(db.Model):
     is_work_preparation_positioning = Column(Boolean, default=False, nullable=False)
     
     short_term_goal = db.relationship('ShortTermGoal', back_populates='individual_goals')
+    daily_activities = db.relationship('DailyLogActivity', back_populates='individual_support_goal', lazy='dynamic', cascade="all, delete-orphan")
+    daily_activities = db.relationship('DailyLogActivity', back_populates='individual_support_goal', lazy='dynamic', cascade="all, delete-orphan")
 
 # ====================================================================
 # 5. SupportConferenceLog (支援会議ログ / 議事録)
@@ -205,3 +223,56 @@ class GoalAssessment(db.Model):
     
     assessor_type = db.relationship('AssessorType', back_populates='goal_assessments')
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
+
+# ====================================================================
+# 8. ISP_Continuity_Gap_Log (ISP遡及・連続性担保監査ログ - 新規)
+# ====================================================================
+
+class GapReasonType(PyEnum):
+    """ISPの断続理由を規定する列挙型"""
+    ABSENCE_HOSPITAL = "ABSENCE_HOSPITAL"
+    ABSENCE_PRIVATE = "ABSENCE_PRIVATE"
+    TERMINATION_VOLUNTARY = "TERMINATION_VOLUNTARY"
+    OTHER = "OTHER"
+
+class ISP_Continuity_Gap_Log(db.Model):
+    """
+    ISP計画の断続状態と理由を記録し、遡及・連続性を担保するための監査証跡テーブル。
+    """
+    __tablename__ = 'isp_continuity_gap_logs'
+
+    # 1. プライマリキー
+    # UUIDを推奨したが、既存のモデルがIntegerベースのため、整合性のためIntegerとする。
+    # ただし、Previous_Plan_IDはIntegerのFKで参照。
+    id = Column(Integer, primary_key=True)
+    
+    # 2. 参照キー: 断続的になった直前の計画のID (SupportPlan.idを参照)
+    Previous_Plan_ID = Column(
+        Integer, 
+        ForeignKey('support_plans.id'), 
+        nullable=False,
+        index=True
+    )
+    
+    # 3. 必須フィールド
+    Gap_Reason_Type = Column(
+        Enum(GapReasonType, name="gap_reason_type_enum"), 
+        nullable=False
+    )
+    Gap_Reason_Detail = Column(Text, nullable=False)
+    
+    # 4. 日付範囲
+    Gap_Start_Date = Column(Date, nullable=False) # 計画が途切れた初日
+    Gap_End_Date = Column(Date, nullable=False)   # 支援実態が再開した日の前日
+    
+    # 5. トレーサビリティ/承認 (L3, L4の核)
+    Responsible_ID = Column(String(50), nullable=False) # 記録・承認した職員ID (SupporterIDをStringで保持と想定)
+    Commit_Timestamp = Column(DateTime, nullable=False, default=func.now()) # 記録・承認の日時
+
+    # リレーションシップ
+    previous_plan = db.relationship(
+        'SupportPlan', 
+        primaryjoin="and_(ISP_Continuity_Gap_Log.Previous_Plan_ID == SupportPlan.id)",
+        foreign_keys="[ISP_Continuity_Gap_Log.Previous_Plan_ID]",
+        back_populates='continuities'
+    )
