@@ -1,4 +1,6 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backende/app/models/finance/billing_compliance.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
 

@@ -1,9 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/user.py
+
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, UniqueConstraint, CheckConstraint, func
 
-# 🚨 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
-#    各メソッド内で実行時にインポートします。
+# 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
+# 各メソッド内で実行時にインポートします。
 import datetime
 
 # ====================================================================
@@ -56,10 +57,12 @@ class User(db.Model):
     family_members = db.relationship('FamilyMember', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     emergency_contacts = db.relationship('EmergencyContact', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
 
-
     # --- 支援プロセスの子テーブル ---
     support_plans = db.relationship('SupportPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     daily_logs = db.relationship('DailyLog', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+
+    # --- 請求・会計の子テーブル ---
+    billings = db.relationship('BillingData', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
     
     # --- コミュニケーションの子テーブル ---
     support_threads = db.relationship('SupportThread', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
@@ -75,8 +78,6 @@ class User(db.Model):
     
     # --- ★ 追加: 危機対応計画 (今回のエラー原因) ---
     crisis_plans = db.relationship('CrisisPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    # --- ★ 追加: 監査・コンプライアンス (これも抜けている可能性があります) ---
-    compliance_events = db.relationship('ComplianceEventLog', back_populates='user', lazy='dynamic')
     # --- ★ 追加: インシデント・苦情 ---
     incident_reports = db.relationship('IncidentReport', back_populates='user', lazy='dynamic')
     # ComplaintLogは foreign_keys 指定が必要
@@ -160,7 +161,7 @@ class UserPII(db.Model):
         """
         このPIIが属する「法人ID」を取得する。
         """
-        # 🚨 暫定的なフォールバック（本来は契約情報から取得）
+        #  暫定的なフォールバック（本来は契約情報から取得）
         return 1 
 
     # --- 階層1：受給者証番号 (エンベロープ暗号化) ---

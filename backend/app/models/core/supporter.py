@@ -1,8 +1,10 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/core/supporter.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
 
-# 🚨 修正点: rbac_links を絶対参照でインポート
+#  修正点: rbac_links を絶対参照でインポート
 from backend.app.models.core.rbac_links import supporter_role_link
 
 # ====================================================================
@@ -16,6 +18,9 @@ class Supporter(db.Model):
     __tablename__ = 'supporters'
     
     id = Column(Integer, primary_key=True)
+    
+    # ★ NEW: 職員コード (Quick Authentication/Business Key)
+    staff_code = Column(String(20), nullable=False, unique=True, index=True)
     
     # --- 基本情報 (平文・業務上必須) ---
     last_name = Column(String(50), nullable=False, index=True)
@@ -186,11 +191,9 @@ class SupporterTimecard(db.Model):
     check_in = Column(DateTime) 
     check_out = Column(DateTime)
     total_break_minutes = Column(Integer, default=0, nullable=False)
-    
-    # --- 常勤換算と法令遵守（みなし時間） ---
-    scheduled_work_minutes = Column(Integer, default=0, nullable=False)
-    
-    is_absent = Column(Boolean, default=False)
+    # 【新規追加】職員がその日に勤務を予定されていた分数（FTE換算ロジックの安定化）
+    scheduled_work_minutes = Column(Integer, default=0, nullable=False) 
+    is_absent = Column(Boolean, default=False)    
     absence_type = Column(String(50)) # 'PAID_LEAVE', 'TRAINING', etc.
     deemed_work_minutes = Column(Integer, default=0) # 有給などのみなし時間
     

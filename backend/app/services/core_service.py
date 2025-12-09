@@ -1,7 +1,6 @@
 # backend/app/services/core_service.py
 
 from flask import current_app # ★この行をインポートに追加★
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from backend.app.models import (
     User, UserPII, Supporter, SupporterPII, RoleMaster, PermissionMaster,
@@ -72,7 +71,6 @@ def get_corporation_id_for_user(user: User) -> int:
         logger.exception(f"🔥 CRITICAL: Failed to resolve Corporation ID for User {user.id}: {e}")
         return 1
 
-
 def get_corporation_kek(corporation_id: int) -> bytes:
     """【階層1】法人のマスターキー（KEK）を取得する。"""
     logger.debug(f"🔑 Retrieving KEK for Corporation {corporation_id}...")
@@ -86,7 +84,6 @@ def get_corporation_kek(corporation_id: int) -> bytes:
         temp_key = b'sTqmG8dK97wNxZyBvC1D2EfGhIjK3L4M5N6O7P8Q9R0='  # テスト用のデフォルトキー
         
     return temp_key if isinstance(temp_key, bytes) else temp_key.encode('utf-8')
-
 
 def get_system_pii_key() -> bytes:
     """【階層2】システム共通鍵（DEK）を取得する。"""
@@ -131,3 +128,36 @@ def check_permission(supporter_id, permission_name):
                 return True
     
     return False
+
+def authenticate_supporter_by_code(staff_code, password):
+    """
+    職員コードとパスワードによるログイン認証（クイック認証用）。
+    staff_code はモデル層で Unique/Not Null でロックされているため、高速検索が可能。
+    """
+    logger.info(f"🔐 Quick Auth attempt for Staff Code: {staff_code}")
+    
+    # Supporter モデルを staff_code で検索
+    supporter = Supporter.query.filter_by(staff_code=staff_code).first()
+    
+    # 認証には SupporterPII モデルのハッシュ化パスワードが必要
+    if supporter and supporter.pii and supporter.pii.check_password(password):
+        logger.info(f"✅ Quick Auth success: Supporter {supporter.id}")
+        return supporter
+    
+    logger.warning(f"⛔ Quick Auth failed for code: {staff_code}")
+    return None
+
+def check_pii_access(supporter_id: int) -> bool:
+    """
+    【PIIアクセス防御壁】
+    職員が利用者PIIを閲覧・操作する権限（ロール）を持っているか確認する。
+    """
+    # 監査上、PIIアクセスは特別な権限（例: 'VIEW_PII'）でのみ許可
+    has_pii_permission = check_permission(supporter_id, "VIEW_PII")
+    
+    if not has_pii_permission:
+        logger.warning(f"🚫 Supporter {supporter_id} attempted PII access without VIEW_PII permission.")
+        return False
+    
+    logger.debug(f"✅ Supporter {supporter_id} has PII access.")
+    return True

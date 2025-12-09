@@ -1,4 +1,6 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/support/attendance_workflow.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
 
@@ -108,7 +110,14 @@ class AbsenceResponseLog(db.Model):
     # (例: 'PHONE_CALL', 'FAMILY_CONTACT', 'HOME_VISIT')
     response_method = Column(String(50), nullable=False)
     response_summary = Column(Text, nullable=False) # 対応内容 (NULL禁止)
-    
+    # ★ 最終修正: どの計画の連続性を担保するために作成されたログか
+    # (不在時の管理努力の証拠 = 監査チェーン)
+    linked_plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True, index=True)
+
     user = db.relationship('User')
     daily_log = db.relationship('DailyLog')
     supporter = db.relationship('Supporter', foreign_keys=[response_supporter_id])
+    # ★ 修正点: リレーションシップ定義の追加
+    # (ここでは簡略化のため、既存のカラムをベースに修正)
+    # supporter, daily_log のリレーション定義もこのファイル内にあることを前提
+    linked_plan = db.relationship('SupportPlan', foreign_keys=[linked_plan_id])

@@ -1,6 +1,8 @@
-# 🚨 修正点: 'from backend.app.extensions' (絶対参照)
+# backend/app/models/finance/accounting_management.py
+
+# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Numeric, func
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, ForeignKey, Text, Boolean, func
 
 # ====================================================================
 # 1. MonthlyBillingSummary (月次請求サマリー / ロック)
@@ -140,3 +142,30 @@ class DocumentConsentLog(db.Model):
         foreign_keys="DocumentConsentLog.document_id",
         back_populates='consent_log'
     )
+
+class CorporateTransferLog(db.Model):
+    """
+    法人からのサービス提供費（工賃原資など）の繰入指示の証跡。
+    会計の分離原則を担保する。
+    """
+    __tablename__ = 'corporate_transfer_logs'
+    
+    id = Column(Integer, primary_key=True)
+    
+    corporation_id = Column(Integer, ForeignKey('corporations.id'), nullable=False, index=True)
+    
+    # 財務上の正当性を証明する項目
+    transfer_amount = Column(Numeric(precision=10, scale=2), nullable=False)
+    transfer_date = Column(Date, nullable=False)
+    
+    # 繰入の理由 (例: 'WAGE_DEFICIT_COVERAGE', 'OPERATING_SUBSIDY')
+    transfer_reason_type = Column(String(50), nullable=False)
+    notes = Column(Text)
+
+    # 誰が承認したか
+    approver_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False)
+    approved_at = Column(DateTime, default=func.now(), nullable=False)
+
+    # リレーションシップ
+    corporation = db.relationship('Corporation')
+    approver = db.relationship('Supporter')

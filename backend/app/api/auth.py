@@ -21,7 +21,7 @@ def login():
     
     if supporter:
         # ロール情報は JWT claims に含めるのが一般的ですが、今回はダミーIDを使用
-        # 🚨 修正点: identity=supporter.id を identity=str(supporter.id) に修正
+        #  修正点: identity=supporter.id を identity=str(supporter.id) に修正
         additional_claims = {
             "role_id": 1, 
             "full_name": f"{supporter.last_name} {supporter.first_name}"

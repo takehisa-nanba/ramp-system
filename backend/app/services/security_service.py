@@ -1,4 +1,5 @@
-# 🚨 修正点: 'backend.app.models' への依存（インポート）を「すべて削除」
+# backend/app/services/security_service.py
+
 from backend.app.extensions import db, bcrypt
 from cryptography.fernet import Fernet, InvalidToken
 import os
@@ -8,7 +9,7 @@ import functools
 # 1. 鍵管理（Key Management）
 # ====================================================================
 
-# 🚨 哲学（原理6）:
+#  哲学（原理6）:
 # このサービスは、もはや「どの鍵を使うか」を知らない。
 # 渡された鍵（バイト列）で暗号化/復号化を実行する「道具」に徹する。
 
