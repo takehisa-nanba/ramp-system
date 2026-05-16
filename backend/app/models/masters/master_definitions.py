@@ -183,6 +183,7 @@ class StaffActivityMaster(db.Model):
     __tablename__ = 'staff_activity_master'
     id = Column(Integer, primary_key=True)
     activity_name = Column(String(100), nullable=False) # 例: 個別支援, 企業開拓, 事務作業, 休憩
+    is_direct_support = Column(Boolean, default=False) # 直接支援フラグ（利用者選択を必須化）
     logs = db.relationship('StaffActivityAllocationLog', back_populates='activity_type', lazy='dynamic')
     
 class ProductMaster(db.Model):

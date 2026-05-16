@@ -59,3 +59,17 @@ def get_user_pii(user_id):
             "birth_date": pii.birth_date.isoformat() if pii.birth_date else None
         }
     }), 200
+
+@users_bp.route('', methods=['GET'])
+@jwt_required()
+def list_users():
+    """
+    利用者一覧を取得する（ドロップダウン選択用など）。
+    """
+    users = User.query.all()
+    return jsonify([
+        {
+            "id": user.id,
+            "display_name": user.display_name
+        } for user in users
+    ]), 200

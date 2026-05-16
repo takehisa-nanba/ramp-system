@@ -33,6 +33,14 @@ class Corporation(db.Model):
     # 実際の鍵はKMSなどにあり、ここには参照IDのみを置く
     kek_reference_id = Column(String(255)) 
     
+    # --- テナント(SaaS)設定 ---
+    # 法人の専用サブドメインやテナントID (例: 'company-a')
+    tenant_id = Column(String(50), unique=True, index=True, nullable=True) 
+    
+    # 外部連携設定 (JSONで柔軟に持たせる)
+    # 例: {"google_workspace": {"enabled": true, "domain": "example.com"}}
+    integration_settings = Column(JSON, nullable=True)
+    
     # OfficeSettingからの逆参照
     office_settings = db.relationship('OfficeSetting', back_populates='corporation', lazy='dynamic')
 

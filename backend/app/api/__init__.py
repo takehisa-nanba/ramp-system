@@ -6,12 +6,12 @@
 from .auth import auth_bp
 from .users import users_bp
 from .plans import plans_bp
-# ...
+from .activities import activities_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
     auth_bp,
     users_bp,
     plans_bp,
-    
+    activities_bp
 ]

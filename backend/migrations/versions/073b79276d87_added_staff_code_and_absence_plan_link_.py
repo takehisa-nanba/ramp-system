@@ -58,7 +58,8 @@ def upgrade():
     with op.batch_alter_table('absence_response_logs', schema=None) as batch_op:
         batch_op.add_column(sa.Column('linked_plan_id', sa.Integer(), nullable=True))
         batch_op.create_index(batch_op.f('ix_absence_response_logs_linked_plan_id'), ['linked_plan_id'], unique=False)
-        batch_op.create_foreign_key(None, 'support_plans', ['linked_plan_id'], ['id'])
+        batch_op.create_foreign_key('fk_absence_response_logs_support_plans', 'support_plans', ['linked_plan_id'], ['id'])
+
 
     with op.batch_alter_table('daily_logs', schema=None) as batch_op:
         batch_op.add_column(sa.Column('location_type', sa.String(length=50), nullable=False))
@@ -77,7 +78,7 @@ def downgrade():
         batch_op.drop_column('location_type')
 
     with op.batch_alter_table('absence_response_logs', schema=None) as batch_op:
-        batch_op.drop_constraint(None, type_='foreignkey')
+        batch_op.drop_constraint('fk_absence_response_logs_support_plans', type_='foreignkey')
         batch_op.drop_index(batch_op.f('ix_absence_response_logs_linked_plan_id'))
         batch_op.drop_column('linked_plan_id')
 

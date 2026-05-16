@@ -1,10 +1,11 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import type { ReactNode } from 'react';
 import Cookies from 'js-cookie';
 // ★修正: 共通型定義から型をインポート
 import type { AuthUser, LoginRequest, LoginResponse } from '../context/type'; 
 // パスに拡張子 .ts を追加して解決を確実にします。
-import { login as apiLogin, logout as apiLogout } from '../services/authService.ts'; // ★ 修正: .ts を追加 ★
-import { jwtDecode } from 'jwt-decode'; // ★修正後：モダンなインポート形式
+import { login as apiLogin, logout as apiLogout } from '../services/authService'; 
+
 
 // ====================================================================
 // 1. Context の型定義
@@ -61,7 +62,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         fullName: response.full_name,
         roleId: response.role_id,
         // APIレスポンスからロール名を取得
-        roleName: response.role_name || (response.full_name.includes('管理者') ? '管理者' : '支援員') // 仮のロール決定ロジックは削除
+        roleName: (response as any).role_name || (response.full_name.includes('管理者') ? '管理者' : '支援員') 
       };
 
       setUser(newUser);

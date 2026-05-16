@@ -2,7 +2,7 @@
 
 import React, { useState, type FormEvent } from 'react';
 // 🛠️ 修正: パスが正しくないため、拡張子 '.ts' を追加して解決を助ける
-import { login } from '../services/authService.ts';
+import { login } from '../services/authService';
 
 // App.tsx から AuthState 型をコピーして使用
 type AuthState = {
@@ -17,8 +17,8 @@ type AuthState = {
 // LoginForm コンポーネント
 // =================================================================
 const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('sato@ramp.co.jp');
-  const [password, setPassword] = useState('adminpassword');
+  const [email, setEmail] = useState('admin@example.com');
+  const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -95,7 +95,7 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
             </button>
           </form>
           <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400 font-mono">Test: sato@ramp.co.jp / adminpassword</p>
+            <p className="text-xs text-gray-400 font-mono">Test: admin@example.com / password</p>
           </div>
         </div>
       </div>

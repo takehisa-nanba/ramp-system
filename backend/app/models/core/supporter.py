@@ -2,7 +2,7 @@
 
 # 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func, CheckConstraint
 
 #  修正点: rbac_links を絶対参照でインポート
 from backend.app.models.core.rbac_links import supporter_role_link
@@ -117,6 +117,10 @@ class SupporterPII(db.Model):
     email = Column(String(120), unique=True, nullable=False, index=True)
     password_hash = Column(String(128)) # ハッシュ化
     
+    # --- SSO認証情報 ---
+    sso_provider = Column(String(50), index=True) # 例: 'google'
+    sso_account_id = Column(String(255), index=True) # GoogleのSubject IDなど
+    
     # --- 機密個人情報 (階層2：システム共通鍵で暗号化) ---
     encrypted_personal_phone = Column(String(255))
     encrypted_address = Column(String(512))
@@ -167,6 +171,14 @@ class SupporterPII(db.Model):
     def check_password(self, password):
         if self.password_hash is None: return False
         return bcrypt.check_password_hash(self.password_hash, password)
+
+    __table_args__ = (
+        CheckConstraint(
+            '(password_hash IS NOT NULL) OR (sso_provider IS NOT NULL AND sso_account_id IS NOT NULL)',
+            name='ck_supporterpii_auth_method'
+        ),
+        UniqueConstraint('sso_provider', 'sso_account_id', name='uq_supporterpii_sso')
+    )
 
 
 # ====================================================================

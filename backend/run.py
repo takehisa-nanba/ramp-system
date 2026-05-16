@@ -1,5 +1,10 @@
 import os
-#  修正点: すべてのインポートを 'backend' 起点に統一
+import sys
+
+# プロジェクトのルートディレクトリ（backendの1つ上の階層）をパスに追加
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# 修正点: すべてのインポートを 'backend' 起点に統一
 from backend.app import create_app, db
 from backend.app import models 
 # ★ 追加: Configクラスを直接インポート
