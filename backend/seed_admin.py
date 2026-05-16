@@ -11,12 +11,17 @@ from backend.app.extensions import db, bcrypt
 from backend.app.models import (
     Supporter, SupporterPII, Corporation, OfficeSetting, 
     MunicipalityMaster, StaffActivityMaster, StatusMaster,
-    User, UserPII, SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal
+    User, UserPII, SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
+    RoleMaster, PermissionMaster
 )
+
 
 app = create_app()
 with app.app_context():
+    # 開発中のため、一度全て削除して再作成（スキーマ変更反映のため）
+    db.drop_all()
     db.create_all()
+
     # 1. マスターデータの整備
     municipality = MunicipalityMaster.query.filter_by(municipality_code='131016').first()
     if not municipality:
@@ -56,8 +61,63 @@ with app.app_context():
         office = OfficeSetting(corporation_id=corp.id, office_name='デモ事業所', municipality_id=municipality.id)
         db.session.add(office)
         db.session.commit()
+    
+    # サービス種別と設定
+    from backend.app.models import ServiceTypeMaster, OfficeServiceConfiguration
+    service_type = ServiceTypeMaster.query.filter_by(service_code='TRANSITION').first()
+    if not service_type:
+        service_type = ServiceTypeMaster(name='就労移行支援', service_code='TRANSITION', required_review_months=6)
+        db.session.add(service_type)
+        db.session.commit()
+    
+    service_config = OfficeServiceConfiguration.query.filter_by(office_id=office.id).first()
+    if not service_config:
+        service_config = OfficeServiceConfiguration(
+            office_id=office.id,
+            service_type_master_id=service_type.id,
+            jigyosho_bango='1310100001',
+            capacity=20,
+            initial_designation_date=date(2023, 4, 1)
+        )
+        db.session.add(service_config)
+        db.session.commit()
 
-    # 3. 支援員 (Admin)
+
+    # 3. 権限・ロールの整備
+    permissions = [
+        {'name': 'VIEW_PII', 'desc': '個人情報の閲覧'},
+        {'name': 'EDIT_PII', 'desc': '個人情報の編集'},
+        {'name': 'MANAGE_STAFF', 'desc': '職員の管理'},
+        {'name': 'MANAGE_OFFICE', 'desc': '事業所の設定'},
+        {'name': 'APPROVE_LOG', 'desc': '日報の承認'},
+        {'name': 'EDIT_PLAN', 'desc': '支援計画の作成・編集'},
+    ]
+    perm_objs = {}
+    for p in permissions:
+        obj = PermissionMaster.query.filter_by(name=p['name']).first()
+        if not obj:
+            obj = PermissionMaster(name=p['name'])
+            db.session.add(obj)
+        perm_objs[p['name']] = obj
+    db.session.commit()
+
+    roles = [
+        {'name': '事業所管理者', 'scope': 'JOB'},
+        {'name': '法人管理者', 'scope': 'CORPORATE'},
+        {'name': 'システム管理者', 'scope': 'SYSTEM'},
+    ]
+    role_objs = []
+    for r in roles:
+        obj = RoleMaster.query.filter_by(name=r['name']).first()
+        if not obj:
+            obj = RoleMaster(name=r['name'], role_scope=r['scope'])
+            # 全ての権限を付与
+            obj.permissions = list(perm_objs.values())
+            db.session.add(obj)
+        role_objs.append(obj)
+    db.session.commit()
+
+    # 4. 支援員 (Admin)
     pii = SupporterPII.query.filter_by(email='admin@example.com').first()
     if not pii:
         admin = Supporter(
@@ -66,6 +126,8 @@ with app.app_context():
             hire_date=date.today(), employment_type='FULL_TIME',
             weekly_scheduled_minutes=2400, is_active=True, office_id=office.id
         )
+        # 全てのロールを付与 (最高権限)
+        admin.roles = role_objs
         db.session.add(admin)
         db.session.commit()
         pii = SupporterPII(supporter_id=admin.id, email='admin@example.com')
@@ -73,17 +135,27 @@ with app.app_context():
         db.session.add(pii)
         db.session.commit()
 
-    # 4. 利用者・支援計画
+
+    # 3. 利用者データの作成 (佐藤 健太)
     user = User.query.filter_by(display_name='佐藤 健太').first()
     if not user:
-        user = User(display_name='佐藤 健太', status_id=active_status.id)
+        user = User(
+            display_name='佐藤 健太',
+            user_code='USR001', # ★ 追加: 利用者コード
+            status_id=active_status.id,
+            primary_supporter_id=admin.id,
+            service_start_date=datetime.datetime.now().date()
+        )
         db.session.add(user)
-        db.session.commit()
-        
-        user_pii = UserPII(user_id=user.id, birth_date=date(1990, 5, 15), email='sato@example.com')
-        user_pii.last_name = '佐藤'
-        user_pii.first_name = '健太'
+        db.session.flush()
+
+        user_pii = UserPII(user_id=user.id)
+        user_pii.last_name = "佐藤"
+        user_pii.first_name = "健太"
+        user_pii.email = "kenta.sato@example.com"
+        user_pii.set_password("password") # ★ パスワード設定
         db.session.add(user_pii)
+
         db.session.commit()
 
     plan = SupportPlan.query.filter_by(user_id=user.id).first()

@@ -64,16 +64,21 @@ class OfficeSetting(db.Model):
     is_active = Column(Boolean, default=True, nullable=False)
     office_seal_image_url = Column(String(500), nullable=True)
     
+    # 所在地・連絡先
+    postal_code = Column(String(10))
+    address = Column(String(255))
+    phone_number = Column(String(20))
+    fax_number = Column(String(20))
+    email_address = Column(String(120))
+    
+    representative_name = Column(String(100)) # 事業所代表者（拠点長）
+    
     # --- ★ 常勤換算の基準とBCP（法令遵守） ★ ---
     full_time_weekly_minutes = Column(Integer, nullable=False, default=2400) # 常勤職員の週所定労働時間（分）
+    local_rules_config = Column(JSON, nullable=True) # ローカルルール設定
     
-    # 運営規定のバージョン（設定変更のガードレール）
+    # 運営規定・BCP
     operational_regulations_version = Column(String(50)) 
-    
-    # ローカルルール設定（厳格/緩やかモードなど）
-    local_rules_config = Column(JSON, nullable=True) 
-    
-    # BCP計画（事業所全体に関わる証憑）
     bcp_document_url = Column(String(500)) 
     
     # --- リレーションシップ ---
@@ -118,7 +123,17 @@ class OfficeServiceConfiguration(db.Model):
     jigyosho_bango = Column(String(20), nullable=False, unique=True) # 行政発行の10桁事業所番号（請求キー）
     capacity = Column(Integer, nullable=False) # 定員
     
-    initial_designation_date = Column(Date) # 初回指定年月日 (原理1)
+    initial_designation_date = Column(Date) # 初回指定年月日
+    designation_expiry_date = Column(Date) # 指定有効期限 (6年更新)
+    
+    # 地域区分 (1級地〜7級地、その他)
+    regional_category = Column(String(20)) 
+    
+    # 主たる対象者 (JSON: {"physical": true, "mental": true, ...})
+    target_disabilities = Column(JSON)
+    
+    # 協力医療機関
+    cooperating_medical_institution = Column(Text)
     
     # 運営規定 (サービスに紐づく証憑)
     operational_regulations_url = Column(String(500)) 

@@ -7,11 +7,21 @@ from .auth import auth_bp
 from .users import users_bp
 from .plans import plans_bp
 from .activities import activities_bp
+from .attendance import attendance_bp
+from .user_support import user_support_bp # ★追加
+from .staff_settings import staff_settings_bp
+from .management import management_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
     auth_bp,
     users_bp,
     plans_bp,
-    activities_bp
+    activities_bp,
+    attendance_bp,
+    user_support_bp,
+    staff_settings_bp,
+    management_bp
 ]
+
+

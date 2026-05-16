@@ -24,7 +24,7 @@ export const login = async (data: LoginRequest): Promise<LoginResponse> => {
   } catch (error) {
     if (axios.isAxiosError(error) && error.response) {
       // バックエンドからのエラーメッセージ（例: 401 Invalid credentials）をキャッチ
-      throw new Error(error.response.data.msg || 'ログインに失敗しました。メールアドレスまたはパスワードを確認してください。');
+      throw new Error(error.response.data.msg || 'ログインに失敗しました。IDまたはパスワードを確認してください。');
     }
     // その他のネットワークエラーなど
     throw new Error('ネットワークエラーまたはサーバーエラー');

@@ -22,6 +22,9 @@ class User(db.Model):
     # ★ 必須: 匿名化後も使用する表示名（原理5）
     display_name = Column(String(100), nullable=False, index=True) 
     
+    # ★ 職員が発行する利用者コード (Login ID)
+    user_code = Column(String(50), unique=True, index=True)
+    
     # --- システム管理情報 ---
     status_id = Column(Integer, ForeignKey('status_master.id'), nullable=False, index=True)
     primary_supporter_id = Column(Integer, ForeignKey('supporters.id'), index=True)

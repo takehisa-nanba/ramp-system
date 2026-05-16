@@ -30,6 +30,14 @@ class DailyLog(db.Model):
     user_effectiveness_flag = Column(Boolean) 
     support_content_notes = Column(Text, nullable=False) # 職員による記録の要約
     
+    # --- カスタム項目回答 ---
+    custom_data = Column(db.JSON) 
+    
+    # --- 入力完了フラグ ---
+    morning_completed = Column(Boolean, default=False)
+    evening_completed = Column(Boolean, default=False)
+
+    
     # --- 財産化（原理5：失敗の構造化）---
     failure_factor_id = Column(Integer, ForeignKey('failure_factor_master.id'))
     challenge_analysis_notes = Column(Text) 

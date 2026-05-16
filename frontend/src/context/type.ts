@@ -1,16 +1,17 @@
 // APIリクエストの基盤となる型
 export interface LoginRequest {
-  email: string;
+  login_id: string; // email または user_code
   password: string;
 }
 
 // ログイン成功時にAPIから返されるデータ
 export interface LoginResponse {
   msg: string;
-  supporter_id: number;
-  role_id: number;
+  user_id: number;
+  role_name: string;
   full_name: string;
 }
+
 
 // 認証が必要なリクエストのヘッダーに含めるCSRFトークン
 export interface CsrfToken {

@@ -12,6 +12,12 @@ import PlanCreator from './components/PlanCreator';
 import UserPiiViewer from './components/UserPiiViewer';
 import MainLayout from './components/layout/MainLayout';
 import DailyLogCreator from './components/DailyLogCreator';
+import UserDashboard from './components/UserDashboard';
+import LogSettings from './components/staff/LogSettings';
+import StaffManagement from './components/StaffManagement';
+import OfficeSettings from './components/OfficeSettings';
+
+
 
 // 認証状態の型定義 (各コンポーネントと共有)
 type AuthState = {
@@ -59,11 +65,23 @@ const App: React.FC = () => {
           }
         >
           {/* MainLayoutの <Outlet /> にレンダリングされる子ルート */}
-          <Route index element={<Dashboard supporterName={auth.supporterName} />} />
+          <Route 
+            index 
+            element={
+              auth.role === 'STAFF' 
+                ? <Dashboard supporterName={auth.supporterName} /> 
+                : <UserDashboard userName={auth.supporterName} />
+            } 
+          />
           <Route path="timecard" element={<Timecard supporterName={auth.supporterName} />} />
           <Route path="users" element={<UserPiiViewer />} />
           <Route path="plans" element={<PlanCreator />} />
           <Route path="daily-log" element={<DailyLogCreator />} />
+          <Route path="settings/log" element={<LogSettings />} />
+          <Route path="management/staff" element={<StaffManagement />} />
+          <Route path="management/office" element={<OfficeSettings />} />
+
+
         </Route>
       </Routes>
     </BrowserRouter>

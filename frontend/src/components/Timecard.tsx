@@ -1,37 +1,75 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, Play, Square, CheckCircle } from 'lucide-react';
+import { 
+  Clock, Play, Square, CheckCircle, 
+  ChevronRight, Calendar, MapPin, Loader2,
+  Plus, Minus, PieChart
+} from 'lucide-react';
+
+import { attendanceApi } from '../services/attendanceApi';
 
 const Timecard: React.FC<{ supporterName: string | null }> = ({ supporterName }) => {
   const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
-  
-  // Mock State
-  const [status, setStatus] = useState<'IDLE' | 'WORKING' | 'BREAK'>('IDLE');
+  const [status, setStatus] = useState<'IDLE' | 'WORKING' | 'COMPLETED'>('IDLE');
   const [startTime, setStartTime] = useState<string | null>(null);
   const [endTime, setEndTime] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   
-  // Activities State
   const [activities, setActivities] = useState([
-    { id: 1, name: '個別支援・面談', minutes: 0, color: 'bg-blue-500' },
-    { id: 2, name: '事務作業（記録等）', minutes: 0, color: 'bg-indigo-500' },
+    { id: 1, name: '個別支援・面談', minutes: 0, color: 'bg-indigo-500' },
+    { id: 2, name: '事務作業（記録等）', minutes: 0, color: 'bg-purple-500' },
     { id: 3, name: '企業開拓・営業', minutes: 0, color: 'bg-emerald-500' },
     { id: 4, name: 'その他・会議', minutes: 0, color: 'bg-slate-500' }
   ]);
 
   useEffect(() => {
     const timer = setInterval(() => setTime(new Date()), 1000);
+    fetchStatus();
     return () => clearInterval(timer);
   }, []);
 
-  const handleClockIn = () => {
-    setStatus('WORKING');
-    setStartTime(time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+  const fetchStatus = async () => {
+    try {
+      const data = await attendanceApi.getStatus();
+      setStatus(data.status);
+      if (data.check_in) {
+        setStartTime(new Date(data.check_in).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+      }
+      if (data.check_out) {
+        setEndTime(new Date(data.check_out).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch attendance status:', err);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleClockOut = () => {
-    setStatus('IDLE');
-    setEndTime(time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+  const handleClockIn = async () => {
+    setIsLoading(true);
+    try {
+      const res = await attendanceApi.clockIn();
+      setStartTime(new Date(res.time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+      setStatus('WORKING');
+    } catch (err) {
+      alert('打刻に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleClockOut = async () => {
+    setIsLoading(true);
+    try {
+      const res = await attendanceApi.clockOut();
+      setEndTime(new Date(res.time).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }));
+      setStatus('COMPLETED');
+    } catch (err) {
+      alert('打刻に失敗しました');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const updateActivityMinutes = (id: number, increment: number) => {
@@ -44,130 +82,145 @@ const Timecard: React.FC<{ supporterName: string | null }> = ({ supporterName })
   const hours = Math.floor(totalMinutes / 60);
   const mins = totalMinutes % 60;
 
+  if (isLoading && status === 'IDLE') {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="animate-spin text-indigo-500" size={32} />
+      </div>
+    );
+  }
+
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl mx-auto">
-      {/* Header */}
-      <header className="flex items-center gap-4 pb-4 border-b border-slate-200">
-        <button 
-          onClick={() => navigate('/')}
-          className="p-2 rounded-full hover:bg-slate-200 transition-colors text-slate-600"
-        >
-          <ArrowLeft size={24} />
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800 tracking-tight">出退勤・活動打刻</h1>
-          <p className="text-sm text-slate-500 font-medium mt-1">担当: {supporterName || 'ゲスト'}</p>
-        </div>
-      </header>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left Column: Clock Area */}
-        <section className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 text-center relative overflow-hidden flex flex-col justify-center">
-          <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
-          
-          <h2 className="text-lg font-medium text-slate-500 mb-2">
-            {time.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
-          </h2>
-          <div className="text-7xl font-black text-slate-800 tracking-tighter mb-10 font-mono drop-shadow-sm">
-            {time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+    <div className="flex flex-col gap-8 animate-in fade-in slide-in-from-bottom-4 duration-700 max-w-7xl mx-auto">
+      
+      {/* 1. Status Dashboard Header */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="md:col-span-2 bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl shadow-slate-200/50 flex flex-col md:flex-row items-center gap-8 relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600" />
+          <div className="text-center md:text-left space-y-2">
+            <h2 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Current Time</h2>
+            <div className="text-6xl font-black text-slate-800 tracking-tighter tabular-nums font-mono">
+              {time.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+            </div>
+            <p className="text-slate-500 font-bold flex items-center gap-2 justify-center md:justify-start">
+              <Calendar size={14} /> {time.toLocaleDateString('ja-JP', { year: 'numeric', month: 'long', day: 'numeric', weekday: 'short' })}
+            </p>
           </div>
+          
+          <div className="flex-1 w-full flex items-center gap-4 bg-slate-50 p-6 rounded-3xl border border-slate-100">
+             <div className="flex-1 text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">出勤</p>
+                <p className="text-2xl font-black text-slate-700">{startTime || '--:--'}</p>
+             </div>
+             <div className="w-px h-10 bg-slate-200" />
+             <div className="flex-1 text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">退勤</p>
+                <p className="text-2xl font-black text-slate-700">{endTime || '--:--'}</p>
+             </div>
+          </div>
+        </div>
 
-          <div className="flex flex-col gap-4">
+        <div className="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-indigo-200 flex flex-col justify-center relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500 opacity-20 rounded-full -mr-16 -mt-16" />
+          <p className="text-[10px] font-black text-indigo-400 uppercase tracking-widest mb-2 relative z-10">Attendance Status</p>
+          <div className="flex items-center gap-3 relative z-10">
+            <div className={`w-3 h-3 rounded-full animate-pulse ${status === 'WORKING' ? 'bg-emerald-500' : 'bg-slate-500'}`} />
+            <h3 className="text-2xl font-black">{status === 'WORKING' ? '勤務中' : status === 'COMPLETED' ? '退勤済み' : '未出勤'}</h3>
+          </div>
+          <p className="text-xs text-slate-400 mt-2 font-medium relative z-10">{supporterName} としてログイン中</p>
+        </div>
+      </div>
+
+      {/* 2. Main Action Area */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        
+        {/* Punch Actions */}
+        <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-24">
+          <section className="bg-white rounded-[2.5rem] p-8 border border-slate-100 shadow-xl space-y-4">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">打刻アクション</h3>
             <button 
               onClick={handleClockIn}
-              disabled={status === 'WORKING' || startTime !== null}
-              className={`flex items-center justify-center gap-2 py-4 rounded-2xl text-xl font-bold transition-all shadow-md ${
-                status === 'WORKING' || startTime !== null
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-700 hover:to-blue-600 hover:-translate-y-1 text-white hover:shadow-xl'
+              disabled={isLoading || status !== 'IDLE'}
+              className={`w-full py-6 rounded-2xl text-xl font-black shadow-lg transition-all flex items-center justify-center gap-3 group ${
+                status !== 'IDLE' ? 'bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed' : 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-indigo-200 hover:-translate-y-1'
               }`}
             >
-              <Play size={24} />
+              {isLoading && status === 'IDLE' ? <Loader2 className="animate-spin" /> : <Play size={24} fill="currentColor" />}
               出勤を打刻する
             </button>
 
             <button 
               onClick={handleClockOut}
-              disabled={status !== 'WORKING'}
-              className={`flex items-center justify-center gap-2 py-4 rounded-2xl text-xl font-bold transition-all shadow-md ${
-                status !== 'WORKING'
-                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed shadow-none'
-                  : 'bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-700 hover:to-indigo-600 hover:-translate-y-1 text-white hover:shadow-xl'
+              disabled={isLoading || status !== 'WORKING'}
+              className={`w-full py-6 rounded-2xl text-xl font-black shadow-lg transition-all flex items-center justify-center gap-3 group ${
+                status !== 'WORKING' ? 'bg-slate-50 text-slate-300 opacity-50 cursor-not-allowed' : 'bg-rose-600 text-white hover:bg-rose-700 shadow-rose-200 hover:-translate-y-1'
               }`}
             >
-              <Square size={24} />
+              {isLoading && status === 'WORKING' ? <Loader2 className="animate-spin" /> : <Square size={24} fill="currentColor" />}
               退勤を打刻する
             </button>
-          </div>
-
-          <div className="mt-10 grid grid-cols-2 gap-4 text-left bg-slate-50 p-5 rounded-2xl border border-slate-100">
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">出勤時間</p>
-              <p className="text-2xl font-black text-slate-700">{startTime || '--:--'}</p>
+            
+            <div className="flex items-center gap-2 pt-4 justify-center text-slate-400 font-bold text-xs">
+              <MapPin size={14} /> 位置情報を記録します
             </div>
-            <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">退勤時間</p>
-              <p className="text-2xl font-black text-slate-700">{endTime || '--:--'}</p>
-            </div>
-          </div>
-        </section>
+          </section>
+        </div>
 
-        {/* Right Column: Activity Allocation */}
-        <section className="bg-white rounded-3xl shadow-sm border border-slate-200 p-8 flex flex-col">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-              <Clock className="text-indigo-500" size={24} />
-              本日の活動配分
-            </h2>
-            <div className="text-right">
-              <p className="text-xs text-slate-500 font-bold uppercase mb-1">合計時間</p>
-              <p className="text-2xl font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-lg inline-block">
-                {hours}h {mins}m
-              </p>
-            </div>
-          </div>
-
-          <p className="text-sm text-slate-500 mb-8 leading-relaxed">
-            退勤時に、本日の業務で各活動に費やしたおおよその時間を入力してください。（経営分析や監査時の証明として利用されます）
-          </p>
-
-          <div className="space-y-6 flex-1">
-            {activities.map(activity => (
-              <div key={activity.id} className="group">
-                <div className="flex justify-between items-center mb-3">
-                  <span className="font-bold text-slate-700 text-sm flex items-center gap-2">
-                    <span className={`w-3 h-3 rounded-full ${activity.color}`}></span>
-                    {activity.name}
-                  </span>
-                  <span className="font-mono font-bold text-slate-600 bg-slate-100 px-3 py-1 rounded-md text-sm border border-slate-200">
-                    {activity.minutes} 分
-                  </span>
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <button onClick={() => updateActivityMinutes(activity.id, -15)} className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-600 transition-colors shadow-sm">-</button>
-                  <input 
-                    type="range" 
-                    min="0" 
-                    max="480" 
-                    step="15" 
-                    value={activity.minutes} 
-                    onChange={(e) => setActivities(acts => acts.map(a => a.id === activity.id ? { ...a, minutes: parseInt(e.target.value) } : a))}
-                    className="flex-1 h-3 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-indigo-600"
-                  />
-                  <button onClick={() => updateActivityMinutes(activity.id, 15)} className="w-10 h-10 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center font-bold text-slate-600 transition-colors shadow-sm">+</button>
-                </div>
+        {/* Activity Allocation */}
+        <div className="lg:col-span-7">
+          <section className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden flex flex-col">
+            <header className="px-8 py-6 border-b border-slate-50 flex items-center justify-between bg-slate-50/50">
+              <h3 className="text-lg font-black text-slate-800 flex items-center gap-3">
+                <PieChart className="text-indigo-600" size={24} />
+                本日の活動配分
+              </h3>
+              <div className="text-right">
+                <p className="text-[10px] font-black text-slate-400 uppercase">Total Activity</p>
+                <p className="text-xl font-black text-indigo-600">{hours}h {mins}m</p>
               </div>
-            ))}
-          </div>
+            </header>
+            
+            <div className="p-8 space-y-10 max-h-[500px] overflow-y-auto custom-scrollbar">
+              {activities.map(activity => (
+                <div key={activity.id} className="space-y-4 group">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-3 h-10 rounded-full ${activity.color} shadow-sm transition-transform group-hover:scale-y-110`} />
+                      <div>
+                        <p className="text-sm font-black text-slate-800">{activity.name}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Minutes: {activity.minutes}</p>
+                      </div>
+                    </div>
+                    <div className="text-2xl font-mono font-black text-slate-300 group-hover:text-indigo-600 transition-colors">
+                      {Math.floor(activity.minutes / 60)}:{(activity.minutes % 60).toString().padStart(2, '0')}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center gap-4 bg-slate-50 p-2 rounded-2xl border border-slate-100">
+                    <button onClick={() => updateActivityMinutes(activity.id, -15)} className="w-10 h-10 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center font-black text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-all active:scale-95">
+                      <Minus size={18} />
+                    </button>
+                    <input 
+                      type="range" min="0" max="480" step="15" value={activity.minutes} 
+                      onChange={(e) => setActivities(acts => acts.map(a => a.id === activity.id ? { ...a, minutes: parseInt(e.target.value) } : a))}
+                      className="flex-1 h-2 bg-slate-200 rounded-full appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <button onClick={() => updateActivityMinutes(activity.id, 15)} className="w-10 h-10 rounded-xl bg-white shadow-sm border border-slate-100 flex items-center justify-center font-black text-slate-500 hover:text-indigo-600 hover:border-indigo-200 transition-all active:scale-95">
+                      <Plus size={18} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-          <div className="mt-8 pt-6 border-t border-slate-100">
-            <button className="bg-slate-800 hover:bg-slate-900 text-white font-bold py-4 px-8 rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2 w-full hover:-translate-y-1">
-              <CheckCircle size={20} />
-              活動を記録して日報へ
-            </button>
-          </div>
-        </section>
+            <footer className="p-8 bg-slate-50/50 border-t border-slate-50">
+              <button className="w-full py-5 bg-slate-900 text-white rounded-2xl text-lg font-black hover:bg-slate-800 transition-all shadow-xl flex items-center justify-center gap-3">
+                <CheckCircle size={22} />
+                活動記録を確定して日報へ <ChevronRight size={20} />
+              </button>
+            </footer>
+          </section>
+        </div>
       </div>
     </div>
   );

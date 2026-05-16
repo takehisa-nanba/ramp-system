@@ -115,6 +115,25 @@ def authenticate_supporter(email, password):
     logger.warning(f"⛔ Auth failed for: {email}")
     return None
 
+def authenticate_user(login_id, password):
+    """利用者のログイン認証（メールアドレスまたは利用者コード）"""
+    logger.info(f"🔐 User Auth attempt for: {login_id}")
+    
+    # 1. メールアドレスで検索
+    user = User.query.join(User.pii).filter(UserPII.email == login_id).first()
+    
+    # 2. 見つからなければ利用者コードで検索
+    if not user:
+        user = User.query.filter_by(user_code=login_id).first()
+        
+    if user and user.pii and user.pii.check_password(password):
+        logger.info(f"✅ User Auth success: User {user.id}")
+        return user
+    
+    logger.warning(f"⛔ User Auth failed for: {login_id}")
+    return None
+
+
 def check_permission(supporter_id, permission_name):
     """職員が特定の権限(Permission)を持っているか確認する。"""
     supporter = db.session.get(Supporter, supporter_id)

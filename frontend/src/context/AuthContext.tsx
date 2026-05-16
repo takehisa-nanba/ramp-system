@@ -58,12 +58,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       // サーバーがレスポンスボディに full_name, role_name を返す前提で実装します。
 
       const newUser: AuthUser = {
-        id: response.supporter_id,
+        id: response.user_id,
         fullName: response.full_name,
-        roleId: response.role_id,
-        // APIレスポンスからロール名を取得
-        roleName: (response as any).role_name || (response.full_name.includes('管理者') ? '管理者' : '支援員') 
+        roleId: 0, // 互換性のため一旦0
+        roleName: response.role_name
       };
+
 
       setUser(newUser);
       

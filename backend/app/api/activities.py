@@ -13,7 +13,17 @@ JST = ZoneInfo("Asia/Tokyo")
 
 activities_bp = Blueprint('activities', __name__, url_prefix='/api/activities')
 
+def get_current_supporter_id():
+    identity = get_jwt_identity()
+    if isinstance(identity, str) and identity.startswith('staff:'):
+        return int(identity.split(':')[1])
+    try:
+        return int(identity)
+    except:
+        return None
+
 @activities_bp.route('/tags', methods=['GET'])
+
 @jwt_required()
 def get_activity_tags():
     """
@@ -35,7 +45,10 @@ def log_activity():
     活動を記録する。直接支援ならDailyLogActivityへ、間接業務ならStaffActivityAllocationLogへ。
     """
     data = request.get_json()
-    supporter_id = get_jwt_identity()
+    supporter_id = get_current_supporter_id()
+    if not supporter_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+
     
     tag_id = data.get('tag_id')
     user_id = data.get('user_id')
@@ -120,7 +133,10 @@ def get_today_timeline():
     """
     本日のタイムライン（活動履歴）を取得する。
     """
-    supporter_id = get_jwt_identity()
+    supporter_id = get_current_supporter_id()
+    if not supporter_id:
+        return jsonify({"msg": "Unauthorized"}), 403
+
     today = datetime.now(JST).date()
     
     # 直接支援の取得

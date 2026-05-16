@@ -202,7 +202,13 @@ class SupporterTimecard(db.Model):
     # --- 実績時間 ---
     check_in = Column(DateTime) 
     check_out = Column(DateTime)
+    
+    # ★ 位置情報の記録 (直行・直帰対応)
+    check_in_location = Column(String(255))
+    check_out_location = Column(String(255))
+    
     total_break_minutes = Column(Integer, default=0, nullable=False)
+
     # 【新規追加】職員がその日に勤務を予定されていた分数（FTE換算ロジックの安定化）
     scheduled_work_minutes = Column(Integer, default=0, nullable=False) 
     is_absent = Column(Boolean, default=False)    

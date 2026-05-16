@@ -37,10 +37,12 @@ class Config:
     # --- JWT-Extended 設定 (NEW) --- ★追加
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'a-default-jwt-secret-for-testing'
     # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）
-    JWT_TOKEN_LOCATION = ["cookies"]
+    JWT_TOKEN_LOCATION = ["cookies", "headers"]
+
     JWT_COOKIE_SECURE = False # 開発中はFalse (HTTPS不要)
     JWT_COOKIE_SAMESITE = 'Lax'
-    JWT_COOKIE_CSRF_PROTECT = True
+    JWT_COOKIE_CSRF_PROTECT = False
+
     JWT_CSRF_CHECK_FOR_FORM_FIELDS = False
     # --- JWT設定ここまで ---
 

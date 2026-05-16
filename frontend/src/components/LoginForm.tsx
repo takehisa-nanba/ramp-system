@@ -17,7 +17,7 @@ type AuthState = {
 // LoginForm コンポーネント
 // =================================================================
 const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = ({ onLoginSuccess }) => {
-  const [email, setEmail] = useState('admin@example.com');
+  const [loginId, setLoginId] = useState('admin@example.com');
   const [password, setPassword] = useState('password');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -28,18 +28,17 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
     setError(null);
 
     try {
-      const data = await login({ email, password });
+      const data = await login({ login_id: loginId, password });
       onLoginSuccess({
         isLoggedIn: true,
         token: null, 
         supporterName: data.full_name,
-        role: "管理者",
+        role: data.role_name,
         error: null,
       });
     } catch (err: any) {
       console.error(err);
-      // エラーメッセージの形式が一致しない可能性があるため、汎用的なメッセージでエラーハンドリングを強化
-      setError(err.message || 'ログインに失敗しました。認証サービスに問題がある可能性があります。');
+      setError(err.message || 'ログインに失敗しました。');
     } finally {
       setLoading(false);
     }
@@ -50,7 +49,7 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
       <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
         <div className="bg-indigo-600 p-8 text-center">
           <h2 className="text-3xl font-bold text-white tracking-wide">RAMP System</h2>
-          <p className="text-indigo-100 mt-2 text-sm">職員向けセキュアログイン</p>
+          <p className="text-indigo-100 mt-2 text-sm">セキュアログイン</p>
         </div>
 
         <div className="p-8">
@@ -63,13 +62,13 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">メールアドレス</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">ログインID または メールアドレス</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="text"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition"
-                placeholder="name@company.com"
+                placeholder="USR1001 または name@example.com"
                 required
               />
             </div>
@@ -95,12 +94,14 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
             </button>
           </form>
           <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400 font-mono">Test: admin@example.com / password</p>
+            <p className="text-xs text-gray-400 font-mono">Staff: admin@example.com / password</p>
+            <p className="text-xs text-gray-400 font-mono mt-1">User: USR001 / password</p>
           </div>
         </div>
       </div>
     </div>
   );
 };
+
 
 export default LoginForm;
