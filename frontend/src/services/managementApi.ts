@@ -7,6 +7,30 @@ const getAuthHeader = () => {
   return { Authorization: `Bearer ${token}` };
 };
 
+export interface JobAssignment {
+  id?: number;
+  job_title_id: number;
+  title_name?: string;
+  assigned_minutes: number;
+  office_service_configuration_id?: number;
+  is_deemed_assignment?: boolean;
+}
+
+export interface JobTitle {
+  id: number;
+  title_name: string;
+  is_management_role: boolean;
+  is_qualified_role: boolean;
+}
+
+export interface EmploymentShiftPattern {
+  id?: number;
+  day_of_week: string;
+  start_time: string | null;
+  end_time: string | null;
+  break_minutes: number;
+}
+
 export interface StaffMember {
   id: number;
   staff_code: string;
@@ -21,7 +45,10 @@ export interface StaffMember {
   is_active: boolean;
   employment_type: string;
   weekly_scheduled_minutes: number;
+  allow_overlap_calculation: boolean;
   hire_date: string | null;
+  job_assignments: JobAssignment[];
+  shift_patterns?: EmploymentShiftPattern[];
 }
 
 export interface Role {
@@ -61,6 +88,10 @@ export const managementApi = {
   },
   getAvailableRoles: async (): Promise<Role[]> => {
     const res = await axios.get(`${API_URL}/roles`, { headers: getAuthHeader() });
+    return res.data;
+  },
+  getJobTitles: async (): Promise<JobTitle[]> => {
+    const res = await axios.get(`${API_URL}/job-titles`, { headers: getAuthHeader() });
     return res.data;
   },
   updateStaffRoles: async (staffId: number, roleIds: number[]): Promise<void> => {

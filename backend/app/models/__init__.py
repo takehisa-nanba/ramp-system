@@ -23,7 +23,7 @@ from backend.app.models.core.office import (
 from backend.app.models.core.supporter import (
     Supporter, SupporterPII, SupporterTimecard, SupporterJobAssignment, 
     SupporterQualification, AttendanceCorrectionRequest,
-    StaffActivityAllocationLog
+    StaffActivityAllocationLog, EmploymentShiftPattern
 )
 from backend.app.models.core.user import (
     User, UserPII

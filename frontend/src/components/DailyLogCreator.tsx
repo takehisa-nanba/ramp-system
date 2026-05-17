@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Plus, Check, Clock, Edit2, Trash2, Calendar, 
+  Plus, Check, Clock, Edit2, Trash2, 
   FileText, Send, Users, Loader2, MessageSquare,
   AlertTriangle, ChevronRight, Activity, Zap
 } from 'lucide-react';

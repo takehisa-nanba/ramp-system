@@ -17,7 +17,7 @@ export const PiiSecureWrapper: React.FC<PiiSecureWrapperProps> = ({
   const [isRevealed, setIsRevealed] = useState(false);
   const [isLogging, setIsLogging] = useState(false);
   const [timeLeft, setTimeLeft] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const timerRef = useRef<any | null>(null);
 
   const startAutoMaskTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);

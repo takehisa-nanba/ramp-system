@@ -26,6 +26,7 @@ type AuthState = {
   supporterName: string | null;
   role: string | null;
   error: string | null;
+  role_scopes?: string[];
 };
 
 // =================================================================
@@ -41,7 +42,9 @@ const App: React.FC = () => {
   });
 
   const handleLogout = () => {
-    // ログアウトAPI呼び出し（省略）
+    localStorage.removeItem('user_role');
+    localStorage.removeItem('user_role_scopes');
+    localStorage.removeItem('user_full_name');
     setAuth({ isLoggedIn: false, token: null, supporterName: null, role: null, error: null });
   };
 

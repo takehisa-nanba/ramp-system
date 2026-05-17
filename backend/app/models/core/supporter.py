@@ -44,6 +44,9 @@ class Supporter(db.Model):
     # アカウント有効化フラグ
     is_active = Column(Boolean, default=True, nullable=False)
 
+    # 重複計上例外特例フラグ (多機能型・一体型事業所などの配置特例用)
+    allow_overlap_calculation = Column(Boolean, default=False, nullable=False)
+
     # --- リレーションシップ ---
     
     # PII（機密情報）保管庫への1対1リレーション
@@ -70,6 +73,9 @@ class Supporter(db.Model):
         foreign_keys='AttendanceCorrectionRequest.supporter_id', 
         lazy='dynamic'
     )
+    
+    # 曜日別契約シフトパターンへのリレーション
+    shift_patterns = db.relationship('EmploymentShiftPattern', back_populates='supporter', cascade="all, delete-orphan")
     
     # ★ RBAC（役割）へのリレーションシップ
     roles = db.relationship('RoleMaster', secondary=supporter_role_link, back_populates='supporters')
@@ -137,32 +143,58 @@ class SupporterPII(db.Model):
     @property
     def personal_phone(self):
         from backend.app.services.security_service import decrypt_data_pii
-        return decrypt_data_pii(self.encrypted_personal_phone)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_personal_phone, key)
 
     @personal_phone.setter
     def personal_phone(self, plaintext):
         from backend.app.services.security_service import encrypt_data_pii
-        self.encrypted_personal_phone = encrypt_data_pii(plaintext)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        self.encrypted_personal_phone = encrypt_data_pii(plaintext, key)
 
     @property
     def address(self):
         from backend.app.services.security_service import decrypt_data_pii
-        return decrypt_data_pii(self.encrypted_address)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_address, key)
 
     @address.setter
     def address(self, plaintext):
         from backend.app.services.security_service import encrypt_data_pii
-        self.encrypted_address = encrypt_data_pii(plaintext)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        self.encrypted_address = encrypt_data_pii(plaintext, key)
 
     @property
     def employment_contract_url(self):
         from backend.app.services.security_service import decrypt_data_pii
-        return decrypt_data_pii(self.encrypted_employment_contract_url)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_employment_contract_url, key)
 
     @employment_contract_url.setter
     def employment_contract_url(self, plaintext):
         from backend.app.services.security_service import encrypt_data_pii
-        self.encrypted_employment_contract_url = encrypt_data_pii(plaintext)
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        self.encrypted_employment_contract_url = encrypt_data_pii(plaintext, key)
+
+    @property
+    def bank_account_info(self):
+        from backend.app.services.security_service import decrypt_data_pii
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        return decrypt_data_pii(self.encrypted_bank_account_info, key)
+
+    @bank_account_info.setter
+    def bank_account_info(self, plaintext):
+        from backend.app.services.security_service import encrypt_data_pii
+        from backend.app.services.core_service import get_system_pii_key
+        key = get_system_pii_key()
+        self.encrypted_bank_account_info = encrypt_data_pii(plaintext, key)
 
     # --- 認証メソッド ---
     def set_password(self, password):
@@ -335,3 +367,24 @@ class AttendanceCorrectionRequest(db.Model):
     
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id], back_populates='attendance_correction_requests')
     approver = db.relationship('Supporter', foreign_keys=[approver_id])
+
+
+# ====================================================================
+# 8. EmploymentShiftPattern (曜日別契約シフトパターンモデル) [NEW]
+# ====================================================================
+class EmploymentShiftPattern(db.Model):
+    """
+    職員の曜日ごとの所定労働時間・シフト契約パターンを格納するテーブル。
+    常勤換算（FTE）の分母や、タイムカードの予実管理の基準となる。
+    """
+    __tablename__ = 'employment_shift_patterns'
+    
+    id = Column(Integer, primary_key=True)
+    supporter_id = Column(Integer, ForeignKey('supporters.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    day_of_week = Column(String(20), nullable=False) # 'Monday', 'Tuesday' 等
+    start_time = Column(String(5), nullable=True)     # '09:00' (HH:MM形式)
+    end_time = Column(String(5), nullable=True)       # '18:00' (HH:MM形式)
+    break_minutes = Column(Integer, default=0, nullable=False) # 休憩時間(分)
+    
+    supporter = db.relationship('Supporter', back_populates='shift_patterns')

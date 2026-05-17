@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Play, Square, Timer, X, Users, ChevronDown } from 'lucide-react';
+import { Play, Square, Timer, X, Users, ChevronDown, AlertTriangle } from 'lucide-react';
 import { dailyLogApi } from '../services/dailyLogApi';
 import type { ActivityTag, UserSummary } from '../services/dailyLogApi';
 
@@ -11,6 +11,7 @@ const ActivityTracker: React.FC = () => {
   const [seconds, setSeconds] = useState(0);
   const [startTime, setStartTime] = useState<Date | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Tags & Users from API
   const [tags, setTags] = useState<ActivityTag[]>([]);
@@ -67,6 +68,7 @@ const ActivityTracker: React.FC = () => {
     if (isTracking) {
       // 停止と保存
       setIsLoading(true);
+      setErrorMessage(null);
       try {
         const endTime = new Date();
         await dailyLogApi.logActivity({
@@ -83,8 +85,14 @@ const ActivityTracker: React.FC = () => {
         // 保存成功したらリセット（タグと利用者は残しても良いが、一旦リセット）
         setSelectedTagId(null);
         setSelectedUserId(null);
-      } catch (err) {
-        alert('活動の保存に失敗しました');
+      } catch (err: any) {
+        let errorMsg = '活動の保存に失敗しました';
+        if (err.response?.data?.message) {
+          errorMsg = err.response.data.message;
+        } else if (err.response?.data?.error) {
+          errorMsg = err.response.data.error;
+        }
+        setErrorMessage(errorMsg);
         console.error(err);
       } finally {
         setIsLoading(false);
@@ -93,6 +101,7 @@ const ActivityTracker: React.FC = () => {
       // 開始
       setStartTime(new Date());
       setIsTracking(true);
+      setErrorMessage(null);
     }
   };
 
@@ -102,6 +111,7 @@ const ActivityTracker: React.FC = () => {
     setStartTime(null);
     setSelectedTagId(null);
     setSelectedUserId(null);
+    setErrorMessage(null);
   };
 
   if (!isOpen && !isTracking) {
@@ -183,6 +193,23 @@ const ActivityTracker: React.FC = () => {
               </select>
               <Users size={16} className="absolute right-3 top-2.5 text-emerald-400 pointer-events-none" />
             </div>
+          </div>
+        )}
+
+        {/* エラーメッセージ（重複警告など）の極上デザイン表示 */}
+        {errorMessage && (
+          <div className="bg-rose-50 border border-rose-100 text-rose-800 p-3.5 rounded-xl text-xs font-bold leading-normal animate-shake flex items-start gap-2">
+            <AlertTriangle size={16} className="text-rose-500 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <span className="block font-black text-rose-950 mb-0.5">登録できませんでした</span>
+              <span className="text-[11px] leading-relaxed">{errorMessage}</span>
+            </div>
+            <button 
+              onClick={() => setErrorMessage(null)} 
+              className="text-rose-400 hover:text-rose-600 font-bold ml-1 text-sm shrink-0"
+            >
+              ×
+            </button>
           </div>
         )}
 

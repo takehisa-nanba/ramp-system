@@ -10,6 +10,7 @@ export const StaffManagement: React.FC = () => {
   const {
     staff,
     roles,
+    jobTitles,
     isLoading,
     isSaving,
     message,
@@ -20,6 +21,32 @@ export const StaffManagement: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
+
+  // 🛡️ フロントエンド認可ガードレール: 管理者ロールチェック
+  const roleScopesJson = localStorage.getItem('user_role_scopes');
+  const roleScopes: string[] = roleScopesJson ? JSON.parse(roleScopesJson) : [];
+  const hasAdminRole = roleScopes.some(scope => ['SYSTEM', 'CORPORATE', 'JOB'].includes(scope));
+
+  if (!hasAdminRole) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] p-8 text-center animate-fade-in relative overflow-hidden bg-white/40 backdrop-blur-md border border-slate-100 rounded-[2.5rem] shadow-xl max-w-2xl mx-auto mt-12">
+        <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-rose-500 to-amber-500" />
+        <div className="w-16 h-16 bg-rose-50 text-rose-500 rounded-2xl flex items-center justify-center mb-6 shadow-sm shadow-rose-100">
+          <ShieldCheck size={36} className="animate-pulse" />
+        </div>
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight mb-3">閲覧権限がありません</h2>
+        <p className="text-slate-500 font-medium max-w-md text-sm leading-relaxed mb-6">
+          職員権限およびアカウント管理画面にアクセスするには、管理者権限（事業所管理者、法人管理者、またはシステム管理者）が必要です。ご不明な点がございましたら、貴施設の管理者までお問い合わせください。
+        </p>
+        <button 
+          onClick={() => window.location.href = '/'}
+          className="bg-slate-900 hover:bg-slate-800 text-white font-black px-6 py-3.5 rounded-xl shadow-md transition-all active:scale-95 text-xs tracking-wider uppercase cursor-pointer"
+        >
+          ダッシュボードへ戻る
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-[1600px] mx-auto p-4 sm:p-8 space-y-8 animate-fade-in">
@@ -88,6 +115,7 @@ export const StaffManagement: React.FC = () => {
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         roles={roles}
+        jobTitles={jobTitles}
         isSaving={isSaving}
         onRegister={handleRegister}
       />
@@ -98,6 +126,7 @@ export const StaffManagement: React.FC = () => {
         onClose={() => setEditingStaff(null)}
         staff={editingStaff}
         roles={roles}
+        jobTitles={jobTitles}
         isSaving={isSaving}
         onUpdate={async (id, data) => {
           const success = await handleUpdateStaff(id, data);

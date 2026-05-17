@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import { 
   FilePlus2, User, FileText, CheckCircle2, 
-  Loader2, AlertCircle, ChevronRight, Target,
+  Loader2, AlertCircle, ChevronRight,
   FileBadge2, Sparkles
 } from 'lucide-react';
 import { createPlanDraft } from '../services/plans.ts';
 
 const PlanCreator: React.FC = () => {
     const [userId, setUserId] = useState(1);
-    const [policyId, setPolicyId] = useState(1);
+    const [policyId] = useState(1);
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<{status: string, id: number} | null>(null);
     const [error, setError] = useState<string | null>(null);

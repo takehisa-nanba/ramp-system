@@ -65,7 +65,32 @@ def log_activity():
     if tag.is_direct_support:
         if not user_id:
             return jsonify({"msg": "User selection is required for direct support"}), 400
-            
+
+        # 入力時間を datetime に変換
+        new_start = datetime.fromisoformat(start_time_str) if start_time_str else datetime.now(JST)
+        new_end = datetime.fromisoformat(end_time_str) if end_time_str else datetime.now(JST)
+
+        # 🛡️ 重複時間帯ガードレール (同一支援員が、同一時間帯に「別の利用者」に対して直接支援を登録するのをブロック)
+        overlapping_activity = db.session.query(DailyLogActivity)\
+            .join(DailyLog, DailyLogActivity.daily_log_id == DailyLog.id)\
+            .filter(
+                DailyLogActivity.supporter_id == supporter_id,
+                DailyLog.log_date == log_date,
+                DailyLog.user_id != user_id,  # 別の利用者
+                DailyLogActivity.support_start_time < new_end,
+                new_start < DailyLogActivity.support_end_time
+            )\
+            .first()
+
+        if overlapping_activity:
+            other_user = db.session.get(User, overlapping_activity.daily_log.user_id)
+            other_user_name = other_user.display_name if other_user else "他の利用者"
+            start_formatted = overlapping_activity.support_start_time.astimezone(JST).strftime('%H:%M') if overlapping_activity.support_start_time else "--:--"
+            end_formatted = overlapping_activity.support_end_time.astimezone(JST).strftime('%H:%M') if overlapping_activity.support_end_time else "--:--"
+            return jsonify({
+                "msg": f"既に同時間帯（{start_formatted}〜{end_formatted}）に別の利用者（{other_user_name}様）の支援記録が登録されています。重複した時間帯での支援記録は作成できません。"
+            }), 400
+
         # 該当利用者の当日のDailyLogを探す（なければ作成）
         daily_log = DailyLog.query.filter_by(user_id=user_id, log_date=log_date).first()
         if not daily_log:

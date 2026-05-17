@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { 
-  Clock, Play, Square, CheckCircle, 
+  Play, Square, CheckCircle, 
   ChevronRight, Calendar, MapPin, Loader2,
   Plus, Minus, PieChart
 } from 'lucide-react';
@@ -9,7 +8,6 @@ import {
 import { attendanceApi } from '../services/attendanceApi';
 
 const Timecard: React.FC<{ supporterName: string | null }> = ({ supporterName }) => {
-  const navigate = useNavigate();
   const [time, setTime] = useState(new Date());
   const [status, setStatus] = useState<'IDLE' | 'WORKING' | 'COMPLETED'>('IDLE');
   const [startTime, setStartTime] = useState<string | null>(null);

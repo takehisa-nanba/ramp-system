@@ -1,5 +1,5 @@
 import React from 'react';
-import { Edit, Loader2, Sparkles, User, Mail, Calendar, Clock } from 'lucide-react';
+import { Edit, Loader2, Clock } from 'lucide-react';
 import type { StaffMember } from '../types';
 
 interface StaffListProps {

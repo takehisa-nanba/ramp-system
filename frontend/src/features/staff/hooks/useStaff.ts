@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { managementApi } from '../../../services/managementApi';
-import type { StaffMember, Role, NewStaffData } from '../types';
+import type { StaffMember, Role, NewStaffData, JobTitle } from '../types';
 
 export const useStaff = () => {
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
+  const [jobTitles, setJobTitles] = useState<JobTitle[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStaff, setSelectedStaff] = useState<StaffMember | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -18,12 +19,14 @@ export const useStaff = () => {
   const fetchData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const [staffData, roleData] = await Promise.all([
+      const [staffData, roleData, jobTitleData] = await Promise.all([
         managementApi.getStaffMembers(),
-        managementApi.getAvailableRoles()
+        managementApi.getAvailableRoles(),
+        managementApi.getJobTitles()
       ]);
       setStaff(staffData);
       setRoles(roleData);
+      setJobTitles(jobTitleData);
       
       // 選択中スタッフの参照を最新データで更新
       if (selectedStaff) {
@@ -106,6 +109,7 @@ export const useStaff = () => {
   return {
     staff,
     roles,
+    jobTitles,
     isLoading,
     isSaving,
     selectedStaff,

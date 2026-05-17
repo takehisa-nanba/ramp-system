@@ -12,7 +12,7 @@ from backend.app.models import (
     Supporter, SupporterPII, Corporation, OfficeSetting, 
     MunicipalityMaster, StaffActivityMaster, StatusMaster,
     User, UserPII, SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
-    RoleMaster, PermissionMaster
+    RoleMaster, PermissionMaster, JobTitleMaster
 )
 
 
@@ -27,6 +27,23 @@ with app.app_context():
     if not municipality:
         municipality = MunicipalityMaster(municipality_code='131016', name='千代田区')
         db.session.add(municipality)
+
+    # 福祉法令上の標準実務職種マスターの投入
+    job_titles_seed = [
+        {'title_name': '管理者', 'is_management': True, 'is_qualified': False},
+        {'title_name': 'サービス管理責任者', 'is_management': False, 'is_qualified': True},
+        {'title_name': '生活支援員', 'is_management': False, 'is_qualified': False},
+        {'title_name': '職業指導員', 'is_management': False, 'is_qualified': False},
+        {'title_name': '就労支援員', 'is_management': False, 'is_qualified': False},
+    ]
+    for jt in job_titles_seed:
+        if not JobTitleMaster.query.filter_by(title_name=jt['title_name']).first():
+            db.session.add(JobTitleMaster(
+                title_name=jt['title_name'],
+                is_management_role=jt['is_management'],
+                is_qualified_role=jt['is_qualified']
+            ))
+    db.session.commit()
 
     # 活動タグ
     tags = [
@@ -102,37 +119,62 @@ with app.app_context():
     db.session.commit()
 
     roles = [
-        {'name': '事業所管理者', 'scope': 'JOB'},
-        {'name': '法人管理者', 'scope': 'CORPORATE'},
-        {'name': 'システム管理者', 'scope': 'SYSTEM'},
+        {'name': '一般支援員', 'scope': 'STAFF', 'perms': ['VIEW_PII', 'EDIT_PLAN', 'APPROVE_LOG']},
+        {'name': '事業所管理者', 'scope': 'JOB', 'perms': 'ALL'},
+        {'name': '法人管理者', 'scope': 'CORPORATE', 'perms': 'ALL'},
+        {'name': 'システム管理者', 'scope': 'SYSTEM', 'perms': 'ALL'},
     ]
     role_objs = []
+    staff_role_obj = None
     for r in roles:
         obj = RoleMaster.query.filter_by(name=r['name']).first()
         if not obj:
             obj = RoleMaster(name=r['name'], role_scope=r['scope'])
-            # 全ての権限を付与
-            obj.permissions = list(perm_objs.values())
+            if r['perms'] == 'ALL':
+                obj.permissions = list(perm_objs.values())
+            else:
+                obj.permissions = [perm_objs[pname] for pname in r['perms'] if pname in perm_objs]
             db.session.add(obj)
         role_objs.append(obj)
+        if r['scope'] == 'STAFF':
+            staff_role_obj = obj
     db.session.commit()
 
     # 4. 支援員 (Admin)
     pii = SupporterPII.query.filter_by(email='admin@example.com').first()
     if not pii:
-        admin = Supporter(
-            staff_code='admin-001', last_name='システム', first_name='管理者',
-            last_name_kana='システム', first_name_kana='カンリシャ',
+      admin = Supporter(
+          staff_code='admin-001', last_name='システム', first_name='管理者',
+          last_name_kana='システム', first_name_kana='カンリシャ',
+          hire_date=date.today(), employment_type='FULL_TIME',
+          weekly_scheduled_minutes=2400, is_active=True, office_id=office.id
+      )
+      # 3つの異なる操作レイヤー（システム・法人・事業所）それぞれの管理ロールを同時に付与（多層ロール設計）
+      admin.roles = [r for r in role_objs if r.role_scope in ('SYSTEM', 'CORPORATE', 'JOB')]
+      db.session.add(admin)
+      db.session.commit()
+      pii = SupporterPII(supporter_id=admin.id, email='admin@example.com')
+      pii.set_password('password')
+      db.session.add(pii)
+      db.session.commit()
+
+    # 4-2. 一般支援員 (セキュリティロールを持たない一般ユーザー) の追加
+    pii_staff = SupporterPII.query.filter_by(email='staff@example.com').first()
+    if not pii_staff:
+        staff_user = Supporter(
+            staff_code='staff-001', last_name='一般', first_name='支援員',
+            last_name_kana='イッパン', first_name_kana='シエンイン',
             hire_date=date.today(), employment_type='FULL_TIME',
             weekly_scheduled_minutes=2400, is_active=True, office_id=office.id
         )
-        # 全てのロールを付与 (最高権限)
-        admin.roles = role_objs
-        db.session.add(admin)
+        # 一般支援員ロールを付与
+        staff_user.roles = [staff_role_obj] if staff_role_obj else []
+        db.session.add(staff_user)
         db.session.commit()
-        pii = SupporterPII(supporter_id=admin.id, email='admin@example.com')
-        pii.set_password('password')
-        db.session.add(pii)
+        
+        pii_staff = SupporterPII(supporter_id=staff_user.id, email='staff@example.com')
+        pii_staff.set_password('password')
+        db.session.add(pii_staff)
         db.session.commit()
 
 
@@ -202,6 +244,70 @@ with app.app_context():
             service_type="ON_SITE"
         )
         db.session.add(indiv_goal)
+        db.session.commit()
+
+    # === 利用者の追加 1: 鈴木 花子 (USR002) ===
+    user2 = User.query.filter_by(display_name='鈴木 花子').first()
+    if not user2:
+        user2 = User(
+            display_name='鈴木 花子',
+            user_code='USR002',
+            status_id=active_status.id,
+            primary_supporter_id=admin.id,
+            service_start_date=datetime.datetime.now().date()
+        )
+        db.session.add(user2)
+        db.session.flush()
+
+        user2_pii = UserPII(user_id=user2.id)
+        user2_pii.last_name = "鈴木"
+        user2_pii.first_name = "花子"
+        user2_pii.email = "hanako.suzuki@example.com"
+        user2_pii.set_password("password")
+        db.session.add(user2_pii)
+
+        db.session.commit()
+
+        # 個別支援計画 (鈴木 花子)
+        plan2 = SupportPlan(
+            user_id=user2.id,
+            plan_start_date=date(2024, 2, 1),
+            plan_end_date=date(2025, 1, 31),
+            plan_status='ACTIVE'
+        )
+        db.session.add(plan2)
+        db.session.commit()
+
+    # === 利用者の追加 2: 高橋 一郎 (USR003) ===
+    user3 = User.query.filter_by(display_name='高橋 一郎').first()
+    if not user3:
+        user3 = User(
+            display_name='高橋 一郎',
+            user_code='USR003',
+            status_id=active_status.id,
+            primary_supporter_id=admin.id,
+            service_start_date=datetime.datetime.now().date()
+        )
+        db.session.add(user3)
+        db.session.flush()
+
+        user3_pii = UserPII(user_id=user3.id)
+        user3_pii.last_name = "高橋"
+        user3_pii.first_name = "一郎"
+        user3_pii.email = "ichiro.takahashi@example.com"
+        user3_pii.set_password("password")
+        db.session.add(user3_pii)
+
+        db.session.commit()
+
+        # 個別支援計画 (高橋 一郎)
+        plan3 = SupportPlan(
+            user_id=user3.id,
+            plan_start_date=date(2024, 3, 1),
+            plan_end_date=date(2025, 2, 28),
+            plan_status='ACTIVE'
+        )
+        db.session.add(plan3)
         db.session.commit()
 
     print("✅ 全てのデモデータの整合性を確認・補填しました。")

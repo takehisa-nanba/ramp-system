@@ -25,17 +25,33 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const isStaff = role === 'STAFF';
 
-  const navItems = isStaff ? [
+  // localStorageからログインユーザーの管理者スコープを取得
+  const roleScopesJson = localStorage.getItem('user_role_scopes');
+  const roleScopes: string[] = roleScopesJson ? JSON.parse(roleScopesJson) : [];
+  const hasAdminRole = roleScopes.some(scope => ['SYSTEM', 'CORPORATE', 'JOB'].includes(scope));
+
+  interface NavItem {
+    name: string;
+    path: string;
+    icon: React.ReactNode;
+    badge?: number;
+  }
+
+  const baseItems: NavItem[] = [
     { name: 'ダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
     { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} />, badge: 3 },
     { name: 'タイムカード', path: '/timecard', icon: <Clock size={18} /> },
     { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
     { name: '個別支援計画', path: '/plans', icon: <FileText size={18} /> },
+  ];
+
+  const adminItems: NavItem[] = hasAdminRole ? [
     { name: 'スタッフ管理', path: '/management/staff', icon: <ShieldCheck size={18} /> },
     { name: '事業所設定', path: '/management/office', icon: <Building2 size={18} /> },
     { name: '日報設定', path: '/settings/log', icon: <Settings size={18} /> },
+  ] : [];
 
-  ] : [
+  const navItems: NavItem[] = isStaff ? [...baseItems, ...adminItems] : [
     { name: 'マイダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
     { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} /> },
     { name: 'カレンダー', path: '/calendar', icon: <Calendar size={18} /> },

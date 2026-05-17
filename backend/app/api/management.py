@@ -20,6 +20,8 @@ def get_current_staff():
 def list_staff():
     current = get_current_staff()
     if not current: return jsonify({"msg": "Unauthorized"}), 401
+    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
+        return jsonify({"msg": "アクセス権限がありません。この操作には管理者権限が必要です。"}), 403
     
     # 事業所内の全スタッフを取得
     staff_members = Supporter.query.filter_by(office_id=current.office_id).all()
@@ -35,19 +37,43 @@ def list_staff():
         "is_active": s.is_active,
         "employment_type": s.employment_type,
         "weekly_scheduled_minutes": s.weekly_scheduled_minutes,
+        "allow_overlap_calculation": s.allow_overlap_calculation,
         "hire_date": s.hire_date.isoformat() if s.hire_date else None,
+        "retirement_date": s.retirement_date.isoformat() if s.retirement_date else None,
         "roles": [r.name for r in s.roles],
         "role_ids": [r.id for r in s.roles],
-        "email": s.pii.email if s.pii else "N/A"
+        "job_assignments": [{
+            "id": a.id,
+            "job_title_id": a.job_title_id,
+            "title_name": a.job_title.title_name if a.job_title else "未設定",
+            "assigned_minutes": a.assigned_minutes,
+            "office_service_configuration_id": a.office_service_configuration_id,
+            "is_deemed_assignment": a.is_deemed_assignment,
+            "deemed_expiry_date": a.deemed_expiry_date.isoformat() if a.deemed_expiry_date else None
+        } for a in s.job_assignments],
+        "shift_patterns": [{
+            "id": p.id,
+            "day_of_week": p.day_of_week,
+            "start_time": p.start_time,
+            "end_time": p.end_time,
+            "break_minutes": p.break_minutes
+        } for p in s.shift_patterns],
+        "email": s.pii.email if s.pii else "N/A",
+        "personal_phone": s.pii.personal_phone if (s.pii and s.pii.encrypted_personal_phone) else "",
+        "address": s.pii.address if (s.pii and s.pii.encrypted_address) else "",
+        "bank_account_info": s.pii.bank_account_info if (s.pii and s.pii.encrypted_bank_account_info) else ""
     } for s in staff_members]), 200
 
 @management_bp.route('/staff/<int:staff_id>', methods=['PUT'])
 @jwt_required()
 def update_staff(staff_id):
-    from backend.app.models import SupporterPII
+    from backend.app.models import SupporterPII, RoleMaster, SupporterJobAssignment, OfficeServiceConfiguration
+    from datetime import date
     
     current = get_current_staff()
     if not current: return jsonify({"msg": "Unauthorized"}), 401
+    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
+        return jsonify({"msg": "アクセス権限がありません。この操作には管理者権限が必要です。"}), 403
     
     staff = Supporter.query.get_or_404(staff_id)
     data = request.get_json()
@@ -62,29 +88,122 @@ def update_staff(staff_id):
             if SupporterPII.query.filter_by(email=data['email']).first():
                 return jsonify({"msg": f"メールアドレス「{data['email']}」は既に別のスタッフで使用されています"}), 400
 
+        # === 兼務時間 ＆ 特例重複計上バリデーション ===
+        allow_overlap = bool(data.get('allow_overlap_calculation', staff.allow_overlap_calculation))
+        weekly_minutes = int(data.get('weekly_scheduled_minutes', staff.weekly_scheduled_minutes))
+        
+        if 'job_assignments' in data:
+            for a in data['job_assignments']:
+                title_id = a.get('job_title_id')
+                if not title_id or int(title_id) <= 0:
+                    return jsonify({"msg": "兼務職務を設定する場合は、すべての行で職種（役割）を選択してください。"}), 400
+
+            if not allow_overlap:
+                total_assigned = sum(int(a.get('assigned_minutes', 0)) for a in data['job_assignments'])
+                if total_assigned > weekly_minutes:
+                    return jsonify({
+                        "msg": f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。複数事業の重複計上（特例）がOFFの間は登録できません。"
+                    }), 400
+
         # 基本情報の更新
         if 'last_name' in data: staff.last_name = data['last_name']
         if 'first_name' in data: staff.first_name = data['first_name']
         if 'last_name_kana' in data: staff.last_name_kana = data['last_name_kana']
         if 'first_name_kana' in data: staff.first_name_kana = data['first_name_kana']
         if 'staff_code' in data: staff.staff_code = data['staff_code']
+        def to_katakana(text):
+            if not text: return text
+            return "".join(chr(ord(c) + 96) if 0x3041 <= ord(c) <= 0x3096 else c for c in text)
+
         if 'employment_type' in data: staff.employment_type = data['employment_type']
         if 'weekly_scheduled_minutes' in data: 
             staff.weekly_scheduled_minutes = int(data['weekly_scheduled_minutes'])
         if 'is_active' in data: staff.is_active = bool(data['is_active'])
+        if 'allow_overlap_calculation' in data:
+            staff.allow_overlap_calculation = bool(data['allow_overlap_calculation'])
         
+        if 'last_name_kana' in data: staff.last_name_kana = to_katakana(data['last_name_kana'])
+        if 'first_name_kana' in data: staff.first_name_kana = to_katakana(data['first_name_kana'])
+
         if 'hire_date' in data and data['hire_date']:
             try:
                 staff.hire_date = datetime.fromisoformat(data['hire_date']).date()
             except: pass
 
-        # PII の更新
-        if 'email' in data and data['email']:
-            if not staff.pii:
-                staff.pii = SupporterPII(supporter_id=staff.id, email=data['email'])
-                db.session.add(staff.pii)
+        if 'retirement_date' in data:
+            if data['retirement_date']:
+                try:
+                    staff.retirement_date = datetime.fromisoformat(data['retirement_date']).date()
+                except: pass
             else:
+                staff.retirement_date = None
+
+        # セキュリティ・ロール (RoleMaster) の同期更新
+        if 'role_ids' in data:
+            role_ids = data['role_ids']
+            roles = RoleMaster.query.filter(RoleMaster.id.in_(role_ids)).all()
+            staff.roles = roles
+
+        # 福祉実務職務 (SupporterJobAssignment) の同期更新
+        if 'job_assignments' in data:
+            # 既存の割り当てを一度完全削除
+            SupporterJobAssignment.query.filter_by(supporter_id=staff.id).delete()
+            
+            # 所属事業所の OfficeServiceConfiguration を取得
+            service_config = OfficeServiceConfiguration.query.filter_by(office_id=staff.office_id).first()
+            service_config_id = service_config.id if service_config else 1
+            
+            for a in data['job_assignments']:
+                expiry_val = None
+                if a.get('deemed_expiry_date'):
+                    try:
+                        expiry_val = datetime.fromisoformat(a['deemed_expiry_date']).date()
+                    except: pass
+
+                new_assign = SupporterJobAssignment(
+                    supporter_id=staff.id,
+                    job_title_id=int(a['job_title_id']),
+                    office_service_configuration_id=service_config_id,
+                    start_date=staff.hire_date or date.today(),
+                    assigned_minutes=int(a['assigned_minutes']),
+                    is_deemed_assignment=bool(a.get('is_deemed_assignment', False)),
+                    deemed_expiry_date=expiry_val
+                )
+                db.session.add(new_assign)
+
+        # 曜日別契約シフトパターン (EmploymentShiftPattern) の同期更新
+        if 'shift_patterns' in data:
+            from backend.app.models import EmploymentShiftPattern
+            # 既存のパターンを全削除
+            EmploymentShiftPattern.query.filter_by(supporter_id=staff.id).delete()
+            
+            for p in data['shift_patterns']:
+                day = p.get('day_of_week')
+                if not day: continue
+                
+                new_pat = EmploymentShiftPattern(
+                    supporter_id=staff.id,
+                    day_of_week=day,
+                    start_time=p.get('start_time'),
+                    end_time=p.get('end_time'),
+                    break_minutes=int(p.get('break_minutes', 0))
+                )
+                db.session.add(new_pat)
+
+        # PII の更新
+        if any(k in data for k in ['email', 'personal_phone', 'address', 'bank_account_info', 'password']):
+            if not staff.pii:
+                staff.pii = SupporterPII(supporter_id=staff.id, email=data.get('email', 'temp@example.com'))
+                db.session.add(staff.pii)
+            
+            if 'email' in data and data['email']:
                 staff.pii.email = data['email']
+            if 'personal_phone' in data:
+                staff.pii.personal_phone = data['personal_phone']
+            if 'address' in data:
+                staff.pii.address = data['address']
+            if 'bank_account_info' in data:
+                staff.pii.bank_account_info = data['bank_account_info']
                 
             # パスワード更新指示がある場合のみ
             if 'password' in data and data['password']:
@@ -108,6 +227,18 @@ def get_available_roles():
         "name": r.name,
         "scope": r.role_scope
     } for r in roles]), 200
+
+@management_bp.route('/job-titles', methods=['GET'])
+@jwt_required()
+def get_available_job_titles():
+    from backend.app.models import JobTitleMaster
+    titles = JobTitleMaster.query.all()
+    return jsonify([{
+        "id": t.id,
+        "title_name": t.title_name,
+        "is_management_role": t.is_management_role,
+        "is_qualified_role": t.is_qualified_role
+    } for t in titles]), 200
 
 @management_bp.route('/staff/<int:staff_id>/roles', methods=['PUT'])
 @jwt_required()
@@ -223,11 +354,14 @@ def update_office_settings():
 @management_bp.route('/staff', methods=['POST'])
 @jwt_required()
 def register_staff():
-    from backend.app.models import SupporterPII, RoleMaster
+    from backend.app.models import SupporterPII, RoleMaster, SupporterJobAssignment, OfficeServiceConfiguration
     from backend.app.extensions import bcrypt
     from datetime import date
     
     current = get_current_staff()
+    if not current: return jsonify({"msg": "Unauthorized"}), 401
+    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
+        return jsonify({"msg": "アクセス権限がありません。この操作には管理者権限が必要です。"}), 403
     data = request.get_json()
     
     try:
@@ -243,6 +377,23 @@ def register_staff():
             if field not in data or not data[field]:
                 return jsonify({"msg": f"必須項目「{field}」が不足しています"}), 400
 
+        # === 兼務時間 ＆ 特例重複計上バリデーション ===
+        allow_overlap = bool(data.get('allow_overlap_calculation', False))
+        weekly_minutes = int(data['weekly_scheduled_minutes'])
+        
+        if 'job_assignments' in data:
+            for a in data['job_assignments']:
+                title_id = a.get('job_title_id')
+                if not title_id or int(title_id) <= 0:
+                    return jsonify({"msg": "兼務職務を設定する場合は、すべての行で職種（役割）を選択してください。"}), 400
+
+            if not allow_overlap:
+                total_assigned = sum(int(a.get('assigned_minutes', 0)) for a in data['job_assignments'])
+                if total_assigned > weekly_minutes:
+                    return jsonify({
+                        "msg": f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。複数事業の重複計上（特例）がOFFの間は登録できません。"
+                    }), 400
+
         # office_id の安全なフォールバック判定
         target_office_id = current.office_id if current else None
         if not target_office_id:
@@ -250,17 +401,30 @@ def register_staff():
             if first_office:
                 target_office_id = first_office.id
 
+        # ひらがなカタカナ変換関数
+        def to_katakana(text):
+            if not text: return text
+            return "".join(chr(ord(c) + 96) if 0x3041 <= ord(c) <= 0x3096 else c for c in text)
+
+        ret_date = None
+        if data.get('retirement_date'):
+            try:
+                ret_date = datetime.fromisoformat(data['retirement_date']).date()
+            except: pass
+
         # 新規スタッフ作成 (厳格なバリデーション)
         new_staff = Supporter(
             office_id=target_office_id,
             staff_code=data['staff_code'],
             last_name=data['last_name'],
             first_name=data['first_name'],
-            last_name_kana=data['last_name_kana'],
-            first_name_kana=data['first_name_kana'],
+            last_name_kana=to_katakana(data['last_name_kana']),
+            first_name_kana=to_katakana(data['first_name_kana']),
             hire_date=datetime.fromisoformat(data['hire_date']).date(),
+            retirement_date=ret_date,
             employment_type=data.get('employment_type', 'FULL_TIME'),
-            weekly_scheduled_minutes=int(data['weekly_scheduled_minutes']),
+            weekly_scheduled_minutes=weekly_minutes,
+            allow_overlap_calculation=allow_overlap,
             is_active=True
         )
 
@@ -277,11 +441,58 @@ def register_staff():
         db.session.add(new_staff)
         db.session.flush()
 
+        # 福祉実務職務 (SupporterJobAssignment) の同期登録
+        if 'job_assignments' in data:
+            # 所属事業所の OfficeServiceConfiguration を取得
+            service_config = OfficeServiceConfiguration.query.filter_by(office_id=new_staff.office_id).first()
+            service_config_id = service_config.id if service_config else 1
+            
+            for a in data['job_assignments']:
+                expiry_val = None
+                if a.get('deemed_expiry_date'):
+                    try:
+                        expiry_val = datetime.fromisoformat(a['deemed_expiry_date']).date()
+                    except: pass
+
+                new_assign = SupporterJobAssignment(
+                    supporter_id=new_staff.id,
+                    job_title_id=int(a['job_title_id']),
+                    office_service_configuration_id=service_config_id,
+                    start_date=new_staff.hire_date,
+                    assigned_minutes=int(a['assigned_minutes']),
+                    is_deemed_assignment=bool(a.get('is_deemed_assignment', False)),
+                    deemed_expiry_date=expiry_val
+                )
+                db.session.add(new_assign)
+
+        # 曜日別契約シフトパターン (EmploymentShiftPattern) の同期登録
+        if 'shift_patterns' in data:
+            from backend.app.models import EmploymentShiftPattern
+            for p in data['shift_patterns']:
+                day = p.get('day_of_week')
+                if not day: continue
+                
+                new_pat = EmploymentShiftPattern(
+                    supporter_id=new_staff.id,
+                    day_of_week=day,
+                    start_time=p.get('start_time'),
+                    end_time=p.get('end_time'),
+                    break_minutes=int(p.get('break_minutes', 0))
+                )
+                db.session.add(new_pat)
+
         # PII (個人情報) 作成
         new_pii = SupporterPII(
             supporter_id=new_staff.id,
             email=data['email']
         )
+        if 'personal_phone' in data:
+            new_pii.personal_phone = data['personal_phone']
+        if 'address' in data:
+            new_pii.address = data['address']
+        if 'bank_account_info' in data:
+            new_pii.bank_account_info = data['bank_account_info']
+            
         # 初期パスワード設定 (ハッシュ化)
         new_pii.set_password(data.get('password', 'password123'))
         db.session.add(new_pii)

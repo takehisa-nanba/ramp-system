@@ -10,6 +10,7 @@ export interface LoginResponse {
   user_id: number;
   role_name: string;
   full_name: string;
+  role_scopes?: string[];
 }
 
 

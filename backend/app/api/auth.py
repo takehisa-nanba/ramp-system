@@ -21,11 +21,13 @@ def login():
     
     # 1. 職員としての認証を試行
     supporter = authenticate_supporter(login_id, password)
+    role_scopes = []
     if supporter:
         role_name = "STAFF"
         identity = f"staff:{supporter.id}"
         full_name = f"{supporter.last_name} {supporter.first_name}"
         user_id = supporter.id
+        role_scopes = [r.role_scope for r in supporter.roles]
     else:
         # 2. 利用者としての認証を試行
         user = authenticate_user(login_id, password)
@@ -39,7 +41,8 @@ def login():
 
     additional_claims = {
         "role_name": role_name,
-        "full_name": full_name
+        "full_name": full_name,
+        "role_scopes": role_scopes
     }
     access_token = create_access_token(identity=identity, additional_claims=additional_claims)
     
@@ -47,7 +50,8 @@ def login():
         "msg": "Login successful", 
         "user_id": user_id, 
         "role_name": role_name, 
-        "full_name": full_name
+        "full_name": full_name,
+        "role_scopes": role_scopes
     })
     
     set_access_cookies(response, access_token)

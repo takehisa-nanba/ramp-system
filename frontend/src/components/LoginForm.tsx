@@ -11,6 +11,7 @@ type AuthState = {
   supporterName: string | null;
   role: string | null;
   error: string | null;
+  role_scopes?: string[];
 };
 
 // =================================================================
@@ -29,12 +30,18 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
 
     try {
       const data = await login({ login_id: loginId, password });
+      
+      localStorage.setItem('user_role', data.role_name);
+      localStorage.setItem('user_role_scopes', JSON.stringify(data.role_scopes || []));
+      localStorage.setItem('user_full_name', data.full_name);
+
       onLoginSuccess({
         isLoggedIn: true,
         token: null, 
         supporterName: data.full_name,
         role: data.role_name,
         error: null,
+        role_scopes: data.role_scopes,
       });
     } catch (err: any) {
       console.error(err);
