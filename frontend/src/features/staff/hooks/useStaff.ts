@@ -86,11 +86,10 @@ export const useStaff = () => {
     });
   };
 
-  const handleUpdateStaff = async (data: any) => {
-    if (!selectedStaff) return false;
+  const handleUpdateStaff = async (staffId: number, data: any) => {
     setIsSaving(true);
     try {
-      await managementApi.updateStaff(selectedStaff.id, data);
+      await managementApi.updateStaff(staffId, data);
       showMessage('success', 'スタッフ情報を更新しました');
       await fetchData();
       return true;

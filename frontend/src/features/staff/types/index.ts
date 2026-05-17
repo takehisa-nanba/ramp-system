@@ -33,4 +33,5 @@ export interface NewStaffData {
   hire_date: string;
   weekly_scheduled_minutes: number;
   role_ids: number[];
+  is_active?: boolean;
 }
