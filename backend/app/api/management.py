@@ -106,7 +106,7 @@ def get_available_roles():
     return jsonify([{
         "id": r.id,
         "name": r.name,
-        "scope": r.scope
+        "scope": r.role_scope
     } for r in roles]), 200
 
 @management_bp.route('/staff/<int:staff_id>/roles', methods=['PUT'])
