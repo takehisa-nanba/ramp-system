@@ -158,7 +158,7 @@ def update_office_settings():
 @management_bp.route('/staff', methods=['POST'])
 @jwt_required()
 def register_staff():
-    from backend.app.models import SupporterPII
+    from backend.app.models import SupporterPII, RoleMaster
     from backend.app.extensions import bcrypt
     from datetime import date
     
@@ -178,9 +178,16 @@ def register_staff():
             if field not in data or not data[field]:
                 return jsonify({"msg": f"必須項目「{field}」が不足しています"}), 400
 
+        # office_id の安全なフォールバック判定
+        target_office_id = current.office_id if current else None
+        if not target_office_id:
+            first_office = OfficeSetting.query.first()
+            if first_office:
+                target_office_id = first_office.id
+
         # 新規スタッフ作成 (厳格なバリデーション)
         new_staff = Supporter(
-            office_id=current.office_id,
+            office_id=target_office_id,
             staff_code=data['staff_code'],
             last_name=data['last_name'],
             first_name=data['first_name'],
@@ -192,10 +199,19 @@ def register_staff():
             is_active=True
         )
 
+        # 初期ロールの割り当て
+        role_ids = data.get('role_ids', [])
+        if role_ids:
+            roles = RoleMaster.query.filter(RoleMaster.id.in_(role_ids)).all()
+            new_staff.roles = roles
+        else:
+            default_role = RoleMaster.query.filter_by(name='事業所管理者').first()
+            if default_role:
+                new_staff.roles = [default_role]
+
         db.session.add(new_staff)
         db.session.flush()
 
-        
         # PII (個人情報) 作成
         new_pii = SupporterPII(
             supporter_id=new_staff.id,

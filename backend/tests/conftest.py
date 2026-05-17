@@ -116,6 +116,10 @@ def setup_active_user(app, setup_initial_masters):
         # setup_initial_masters の戻り値を受け取る必要は必ずしもないため、明示的に呼び出さない
         
         corp = db.session.query(Corporation).first() 
+        if not corp:
+            corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
+            db.session.add(corp)
+            db.session.flush()
         muni = db.session.query(MunicipalityMaster).first()
         status = db.session.query(StatusMaster).first()
         

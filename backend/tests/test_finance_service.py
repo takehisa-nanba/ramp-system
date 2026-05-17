@@ -130,19 +130,23 @@ def test_fte_calculation(app):
         
         # Aさん: 常勤 (Full-Time) 
         supporter_a = Supporter(
-            staff_code="S001", last_name="Full", first_name="Time", last_name_kana="フル", first_name_kana="タイム", 
+            staff_code="S001_FTE", last_name="Full", first_name="Time", last_name_kana="フル", first_name_kana="タイム", 
             hire_date=date(2025, 1, 1), employment_type="FULL_TIME", 
             weekly_scheduled_minutes=WEEKLY_FULL_TIME_MINUTES
         )
-        supporter_a.pii = SupporterPII(email="a@test.com")
+        pii_a = SupporterPII(email="a_fte@test.com")
+        pii_a.set_password("password123")
+        supporter_a.pii = pii_a
         
         # Bさん: 非常勤 (Part-Time) 
         supporter_b = Supporter(
-            staff_code="S002", last_name="Part", first_name="Time", last_name_kana="パート", first_name_kana="タイム", 
+            staff_code="S002_FTE", last_name="Part", first_name="Time", last_name_kana="パート", first_name_kana="タイム", 
             hire_date=date(2025, 1, 1), employment_type="PART_TIME", 
             weekly_scheduled_minutes=1200
         )
-        supporter_b.pii = SupporterPII(email="b@test.com")
+        pii_b = SupporterPII(email="b_fte@test.com")
+        pii_b.set_password("password123")
+        supporter_b.pii = pii_b
         session.add_all([supporter_a, supporter_b])
         session.flush() # ID確定
         

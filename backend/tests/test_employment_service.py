@@ -15,18 +15,25 @@ def test_placement_and_retention(app):
 
     with app.app_context():
         # --- 1. 準備 ---
-        status = StatusMaster(name="利用中")
-        db.session.add(status)
-        db.session.flush()
+        status = db.session.query(StatusMaster).filter_by(name="利用中").first()
+        if not status:
+            status = StatusMaster(name="利用中")
+            db.session.add(status)
+            db.session.flush()
 
         user = User(display_name="WorkerA", status_id=status.id)
         staff = Supporter(
+            staff_code="S_EMP",
             last_name="Dev", first_name="Staff", last_name_kana="D", first_name_kana="S",
             employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1)
         )
         employer = EmployerMaster(company_name="Tech Corp", industry_type="IT")
         
         db.session.add_all([user, staff, employer])
+        db.session.flush()
+        staff_id = staff.id
+        employer_id = employer.id
+        user_id = user.id
         db.session.commit()
 
         service = EmploymentService()
@@ -37,8 +44,8 @@ def test_placement_and_retention(app):
         placement_date = date.today() - timedelta(days=210)
         
         placement = service.register_placement(
-            user_id=user.id,
-            employer_id=employer.id,
+            user_id=user_id,
+            employer_id=employer_id,
             placement_date=placement_date,
             scenario="NEW_PLACEMENT"
         )
@@ -47,7 +54,7 @@ def test_placement_and_retention(app):
 
         # --- 3. 定着確認 (6ヶ月達成) ---
         logger.info("🔹 ステップ2: 定着マイルストーン判定")
-        status = service.check_retention_status(user.id)
+        status = service.check_retention_status(user_id)
         
         assert status['status'] == 'EMPLOYED'
         assert status['milestone_reached'] is True
@@ -56,10 +63,10 @@ def test_placement_and_retention(app):
         # --- 4. 企業開拓ログ ---
         logger.info("🔹 ステップ3: 企業開拓ログ")
         log = service.log_development_activity(
-            supporter_id=staff.id,
+            supporter_id=staff_id,
             activity_type="VISIT",
             summary="定着支援訪問。様子良好。",
-            employer_id=employer.id
+            employer_id=employer_id
         )
         assert log.id is not None
         logger.debug("   -> Activity Logged")

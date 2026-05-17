@@ -72,4 +72,60 @@ def list_users():
             "id": user.id,
             "display_name": user.display_name
         } for user in users
-    ]), 200
+    ]), 200
+
+@users_bp.route('/<int:user_id>/decrypt-pii', methods=['POST'])
+@jwt_required()
+def decrypt_user_pii(user_id):
+    """
+    理由入力付きで特定の個人情報を閲覧し、監査ログを記録する。
+    """
+    from flask import request
+    from backend.app.models.core.audit_log import AuditActionLog
+    
+    current_supporter_id = get_jwt_identity()
+
+    if not check_permission(current_supporter_id, 'VIEW_PII'):
+        return jsonify({"msg": "Permission denied: Missing 'VIEW_PII' permission"}), 403
+
+    data = request.get_json() or {}
+    pii_type = data.get('pii_type')
+    reason = data.get('reason')
+
+    if not pii_type or not reason:
+        return jsonify({"msg": "pii_type and reason are required"}), 400
+
+    if len(reason) < 10:
+        return jsonify({"msg": "閲覧理由は10文字以上で入力してください。"}), 400
+
+    user = db.session.get(User, user_id)
+    if not user or not user.pii:
+        return jsonify({"msg": "User or PII record not found"}), 404
+
+    pii = user.pii
+    val = ""
+    if pii_type == 'phone':
+        val = pii.phone_number
+    elif pii_type == 'email':
+        val = pii.email
+    elif pii_type == 'address':
+        val = pii.address
+    elif pii_type == 'name':
+        val = f"{pii.last_name} {pii.first_name}"
+    elif pii_type == 'bank_account':
+        val = pii.certificate_number or "未登録"
+    else:
+        return jsonify({"msg": "Invalid pii_type"}), 400
+
+    # 監査ログを記録
+    audit_log = AuditActionLog(
+        supporter_id=current_supporter_id,
+        action_type='VIEW_PII',
+        target_table='user_pii',
+        target_id=user_id,
+        change_details=f"PII Type: {pii_type} | Reason: {reason}"
+    )
+    db.session.add(audit_log)
+    db.session.commit()
+
+    return jsonify({"value": val}), 200

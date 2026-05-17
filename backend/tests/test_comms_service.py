@@ -18,14 +18,17 @@ def test_chat_functionality(app):
 
     with app.app_context():
         # --- 1. 準備 ---
-        status = StatusMaster(name="利用中")
-        db.session.add(status)
-        db.session.flush()
+        status = db.session.query(StatusMaster).filter_by(name="利用中").first()
+        if not status:
+            status = StatusMaster(name="利用中")
+            db.session.add(status)
+            db.session.flush()
 
         user = User(display_name="ChatUser", status_id=status.id)
         
         # ★ 修正: hire_date を文字列から date オブジェクトに変更
         supporter = Supporter(
+            staff_code="S_COMMS",
             last_name="Staff", first_name="One", last_name_kana="スタッフ", first_name_kana="イチ",
             employment_type="FULL_TIME", weekly_scheduled_minutes=2400, 
             hire_date=date(2025, 1, 1) 

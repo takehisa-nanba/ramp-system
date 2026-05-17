@@ -1,8 +1,10 @@
 import React from 'react';
 import { 
   Users, Clock, CheckCircle, AlertCircle, 
-  TrendingUp, Calendar, ChevronRight, ArrowUpRight
+  TrendingUp, Calendar, ChevronRight, ArrowUpRight,
+  MessageSquare
 } from 'lucide-react';
+import { SessionLockTimer } from './common/SessionLockTimer';
 
 interface DashboardProps {
   supporterName: string | null;
@@ -28,13 +30,17 @@ const Dashboard: React.FC<DashboardProps> = ({ supporterName }) => {
           </h1>
           <p className="text-slate-500 font-medium mt-1 text-lg">今日の事業所の状況を確認しましょう。</p>
         </div>
-        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
-          <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
-            <Calendar size={20} />
-          </div>
-          <div className="pr-4">
-            <p className="text-[10px] font-black text-slate-400 uppercase">Today</p>
-            <p className="text-sm font-black text-slate-700">2026年 5月 16日 (土)</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <SessionLockTimer />
+          
+          <div className="flex items-center gap-3 bg-white p-2 rounded-2xl shadow-sm border border-slate-100">
+            <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+              <Calendar size={20} />
+            </div>
+            <div className="pr-4">
+              <p className="text-[10px] font-black text-slate-400 uppercase">Today</p>
+              <p className="text-sm font-black text-slate-700">2026年 5月 16日 (土)</p>
+            </div>
           </div>
         </div>
       </header>

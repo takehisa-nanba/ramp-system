@@ -140,34 +140,14 @@ class EmploymentService:
             recent_log = JobDevelopmentLog.query.filter(
                 JobDevelopmentLog.employer_id == employer_id,
                 JobDevelopmentLog.activity_timestamp >= three_months_ago,
-                # 今回の職員IDではないログがあれば重複と見なす（連携不足防止のため、職員IDはチェックしない）
             ).first()
             
             if recent_log:
-                # 🚨 警告: 重複アプローチを検知。記録はするが、監査ログとして記録 (URACのような処理を想定)
+                # 🚨 警告: 重複アプローチを検知。記録はするが、監査ログとして記録
                 logger.warning(f"⚠️ Dev activity for Employer {employer_id} is a RECENT DUPLICATE (last approach: {recent_log.activity_timestamp.date()}).")
-                # NOTE: ここで Soft Block 対話（「本当に必要ですか？」）を API 層で実装することを推奨
                 pass # ロギングは継続
 
         # 2. ログの作成
-        log = JobDevelopmentLog(
-        # ... (既存のログ作成ロジックは継続) ...
-        )
-        
-        db.session.add(log)
-        db.session.commit()
-        
-        target = f"Employer {employer_id}" if employer_id else "New Prospect"
-        logger.info(f"📢 Development Activity Logged: {activity_type} -> {target}")
-        
-        return log
-        """
-        Logs a job development activity (e.g., cold calling, visiting).
-        ★ NEW: 既存企業への重複アプローチを防ぐため、直近の活動をチェックする。（ロジックは Service Layer で別途実装）
-        """
-        # NOTE: 重複チェックロジック（直近30日間の重複アプローチ警告など）は、この関数の呼び出し元か
-        #       ここで DB を参照して実装されることを想定。
-        
         log = JobDevelopmentLog(
             supporter_id=supporter_id,
             employer_id=employer_id, # NULL if it's a new prospect

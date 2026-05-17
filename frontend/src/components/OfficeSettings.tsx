@@ -6,11 +6,68 @@ import {
 } from 'lucide-react';
 import { managementApi, type OfficeSettings as IOfficeSettings } from '../services/managementApi';
 
+interface AdditiveFiling {
+  id: number;
+  fee_name: string;
+  filing_date: string;
+  start_date: string;
+  end_date?: string;
+}
+
 const OfficeSettings: React.FC = () => {
   const [settings, setSettings] = useState<IOfficeSettings | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
+
+  // 加算届出履歴ステート
+  const [filings, setFilings] = useState<AdditiveFiling[]>([
+    { id: 1, fee_name: '福祉専門職員配置等加算(I)', filing_date: '2025-04-01', start_date: '2025-04-01', end_date: '' },
+    { id: 2, fee_name: '送迎加算(往路・復路)', filing_date: '2025-04-10', start_date: '2025-04-10', end_date: '2026-03-31' },
+    { id: 3, fee_name: '人員配置体制加算(I)', filing_date: '2025-05-01', start_date: '2025-05-01', end_date: '' },
+  ]);
+  const [isFilingModalOpen, setIsFilingModalOpen] = useState(false);
+  const [newFiling, setNewFiling] = useState<Omit<AdditiveFiling, 'id'>>({
+    fee_name: '',
+    filing_date: new Date().toISOString().split('T')[0],
+    start_date: new Date().toISOString().split('T')[0],
+    end_date: ''
+  });
+
+  const handleAddFiling = () => {
+    if (!newFiling.fee_name || !newFiling.filing_date || !newFiling.start_date) {
+      alert('すべての必須項目を入力してください。');
+      return;
+    }
+    const id = filings.length > 0 ? Math.max(...filings.map(f => f.id)) + 1 : 1;
+    setFilings([...filings, { ...newFiling, id }]);
+    setIsFilingModalOpen(false);
+    setNewFiling({
+      fee_name: '',
+      filing_date: new Date().toISOString().split('T')[0],
+      start_date: new Date().toISOString().split('T')[0],
+      end_date: ''
+    });
+  };
+
+  const handleDeleteFiling = (id: number) => {
+    if (window.confirm('この加算届出履歴を削除しますか？')) {
+      setFilings(filings.filter(f => f.id !== id));
+    }
+  };
+
+  const isFilingActive = (start: string, end?: string) => {
+    const today = new Date();
+    const startDate = new Date(start);
+    if (isNaN(startDate.getTime())) return false;
+    
+    if (today < startDate) return false;
+    if (end) {
+      const endDate = new Date(end);
+      if (!isNaN(endDate.getTime()) && today > endDate) return false;
+    }
+    return true;
+  };
 
   useEffect(() => {
     fetchSettings();
@@ -305,6 +362,62 @@ const OfficeSettings: React.FC = () => {
               </div>
             </div>
           </section>
+
+          {/* Section 3: Additive Filings (加算届出履歴) */}
+          <section className="bg-white rounded-[2.5rem] shadow-sm border border-slate-100 overflow-hidden mt-8">
+            <div className="px-8 py-6 border-b border-slate-50 bg-slate-50/30 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Landmark size={18} className="text-indigo-500" />
+                <h3 className="font-black text-slate-800 uppercase tracking-wider text-xs">事業所加算届出履歴</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setIsFilingModalOpen(true)}
+                className="px-4 py-2 bg-indigo-50 text-indigo-600 rounded-xl font-bold text-xs hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm"
+              >
+                + 新規届出を追加
+              </button>
+            </div>
+            
+            <div className="p-8 space-y-6">
+              {filings.length === 0 ? (
+                <div className="text-center py-12 text-slate-400 space-y-2">
+                  <Landmark size={48} className="mx-auto text-slate-200" />
+                  <p className="font-bold text-sm">登録されている加算届出はありません。</p>
+                  <p className="text-xs text-slate-400">新しい加算届出を追加してください。</p>
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {filings.map((filing) => {
+                    const isActive = isFilingActive(filing.start_date, filing.end_date);
+                    return (
+                      <div key={filing.id} className="py-4 first:pt-0 last:pb-0 flex flex-col md:flex-row md:items-center justify-between gap-4 group">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-slate-800">{filing.fee_name}</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${isActive ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' : 'bg-slate-100 text-slate-400'}`}>
+                              {isActive ? '有効' : '期限切れ'}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400 font-medium">
+                            <span>届出日: {filing.filing_date}</span>
+                            <span>有効期間: {filing.start_date} ～ {filing.end_date || '無期限'}</span>
+                          </div>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => handleDeleteFiling(filing.id)}
+                          className="px-3 py-1.5 text-rose-600 hover:bg-rose-50 border border-transparent hover:border-rose-100 rounded-lg text-xs font-bold transition-all opacity-0 group-hover:opacity-100 shrink-0 self-end md:self-auto"
+                        >
+                          削除
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </section>
         </div>
 
         {/* Right: FTE & Shortcuts (Cols 9-12) */}
@@ -375,6 +488,88 @@ const OfficeSettings: React.FC = () => {
         </div>
 
       </div>
+
+      {/* Additive Filing Modal */}
+      {isFilingModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[999] flex items-center justify-center p-4 animate-in fade-in">
+          <div className="bg-white rounded-[2.5rem] p-8 max-w-lg w-full border border-slate-100 shadow-2xl space-y-6 animate-in zoom-in-95">
+            <div className="flex items-center gap-3 border-b border-slate-50 pb-4">
+              <div className="p-2 bg-indigo-50 text-indigo-600 rounded-xl">
+                <Landmark size={20} />
+              </div>
+              <h2 className="text-xl font-black text-slate-800 tracking-tight">新規加算届出の登録</h2>
+            </div>
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">届出加算名</label>
+                <select 
+                  value={newFiling.fee_name}
+                  onChange={e => setNewFiling({...newFiling, fee_name: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-slate-700 appearance-none"
+                >
+                  <option value="">加算項目を選択してください</option>
+                  <option value="福祉専門職員配置等加算(I)">福祉専門職員配置等加算(I)</option>
+                  <option value="福祉専門職員配置等加算(II)">福祉専門職員配置等加算(II)</option>
+                  <option value="送迎加算(往路・復路)">送迎加算(往路・復路)</option>
+                  <option value="人員配置体制加算(I)">人員配置体制加算(I)</option>
+                  <option value="人員配置体制加算(II)">人員配置体制加算(II)</option>
+                  <option value="就労移行支援体制加算">就労移行支援体制加算</option>
+                  <option value="目標工賃達成加算">目標工賃達成加算</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">届出年月日</label>
+                  <input 
+                    type="date"
+                    value={newFiling.filing_date}
+                    onChange={e => setNewFiling({...newFiling, filing_date: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-slate-700"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">適用開始日</label>
+                  <input 
+                    type="date"
+                    value={newFiling.start_date}
+                    onChange={e => setNewFiling({...newFiling, start_date: e.target.value})}
+                    className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-slate-700"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">適用終了日 (任意、無期限は空欄)</label>
+                <input 
+                  type="date"
+                  value={newFiling.end_date}
+                  onChange={e => setNewFiling({...newFiling, end_date: e.target.value})}
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-slate-700"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-4 pt-4 border-t border-slate-50">
+              <button 
+                type="button"
+                onClick={() => setIsFilingModalOpen(false)}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition-all text-sm"
+              >
+                キャンセル
+              </button>
+              <button 
+                type="button"
+                onClick={handleAddFiling}
+                className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold transition-all text-sm flex items-center justify-center gap-2 shadow-lg"
+              >
+                届出を登録
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

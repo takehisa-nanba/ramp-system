@@ -11,7 +11,7 @@ from backend.app.models import (
 # ★ NEW: URACモデルをインポート
 from backend.app.models import UnresponsiveRiskCounter 
 # ★ NEW: DailyLogモデルをインポート (人員配置チェックで使用)
-from backend.app.models import DailyLog, IndividualSupportGoal, SupporterTimecard
+from backend.app.models import DailyLog, DailyLogActivity, IndividualSupportGoal, SupporterTimecard
 from backend.app.services.compliance_service import ComplianceService
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,21 @@ def test_incident_workflow_and_compliance(app):
     with app.app_context():
         # --- 1. 準備 ---
         # 必要なマスタと組織
-        status = StatusMaster(name="利用中")
-        muni = MunicipalityMaster(municipality_code="999999", name="Test City")
-        ctype = CommitteeTypeMaster(name="感染対策委員会", required_frequency_months=3)
-        db.session.add_all([status, muni, ctype])
+        status = db.session.query(StatusMaster).filter_by(name="利用中").first()
+        if not status:
+            status = StatusMaster(name="利用中")
+            db.session.add(status)
+        
+        muni = db.session.query(MunicipalityMaster).filter_by(municipality_code="999999").first()
+        if not muni:
+            muni = MunicipalityMaster(municipality_code="999999", name="Test City")
+            db.session.add(muni)
+            
+        ctype = db.session.query(CommitteeTypeMaster).filter_by(name="感染対策委員会").first()
+        if not ctype:
+            ctype = CommitteeTypeMaster(name="感染対策委員会", required_frequency_months=3)
+            db.session.add(ctype)
+            
         db.session.flush()
 
         corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
@@ -191,14 +202,24 @@ def test_daily_personnel_ratio(app, setup_active_user):
         db.session.add(goal)
         db.session.commit()
         
-        DailyLog(
+        log = DailyLog(
             user_id=user.id, 
-            supporter_id=staff.id, 
             log_date=test_date, 
-            goal_id=goal.id, 
             location_type='OFF_SITE_EXTERNAL',
             support_content_notes='企業面接'
         )
+        db.session.add(log)
+        db.session.flush()
+
+        activity = DailyLogActivity(
+            daily_log_id=log.id,
+            support_goal_id=goal.id,
+            supporter_id=staff.id,
+            support_start_time=datetime.combine(test_date, datetime.min.time()),
+            support_end_time=datetime.combine(test_date, datetime.min.time()) + timedelta(hours=1),
+            support_content='企業面接'
+        )
+        db.session.add(activity)
         db.session.commit()
 
         # NOTE: Logic assumes OFFICE_CAPACITY=20, Active Staff=2 (Manager, Staff)

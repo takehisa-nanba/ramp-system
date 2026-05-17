@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { PiiSecureWrapper } from './common/PiiSecureWrapper';
 import { 
   ShieldCheck, Search, Loader2, AlertCircle, 
   Phone, Mail, MapPin, User, Fingerprint, Lock
@@ -98,8 +99,8 @@ const UserPiiViewer: React.FC = () => {
                    Decrypted Name
                 </h3>
                 <div className="space-y-1">
-                  <p className="text-2xl font-black text-slate-800">{userData.pii.last_name} {userData.pii.first_name}</p>
-                  <p className="text-sm text-slate-400 font-bold">正式名称（漢字）</p>
+                  <PiiSecureWrapper userId={userData.id} piiType="name" />
+                  <p className="text-sm text-slate-400 font-bold mt-2">正式名称（漢字）</p>
                 </div>
               </div>
 
@@ -110,16 +111,16 @@ const UserPiiViewer: React.FC = () => {
                 </h3>
                 <div className="space-y-4">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-colors">
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
                       <Phone size={14} />
                     </div>
-                    <p className="font-black text-slate-700">{userData.pii.phone_number}</p>
+                    <PiiSecureWrapper userId={userData.id} piiType="phone" />
                   </div>
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 group-hover:text-indigo-600 transition-colors">
+                    <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
                       <Mail size={14} />
                     </div>
-                    <p className="font-bold text-slate-700">{userData.pii.email}</p>
+                    <PiiSecureWrapper userId={userData.id} piiType="email" />
                   </div>
                 </div>
               </div>
@@ -132,9 +133,9 @@ const UserPiiViewer: React.FC = () => {
                    <MapPin size={14} className="text-indigo-400" />
                    Residential Address
                 </h3>
-                <div className="relative z-10">
-                  <p className="text-xl font-black text-slate-800 leading-relaxed max-w-2xl">{userData.pii.address}</p>
-                  <button className="mt-4 text-xs font-black text-indigo-600 hover:underline">Googleマップで表示</button>
+                <div className="relative z-10 space-y-2">
+                  <PiiSecureWrapper userId={userData.id} piiType="address" />
+                  <button className="mt-2 text-xs font-black text-indigo-600 hover:underline">Googleマップで表示</button>
                 </div>
               </div>
             </div>

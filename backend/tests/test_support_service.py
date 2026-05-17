@@ -51,7 +51,9 @@ def setup_masters_and_user(session, display_name="TestUser", staff_code="S999"):
         last_name="Sato", first_name="Sabikan", last_name_kana="サトウ", first_name_kana="サビカン",
         employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date.today()
     )
-    sabikan.pii = SupporterPII(email=f"{staff_code}@test.com")
+    pii = SupporterPII(email=f"{staff_code}@test.com")
+    pii.set_password("password123")
+    sabikan.pii = pii
     session.add(sabikan)
     session.flush()
     

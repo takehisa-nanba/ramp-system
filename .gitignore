@@ -56,8 +56,13 @@ tree.txt
 MARKDOWN_CHEAT_SHEET.md
 GIT_CHEAT_SHEET.md
 handover_*
+
 ---
 
+backend_architecture_analysis.md
+frontend_gap_analysis_and_plan.md
+
+---
 
 # --------------------------
 # 4. 初期データ関連
