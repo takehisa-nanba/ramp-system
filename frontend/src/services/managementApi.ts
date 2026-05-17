@@ -11,11 +11,17 @@ export interface StaffMember {
   id: number;
   staff_code: string;
   name: string;
+  last_name: string;
+  first_name: string;
+  last_name_kana: string;
+  first_name_kana: string;
   email: string | null;
   roles: string[];
   role_ids: number[];
   is_active: boolean;
   employment_type: string;
+  weekly_scheduled_minutes: number;
+  hire_date: string | null;
 }
 
 export interface Role {
@@ -63,6 +69,9 @@ export const managementApi = {
   registerStaff: async (data: any) => {
     const res = await axios.post(`${API_URL}/staff`, data, { headers: getAuthHeader() });
     return res.data;
+  },
+  updateStaff: async (staffId: number, data: any): Promise<void> => {
+    await axios.put(`${API_URL}/staff/${staffId}`, data, { headers: getAuthHeader() });
   },
 
   // Office

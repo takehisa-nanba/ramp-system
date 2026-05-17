@@ -86,6 +86,24 @@ export const useStaff = () => {
     });
   };
 
+  const handleUpdateStaff = async (data: any) => {
+    if (!selectedStaff) return false;
+    setIsSaving(true);
+    try {
+      await managementApi.updateStaff(selectedStaff.id, data);
+      showMessage('success', 'スタッフ情報を更新しました');
+      await fetchData();
+      return true;
+    } catch (err: any) {
+      console.error(err);
+      const errorMsg = err.response?.data?.msg || '情報の更新に失敗しました';
+      showMessage('error', errorMsg, 5000);
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return {
     staff,
     roles,
@@ -97,6 +115,7 @@ export const useStaff = () => {
     handleRoleToggle,
     handleSaveRoles,
     handleRegister,
+    handleUpdateStaff,
     refresh: fetchData
   };
 };

@@ -38,6 +38,7 @@
 
 - **フロントエンド関心の分離（Separation of Concerns）リファクタリング (2026年5月)**:
   - **利用者ダッシュボードのクリーン設計**: ロジック（API通信および状態遷移）を [useUserDashboard.ts](frontend/src/hooks/useUserDashboard.ts) に、表示レイアウト（UIマークアップ）を [UserDashboardView.tsx](frontend/src/components/UserDashboardView.tsx) に完全分離。300行超の巨大ファイルを約30行の極めてスリムなブリッジコンポーネントへ整理し、高い保守性とユニットテスト性を確保。
+  - **スタッフ詳細・編集機能の完全実装（Phase 1 残課題の解消）**: スタッフの基本情報（姓・名、ふりがな、コード、メール、雇用形態、週労働時間、有効ステータス、入社日）の閲覧カードと、インプットモード最適化済みの対話型「編集モード」フォームを [StaffDetailPanel.tsx](frontend/src/features/staff/components/StaffDetailPanel.tsx) に統合。対応するバックエンド `PUT /api/management/staff/<id>` API も新設し、双方向の更新処理が完全な型安全（tscエラーなし）で稼働。
 - **フェーズ1 セキュリティと基本管理機能の実装 (2026年5月)**:
   - **個人情報（PII）閲覧アクセス監査ログ**: PII属性（名前、連絡先、住所等）の復号化時に理由（10文字以上）の入力を必須とし、データベース内の `AuditActionLog` テーブルにアクセス証跡を永続保存するバックエンド監査APIを新設。
   - **揮発性個人情報保護ラッパー**: 目のアイコンクリックから監査ログを記録して一時的に PII を復号し、20秒後に自動的に再マスク表示へと切り替える保護ラッパーコンポーネント `PiiSecureWrapper` をフロントエンドに配備。

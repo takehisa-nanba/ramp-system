@@ -16,7 +16,8 @@ export const StaffManagement: React.FC = () => {
     setSelectedStaff,
     handleRoleToggle,
     handleSaveRoles,
-    handleRegister
+    handleRegister,
+    handleUpdateStaff
   } = useStaff();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -95,6 +96,7 @@ export const StaffManagement: React.FC = () => {
             isSaving={isSaving}
             onRoleToggle={handleRoleToggle}
             onSaveRoles={handleSaveRoles}
+            onUpdateStaff={handleUpdateStaff}
           />
         </div>
       </div>

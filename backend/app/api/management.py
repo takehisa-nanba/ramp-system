@@ -27,12 +27,77 @@ def list_staff():
     return jsonify([{
         "id": s.id,
         "name": f"{s.last_name} {s.first_name}",
+        "last_name": s.last_name,
+        "first_name": s.first_name,
+        "last_name_kana": s.last_name_kana,
+        "first_name_kana": s.first_name_kana,
         "staff_code": s.staff_code,
         "is_active": s.is_active,
+        "employment_type": s.employment_type,
+        "weekly_scheduled_minutes": s.weekly_scheduled_minutes,
+        "hire_date": s.hire_date.isoformat() if s.hire_date else None,
         "roles": [r.name for r in s.roles],
         "role_ids": [r.id for r in s.roles],
         "email": s.pii.email if s.pii else "N/A"
     } for s in staff_members]), 200
+
+@management_bp.route('/staff/<int:staff_id>', methods=['PUT'])
+@jwt_required()
+def update_staff(staff_id):
+    from backend.app.models import SupporterPII
+    
+    current = get_current_staff()
+    if not current: return jsonify({"msg": "Unauthorized"}), 401
+    
+    staff = Supporter.query.get_or_404(staff_id)
+    data = request.get_json()
+    
+    try:
+        # 重複チェック (他スタッフと競合しないか)
+        if 'staff_code' in data and data['staff_code'] != staff.staff_code:
+            if Supporter.query.filter_by(staff_code=data['staff_code']).first():
+                return jsonify({"msg": f"職員コード「{data['staff_code']}」は既に別のスタッフで使用されています"}), 400
+                
+        if 'email' in data and staff.pii and data['email'] != staff.pii.email:
+            if SupporterPII.query.filter_by(email=data['email']).first():
+                return jsonify({"msg": f"メールアドレス「{data['email']}」は既に別のスタッフで使用されています"}), 400
+
+        # 基本情報の更新
+        if 'last_name' in data: staff.last_name = data['last_name']
+        if 'first_name' in data: staff.first_name = data['first_name']
+        if 'last_name_kana' in data: staff.last_name_kana = data['last_name_kana']
+        if 'first_name_kana' in data: staff.first_name_kana = data['first_name_kana']
+        if 'staff_code' in data: staff.staff_code = data['staff_code']
+        if 'employment_type' in data: staff.employment_type = data['employment_type']
+        if 'weekly_scheduled_minutes' in data: 
+            staff.weekly_scheduled_minutes = int(data['weekly_scheduled_minutes'])
+        if 'is_active' in data: staff.is_active = bool(data['is_active'])
+        
+        if 'hire_date' in data and data['hire_date']:
+            try:
+                staff.hire_date = datetime.fromisoformat(data['hire_date']).date()
+            except: pass
+
+        # PII の更新
+        if 'email' in data and data['email']:
+            if not staff.pii:
+                staff.pii = SupporterPII(supporter_id=staff.id, email=data['email'])
+                db.session.add(staff.pii)
+            else:
+                staff.pii.email = data['email']
+                
+            # パスワード更新指示がある場合のみ
+            if 'password' in data and data['password']:
+                staff.pii.set_password(data['password'])
+
+        db.session.commit()
+        return jsonify({"msg": "Staff updated successfully"}), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        import logging
+        logging.error(f"Update Staff Error: {str(e)}")
+        return jsonify({"msg": f"更新に失敗しました: {str(e)}"}), 500
 
 @management_bp.route('/roles', methods=['GET'])
 @jwt_required()
