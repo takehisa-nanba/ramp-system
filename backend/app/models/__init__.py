@@ -28,6 +28,9 @@ from backend.app.models.core.supporter import (
 from backend.app.models.core.user import (
     User, UserPII
 )
+from backend.app.models.core.supporter_form_draft import (
+    SupporterFormDraft
+)
 from backend.app.models.core.user_profile import (
     UserProfile, EmergencyContact, FamilyMember
 )

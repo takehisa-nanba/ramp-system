@@ -13,6 +13,15 @@ if os.path.exists(dotenv_path):
 DATABASE_URL = os.environ.get('DATABASE_URL') or \
     'sqlite:///' + os.path.join(basedir, 'app.db')
 
+# ★★★ Windows/WSL 2環境用: localhost接続をWSL IPに動的解決するロジック ★★★
+# (ローカルWindows環境にPostgreSQLをインストールして直接接続するため、動的解決を無効化しそのまま返します)
+def resolve_wsl_ip(url: str) -> str:
+    return url
+
+DATABASE_URL = resolve_wsl_ip(DATABASE_URL)
+# ★★★ ここまで ★★★
+
+
 class Config:
     """
     アプリケーションの設定（コンフィグ）を管理するクラス。
@@ -35,7 +44,10 @@ class Config:
     # ★★★ ここまで ★★★
     
     # --- JWT-Extended 設定 (NEW) --- ★追加
+    import datetime
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'a-default-jwt-secret-for-testing'
+    # JWTの有効期限を 1日 に延長（デフォルト15分による開発中のトークン切れを防止）
+    JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(days=1)
     # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）
     JWT_TOKEN_LOCATION = ["cookies", "headers"]
 

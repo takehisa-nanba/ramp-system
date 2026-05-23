@@ -41,10 +41,11 @@ class SupportService:
     def __init__(self, compliance_service=None):
         self.compliance_service = compliance_service
 
-    def create_plan_draft(self, user_id: int, sabikan_id: int, based_on_policy_id: int) -> SupportPlan:
+    def create_plan_draft(self, user_id: int, created_by_id: int, based_on_policy_id: int) -> SupportPlan:
         """
         原案(DRAFT)を作成する。
         開始日は、初回利用日または前計画の終了日の翌日に設定し、遡及的連続性を担保する。
+        作成時点ではサビ管の承認(sabikan_approved_by_id)はまだ行われない。
         """
         policy = db.session.get(HolisticSupportPolicy, based_on_policy_id)
         if not policy or policy.user_id != user_id:
@@ -81,7 +82,6 @@ class SupportService:
             user_id=user_id,
             plan_version=1,
             plan_status='DRAFT',
-            sabikan_approved_by_id=sabikan_id,
             holistic_support_policy_id=based_on_policy_id,
             plan_start_date=plan_start_date,
             plan_end_date=plan_end_date 

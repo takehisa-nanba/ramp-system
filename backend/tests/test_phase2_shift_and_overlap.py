@@ -221,10 +221,35 @@ def test_staff_extended_features(app, client):
             db.session.add(job_title)
             db.session.flush()
 
+        # テスト用の事業所を取得または作成 (list_staff APIがoffice_idでフィルタするため必須)
+        from backend.app.models import OfficeSetting
+        office = db.session.query(OfficeSetting).first()
+        if not office:
+            from backend.app.models import Corporation, MunicipalityMaster
+            corp = db.session.query(Corporation).first()
+            if not corp:
+                corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
+                db.session.add(corp)
+                db.session.flush()
+            muni = db.session.query(MunicipalityMaster).first()
+            if not muni:
+                muni = MunicipalityMaster(municipality_code="999999", name="Test City")
+                db.session.add(muni)
+                db.session.flush()
+            office = OfficeSetting(
+                corporation_id=corp.id, 
+                office_name="Test Office", 
+                municipality_id=muni.id, 
+                full_time_weekly_minutes=2400
+            )
+            db.session.add(office)
+            db.session.flush()
+
         admin_staff = Supporter(
             staff_code="S_ADMIN_T",
             last_name="管理", first_name="者", last_name_kana="カンリ", first_name_kana="シャ",
-            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1)
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office.id
         )
         db.session.add(admin_staff)
         db.session.flush()
@@ -363,3 +388,110 @@ def test_staff_extended_features(app, client):
         assert assignment_after_update.deemed_expiry_date is None
 
         logger.info("✅ スタッフ管理拡張機能（カナ変換・PII・みなし配置等）のテスト完了")
+
+
+def test_staff_role_based_visibility(app, client):
+    """
+    管理者ロールに応じたスタッフ表示制御（SYSTEM/CORPORATEは全表示、JOBは特定事業所のみ）のテスト
+    """
+    logger.info("🚀 TEST START: 管理者ロールに応じたスタッフ表示制御のテスト")
+
+    from backend.app.models.masters.master_definitions import RoleMaster
+    from backend.app.models.core.office import OfficeSetting, Corporation
+    from backend.app.models import MunicipalityMaster
+    from backend.app.models.core.rbac_links import supporter_role_link
+
+    with app.app_context():
+        # 1. ロールと事業所の準備
+        sys_role = db.session.query(RoleMaster).filter_by(role_scope="SYSTEM").first()
+        if not sys_role:
+            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM")
+            db.session.add(sys_role)
+            db.session.flush()
+
+        job_role = db.session.query(RoleMaster).filter_by(role_scope="JOB").first()
+        if not job_role:
+            job_role = RoleMaster(name="事業所管理者", role_scope="JOB")
+            db.session.add(job_role)
+            db.session.flush()
+
+        corp = db.session.query(Corporation).first()
+        if not corp:
+            corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
+            db.session.add(corp)
+            db.session.flush()
+        muni = db.session.query(MunicipalityMaster).first()
+        if not muni:
+            muni = MunicipalityMaster(municipality_code="999999", name="Test City")
+            db.session.add(muni)
+            db.session.flush()
+
+        # 事業所1と事業所2を作成
+        office1 = OfficeSetting(corporation_id=corp.id, office_name="Office One", municipality_id=muni.id, full_time_weekly_minutes=2400)
+        office2 = OfficeSetting(corporation_id=corp.id, office_name="Office Two", municipality_id=muni.id, full_time_weekly_minutes=2400)
+        db.session.add_all([office1, office2])
+        db.session.flush()
+
+        # 職員1（事業所1所属）
+        staff1 = Supporter(
+            staff_code="S_VIS_001",
+            last_name="事業所1", first_name="職員", last_name_kana="イチ", first_name_kana="ショクイン",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office1.id
+        )
+        # 職員2（事業所2所属）
+        staff2 = Supporter(
+            staff_code="S_VIS_002",
+            last_name="事業所2", first_name="職員", last_name_kana="ニ", first_name_kana="ショクイン",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office2.id
+        )
+        # グローバル管理者（office_id=None）
+        global_admin = Supporter(
+            staff_code="S_VIS_GLB",
+            last_name="グローバル", first_name="管理者", last_name_kana="グローバル", first_name_kana="カンリシャ",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=None
+        )
+        # 事業所1の管理者（office_id=office1.id）
+        job_admin = Supporter(
+            staff_code="S_VIS_JOB",
+            last_name="事業所1", first_name="管理者", last_name_kana="イチ", first_name_kana="カンリシャ",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office1.id
+        )
+        db.session.add_all([staff1, staff2, global_admin, job_admin])
+        db.session.flush()
+
+        # ロールの紐付け
+        db.session.execute(supporter_role_link.insert().values(supporter_id=global_admin.id, role_id=sys_role.id))
+        db.session.execute(supporter_role_link.insert().values(supporter_id=job_admin.id, role_id=job_role.id))
+        db.session.commit()
+
+        # ----------------------------------------------------
+        # テスト1: SYSTEM管理者（グローバル）の表示範囲検証 -> 全職員が見えること
+        # ----------------------------------------------------
+        token_glb = create_access_token(identity=f"staff:{global_admin.id}")
+        res_glb = client.get('/api/management/staff', headers={'Authorization': f'Bearer {token_glb}'})
+        assert res_glb.status_code == 200
+        glb_list = res_glb.get_json()
+        glb_codes = [s["staff_code"] for s in glb_list]
+        assert "S_VIS_001" in glb_codes
+        assert "S_VIS_002" in glb_codes
+        assert "S_VIS_GLB" in glb_codes
+        assert "S_VIS_JOB" in glb_codes
+
+        # ----------------------------------------------------
+        # テスト2: JOB管理者（事業所1限定）の表示範囲検証 -> 事業所1の職員のみ見えること
+        # ----------------------------------------------------
+        token_job = create_access_token(identity=f"staff:{job_admin.id}")
+        res_job = client.get('/api/management/staff', headers={'Authorization': f'Bearer {token_job}'})
+        assert res_job.status_code == 200
+        job_list = res_job.get_json()
+        job_codes = [s["staff_code"] for s in job_list]
+        assert "S_VIS_001" in job_codes
+        assert "S_VIS_JOB" in job_codes
+        assert "S_VIS_002" not in job_codes
+        assert "S_VIS_GLB" not in job_codes
+
+        logger.info("✅ 管理者ロールに応じたスタッフ表示制御のテスト完了")

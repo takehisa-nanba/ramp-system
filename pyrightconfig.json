@@ -1,6 +1,6 @@
 {
-  "venvPath": ".",
-  "venv": "backend/venv",
+  "venvPath": "c:\\Users\\難波\\Desktop\\ramp-system\\backend",
+  "venv": "venv",
   "include": [
     "backend"
   ],

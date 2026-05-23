@@ -5,13 +5,14 @@ from backend.app.models import Supporter, OfficeSetting, RoleMaster, PermissionM
 from sqlalchemy.orm import joinedload
 from datetime import datetime
 import logging
+from backend.app.utils.text_helpers import convert_to_katakana
 
 management_bp = Blueprint('management', __name__, url_prefix='/api/management')
 
 def get_current_staff():
-    identity = get_jwt_identity()
-    if isinstance(identity, str) and identity.startswith('staff:'):
-        staff_id = int(identity.split(':')[1])
+    from backend.app.services.core_service import parse_jwt_identity
+    prefix, staff_id = parse_jwt_identity(get_jwt_identity())
+    if prefix == 'staff' and staff_id:
         return Supporter.query.get(staff_id)
     return None
 
@@ -23,8 +24,22 @@ def list_staff():
     if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
         return jsonify({"msg": "アクセス権限がありません。この操作には管理者権限が必要です。"}), 403
     
-    # 事業所内の全スタッフを取得
-    staff_members = Supporter.query.filter_by(office_id=current.office_id).all()
+    # SYSTEM または CORPORATE ロールの場合は全スタッフを取得、JOBロール（事業所管理者）の場合は自身の事業所のスタッフのみ取得
+    is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] for r in current.roles)
+    
+    if is_global_admin:
+        staff_members = Supporter.query.all()
+    else:
+        office_id = current.office_id
+        if not office_id:
+            # 安全なフォールバック判定
+            first_office = OfficeSetting.query.first()
+            office_id = first_office.id if first_office else None
+            
+        if office_id:
+            staff_members = Supporter.query.filter_by(office_id=office_id).all()
+        else:
+            staff_members = []
     
     return jsonify([{
         "id": s.id,
@@ -111,9 +126,6 @@ def update_staff(staff_id):
         if 'last_name_kana' in data: staff.last_name_kana = data['last_name_kana']
         if 'first_name_kana' in data: staff.first_name_kana = data['first_name_kana']
         if 'staff_code' in data: staff.staff_code = data['staff_code']
-        def to_katakana(text):
-            if not text: return text
-            return "".join(chr(ord(c) + 96) if 0x3041 <= ord(c) <= 0x3096 else c for c in text)
 
         if 'employment_type' in data: staff.employment_type = data['employment_type']
         if 'weekly_scheduled_minutes' in data: 
@@ -121,9 +133,8 @@ def update_staff(staff_id):
         if 'is_active' in data: staff.is_active = bool(data['is_active'])
         if 'allow_overlap_calculation' in data:
             staff.allow_overlap_calculation = bool(data['allow_overlap_calculation'])
-        
-        if 'last_name_kana' in data: staff.last_name_kana = to_katakana(data['last_name_kana'])
-        if 'first_name_kana' in data: staff.first_name_kana = to_katakana(data['first_name_kana'])
+        if 'last_name_kana' in data: staff.last_name_kana = convert_to_katakana(data['last_name_kana'])
+        if 'first_name_kana' in data: staff.first_name_kana = convert_to_katakana(data['first_name_kana'])
 
         if 'hire_date' in data and data['hire_date']:
             try:
@@ -144,51 +155,65 @@ def update_staff(staff_id):
             roles = RoleMaster.query.filter(RoleMaster.id.in_(role_ids)).all()
             staff.roles = roles
 
-        # 福祉実務職務 (SupporterJobAssignment) の同期更新
+        # 福祉実務職務 (SupporterJobAssignment) の同期更新 (差分整合)
         if 'job_assignments' in data:
-            # 既存の割り当てを一度完全削除
-            SupporterJobAssignment.query.filter_by(supporter_id=staff.id).delete()
+            from backend.app.services.core_service import reconcile_relations
+            from datetime import date
             
-            # 所属事業所の OfficeServiceConfiguration を取得
             service_config = OfficeServiceConfiguration.query.filter_by(office_id=staff.office_id).first()
             service_config_id = service_config.id if service_config else 1
             
-            for a in data['job_assignments']:
+            def match_job(existing, incoming):
+                return existing.job_title_id == int(incoming['job_title_id'])
+                
+            def update_job(item, incoming):
+                item.supporter_id = staff.id
+                item.job_title_id = int(incoming['job_title_id'])
+                item.office_service_configuration_id = service_config_id
+                item.start_date = staff.hire_date or date.today()
+                item.assigned_minutes = int(incoming['assigned_minutes'])
+                item.is_deemed_assignment = bool(incoming.get('is_deemed_assignment', False))
                 expiry_val = None
-                if a.get('deemed_expiry_date'):
+                if incoming.get('deemed_expiry_date'):
                     try:
-                        expiry_val = datetime.fromisoformat(a['deemed_expiry_date']).date()
+                        expiry_val = datetime.fromisoformat(incoming['deemed_expiry_date']).date()
                     except: pass
+                item.deemed_expiry_date = expiry_val
+                
+            reconcile_relations(
+                staff.job_assignments,
+                data['job_assignments'],
+                SupporterJobAssignment,
+                db.session,
+                match_job,
+                update_job
+            )
 
-                new_assign = SupporterJobAssignment(
-                    supporter_id=staff.id,
-                    job_title_id=int(a['job_title_id']),
-                    office_service_configuration_id=service_config_id,
-                    start_date=staff.hire_date or date.today(),
-                    assigned_minutes=int(a['assigned_minutes']),
-                    is_deemed_assignment=bool(a.get('is_deemed_assignment', False)),
-                    deemed_expiry_date=expiry_val
-                )
-                db.session.add(new_assign)
-
-        # 曜日別契約シフトパターン (EmploymentShiftPattern) の同期更新
+        # 曜日別契約シフトパターン (EmploymentShiftPattern) の同期更新 (差分整合)
         if 'shift_patterns' in data:
             from backend.app.models import EmploymentShiftPattern
-            # 既存のパターンを全削除
-            EmploymentShiftPattern.query.filter_by(supporter_id=staff.id).delete()
+            from backend.app.services.core_service import reconcile_relations
             
-            for p in data['shift_patterns']:
-                day = p.get('day_of_week')
-                if not day: continue
+            valid_patterns = [p for p in data['shift_patterns'] if p.get('day_of_week')]
+            
+            def match_shift(existing, incoming):
+                return existing.day_of_week == incoming['day_of_week']
                 
-                new_pat = EmploymentShiftPattern(
-                    supporter_id=staff.id,
-                    day_of_week=day,
-                    start_time=p.get('start_time'),
-                    end_time=p.get('end_time'),
-                    break_minutes=int(p.get('break_minutes', 0))
-                )
-                db.session.add(new_pat)
+            def update_shift(item, incoming):
+                item.supporter_id = staff.id
+                item.day_of_week = incoming['day_of_week']
+                item.start_time = incoming.get('start_time')
+                item.end_time = incoming.get('end_time')
+                item.break_minutes = int(incoming.get('break_minutes', 0))
+                
+            reconcile_relations(
+                staff.shift_patterns,
+                valid_patterns,
+                EmploymentShiftPattern,
+                db.session,
+                match_shift,
+                update_shift
+            )
 
         # PII の更新
         if any(k in data for k in ['email', 'personal_phone', 'address', 'bank_account_info', 'password']):
@@ -401,11 +426,6 @@ def register_staff():
             if first_office:
                 target_office_id = first_office.id
 
-        # ひらがなカタカナ変換関数
-        def to_katakana(text):
-            if not text: return text
-            return "".join(chr(ord(c) + 96) if 0x3041 <= ord(c) <= 0x3096 else c for c in text)
-
         ret_date = None
         if data.get('retirement_date'):
             try:
@@ -418,8 +438,8 @@ def register_staff():
             staff_code=data['staff_code'],
             last_name=data['last_name'],
             first_name=data['first_name'],
-            last_name_kana=to_katakana(data['last_name_kana']),
-            first_name_kana=to_katakana(data['first_name_kana']),
+            last_name_kana=convert_to_katakana(data['last_name_kana']),
+            first_name_kana=convert_to_katakana(data['first_name_kana']),
             hire_date=datetime.fromisoformat(data['hire_date']).date(),
             retirement_date=ret_date,
             employment_type=data.get('employment_type', 'FULL_TIME'),

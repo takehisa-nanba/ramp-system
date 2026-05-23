@@ -1,8 +1,20 @@
 {
-  "python.defaultInterpreterPath": "backend/venv/Scripts/python.exe",
+  "python.defaultInterpreterPath": "${workspaceFolder}/backend/venv/Scripts/python.exe",
   "python.analysis.extraPaths": [
     "./backend"
   ],
-  "python.analysis.venvPath": ".",
-  "python.analysis.venv": "backend/venv"
+  "python.analysis.venvPath": "c:\\Users\\難波\\Desktop\\ramp-system\\backend",
+  "python.analysis.venv": "venv",
+  "sqltools.connections": [
+    {
+      "name": "Ramp-System (Local)",
+      "driver": "PostgreSQL",
+      "server": "127.0.0.1",
+      "port": 5432,
+      "database": "ramp_db",
+      "username": "ramp_user",
+      "password": "ramp_pass",
+      "askForPassword": false
+    }
+  ]
 }

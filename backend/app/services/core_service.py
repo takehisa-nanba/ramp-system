@@ -134,9 +134,37 @@ def authenticate_user(login_id, password):
     return None
 
 
+def parse_jwt_identity(identity):
+    """
+    JWTのアイデンティティ(例: 'staff:1' や 'user:12')から
+    ロールタイプ('staff' または 'user')と、数値IDを安全に抽出する。
+    """
+    if not identity:
+        return None, None
+    if isinstance(identity, int):
+        return 'staff', identity
+    
+    identity_str = str(identity)
+    if ':' in identity_str:
+        try:
+            prefix, actual_id = identity_str.split(':', 1)
+            return prefix, int(actual_id)
+        except ValueError:
+            return None, None
+    else:
+        try:
+            return 'staff', int(identity_str)
+        except ValueError:
+            return None, None
+
+
 def check_permission(supporter_id, permission_name):
     """職員が特定の権限(Permission)を持っているか確認する。"""
-    supporter = db.session.get(Supporter, supporter_id)
+    prefix, actual_id = parse_jwt_identity(supporter_id)
+    if not actual_id or prefix != 'staff':
+        return False
+
+    supporter = db.session.get(Supporter, actual_id)
     if not supporter:
         return False
     
@@ -180,3 +208,40 @@ def check_pii_access(supporter_id: int) -> bool:
     
     logger.debug(f"✅ Supporter {supporter_id} has PII access.")
     return True
+
+def reconcile_relations(existing_items, incoming_payload, model_class, db_session, unique_match_func, update_func):
+    """
+    関連テーブル（子テーブル）の差分整合を行う汎用関数。
+    
+    :param existing_items: データベースに存在する既存レコードのリスト
+    :param incoming_payload: クライアントから送信されたデータのリスト (dictのリスト)
+    :param model_class: 新規作成する際のSQLAlchemyモデルクラス
+    :param db_session: SQLAlchemyのデータベースセッション
+    :param unique_match_func: (item, payload) -> bool : 既存レコードと送信データが同一要素か判定する関数
+    :param update_func: (item, payload) -> None : 既存レコードのプロパティを更新する関数
+    """
+    # 既存の要素を追跡するリスト（変更されないようにコピーする）
+    unmatched_existing = list(existing_items)
+    
+    for payload in incoming_payload:
+        # payloadとマッチする既存レコードを探す
+        matched_item = None
+        for item in unmatched_existing:
+            if unique_match_func(item, payload):
+                matched_item = item
+                break
+        
+        if matched_item:
+            # マッチした場合はUPDATE
+            update_func(matched_item, payload)
+            # 処理済みとしてリストから削除
+            unmatched_existing.remove(matched_item)
+        else:
+            # マッチしない場合はINSERT
+            new_item = model_class()
+            update_func(new_item, payload)
+            db_session.add(new_item)
+            
+    # ペイロードに含まれていなかった既存レコードはDELETE
+    for leftover in unmatched_existing:
+        db_session.delete(leftover)

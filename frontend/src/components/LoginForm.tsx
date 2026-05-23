@@ -19,7 +19,7 @@ type AuthState = {
 // =================================================================
 const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = ({ onLoginSuccess }) => {
   const [loginId, setLoginId] = useState('admin@example.com');
-  const [password, setPassword] = useState('password');
+  const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -101,8 +101,8 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
             </button>
           </form>
           <div className="mt-8 pt-6 border-t border-gray-100 text-center">
-            <p className="text-xs text-gray-400 font-mono">Staff: admin@example.com / password</p>
-            <p className="text-xs text-gray-400 font-mono mt-1">User: USR001 / password</p>
+            <p className="text-xs text-gray-400 font-mono">Staff: admin@example.com / password123</p>
+            <p className="text-xs text-gray-400 font-mono mt-1">User: USR001 / password123</p>
           </div>
         </div>
       </div>

@@ -59,10 +59,17 @@ with app.app_context():
         if not StaffActivityMaster.query.filter_by(activity_name=tag['name']).first():
             db.session.add(StaffActivityMaster(activity_name=tag['name'], is_direct_support=tag['is_direct']))
 
-    active_status = StatusMaster.query.filter_by(name='利用中').first()
-    if not active_status:
-        active_status = StatusMaster(name='利用中')
-        db.session.add(active_status)
+    statuses_to_seed = [
+        {'name': '問い合わせ', 'description': '利用前の見込み客や問い合わせ段階', 'sort_order': 1},
+        {'name': '利用中', 'description': '現在サービスを利用している状態', 'sort_order': 2},
+        {'name': '利用終了（定着支援中）', 'description': '就職し、6か月の定着支援期間中', 'sort_order': 3},
+        {'name': '利用終了（定着完了）', 'description': '6か月の定着支援が完了した状態', 'sort_order': 4},
+        {'name': '利用終了（退所）', 'description': '就職以外の理由で利用を終了した状態', 'sort_order': 5},
+    ]
+    for s_data in statuses_to_seed:
+        status = StatusMaster.query.filter_by(name=s_data['name']).first()
+        if not status:
+            db.session.add(StatusMaster(name=s_data['name'], description=s_data['description'], sort_order=s_data['sort_order']))
     
     db.session.commit()
 
@@ -154,7 +161,7 @@ with app.app_context():
       db.session.add(admin)
       db.session.commit()
       pii = SupporterPII(supporter_id=admin.id, email='admin@example.com')
-      pii.set_password('password')
+      pii.set_password('password123')
       db.session.add(pii)
       db.session.commit()
 
@@ -173,7 +180,7 @@ with app.app_context():
         db.session.commit()
         
         pii_staff = SupporterPII(supporter_id=staff_user.id, email='staff@example.com')
-        pii_staff.set_password('password')
+        pii_staff.set_password('password123')
         db.session.add(pii_staff)
         db.session.commit()
 
@@ -195,7 +202,7 @@ with app.app_context():
         user_pii.last_name = "佐藤"
         user_pii.first_name = "健太"
         user_pii.email = "kenta.sato@example.com"
-        user_pii.set_password("password") # ★ パスワード設定
+        user_pii.set_password("password123") # ★ パスワード設定
         db.session.add(user_pii)
 
         db.session.commit()
@@ -263,7 +270,7 @@ with app.app_context():
         user2_pii.last_name = "鈴木"
         user2_pii.first_name = "花子"
         user2_pii.email = "hanako.suzuki@example.com"
-        user2_pii.set_password("password")
+        user2_pii.set_password("password123")
         db.session.add(user2_pii)
 
         db.session.commit()
@@ -295,7 +302,7 @@ with app.app_context():
         user3_pii.last_name = "高橋"
         user3_pii.first_name = "一郎"
         user3_pii.email = "ichiro.takahashi@example.com"
-        user3_pii.set_password("password")
+        user3_pii.set_password("password123")
         db.session.add(user3_pii)
 
         db.session.commit()

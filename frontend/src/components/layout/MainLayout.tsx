@@ -41,8 +41,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
     { name: 'ダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
     { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} />, badge: 3 },
     { name: 'タイムカード', path: '/timecard', icon: <Clock size={18} /> },
-    { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
-    { name: '個別支援計画', path: '/plans', icon: <FileText size={18} /> },
+    { name: '利用者管理', path: '/users', icon: <Users size={18} /> },
   ];
 
   const adminItems: NavItem[] = hasAdminRole ? [

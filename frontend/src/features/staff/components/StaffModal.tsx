@@ -1,95 +1,42 @@
-import React, { useState, useEffect } from 'react';
-import { X, UserPlus, Type, Key, Mail, Calendar, Clock, ShieldCheck, Briefcase, Plus, Trash2, HelpCircle, Building2, Server } from 'lucide-react';
-import type { Role, JobTitle, NewStaffData, JobAssignment } from '../types';
+import React, { useState } from 'react';
+import { X, UserPlus, Type, Key, Mail, Calendar, Clock, ShieldCheck, Briefcase, Plus, Trash2, HelpCircle, Building2, Server, Eye, EyeOff } from 'lucide-react';
+import type { Role, JobTitle, NewStaffData, JobAssignment, StaffMember } from '../types';
+import { useStaffForm } from '../hooks/useStaffForm';
+import { calculateShiftWorkingHours, calculateTotalAssignedHours, calculateTotalShiftWorkingHours, validateAssignedHoursMismatch, validateShiftHoursMismatch } from '../../../utils/shiftCalculator';
 
-interface RegisterStaffModalProps {
+interface StaffModalProps {
   isOpen: boolean;
   onClose: () => void;
   roles: Role[];
   jobTitles: JobTitle[];
   isSaving: boolean;
-  onRegister: (data: NewStaffData) => Promise<boolean>;
+  mode: 'create' | 'edit';
+  staff: StaffMember | null;
+  onSave: (data: NewStaffData) => Promise<boolean>;
 }
 
-const DAYS_OF_WEEK = [
-  { key: 'Monday', label: '月曜日' },
-  { key: 'Tuesday', label: '火曜日' },
-  { key: 'Wednesday', label: '水曜日' },
-  { key: 'Thursday', label: '木曜日' },
-  { key: 'Friday', label: '金曜日' },
-  { key: 'Saturday', label: '土曜日' },
-  { key: 'Sunday', label: '日曜日' }
-];
-
-export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
+export const StaffModal: React.FC<StaffModalProps> = ({
   isOpen,
   onClose,
   roles,
   jobTitles,
   isSaving,
-  onRegister
+  mode,
+  staff,
+  onSave
 }) => {
-  // --- ログインユーザーの最高セキュリティ・ロールを判定し、特権昇格を防ぐ ---
-  const getLoginUserMaxRole = (): 'SYSTEM' | 'CORPORATE' | 'JOB' | 'NONE' => {
-    try {
-      const scopesJson = localStorage.getItem('user_role_scopes');
-      if (!scopesJson) return 'NONE';
-      const scopes: string[] = JSON.parse(scopesJson);
-      
-      if (scopes.includes('SYSTEM')) return 'SYSTEM';
-      if (scopes.includes('CORPORATE')) return 'CORPORATE';
-      if (scopes.includes('JOB')) return 'JOB';
-      return 'NONE';
-    } catch {
-      return 'NONE';
-    }
-  };
+  const {
+    form,
+    setForm,
+    validationError,
+    setValidationError,
+    loginUserRole,
+    handleLayerRoleChange,
+    DAYS_OF_WEEK
+  } = useStaffForm(isOpen, mode, staff, roles, jobTitles);
 
-  const loginUserRole = getLoginUserMaxRole();
-
-  // --- フォーム初期状態 ---
-  const getInitialFormState = () => ({
-    last_name: '',
-    first_name: '',
-    last_name_kana: '',
-    first_name_kana: '',
-    staff_code: '',
-    email: '',
-    employment_type: 'FULL_TIME',
-    password: '',
-    hire_date: new Date().toISOString().split('T')[0],
-    retirement_date: '',
-    weekly_scheduled_hours: '40',
-    is_active: true,
-    role_ids: [] as number[],
-    
-    // 暗号化個人情報 (PII)
-    personal_phone: '',
-    address: '',
-    bank_account_info: '',
-    
-    // 実務職務設定用
-    main_job_title_id: jobTitles[0]?.id || 0,
-    main_is_deemed_assignment: false,
-    main_deemed_expiry_date: '',
-    is_multiple_jobs: false,
-    allow_overlap_calculation: false,
-    job_assignments: [] as { job_title_id: number; hours: string; is_deemed_assignment?: boolean; deemed_expiry_date?: string }[],
-
-    // ★ 曜日別契約シフト設定用
-    is_shift_pattern_enabled: false,
-    shift_patterns: DAYS_OF_WEEK.map(d => ({
-      day_of_week: d.key,
-      start_time: '09:00',
-      end_time: '18:00',
-      break_minutes: 60,
-      is_active: false
-    }))
-  });
-
-  const [form, setForm] = useState(getInitialFormState());
-  const [validationError, setValidationError] = useState<string | null>(null);
   const [isPiiOpen, setIsPiiOpen] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // カタカナ自動変換
   const toKatakana = (val: string) => {
@@ -98,89 +45,16 @@ export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
     });
   };
 
-  // --- 3つのセキュリティレイヤー（システム・法人・事業所）それぞれのセレクトボックス変更ハンドラー ---
-  const handleLayerRoleChange = (layer: 'SYSTEM' | 'CORPORATE' | 'JOB_LAYER', newRoleId: number) => {
-    setForm(prev => {
-      const sysRole = roles.find(r => r.scope === 'SYSTEM');
-      const corpRole = roles.find(r => r.scope === 'CORPORATE');
-      const jobRole = roles.find(r => r.scope === 'JOB');
-      const staffRole = roles.find(r => r.scope === 'STAFF');
-
-      let updated = [...prev.role_ids];
-
-      if (layer === 'SYSTEM') {
-        if (sysRole) updated = updated.filter(id => id !== sysRole.id);
-        if (newRoleId > 0) updated.push(newRoleId);
-      } else if (layer === 'CORPORATE') {
-        if (corpRole) updated = updated.filter(id => id !== corpRole.id);
-        if (newRoleId > 0) updated.push(newRoleId);
-      } else if (layer === 'JOB_LAYER') {
-        if (jobRole) updated = updated.filter(id => id !== jobRole.id);
-        if (staffRole) updated = updated.filter(id => id !== staffRole.id);
-        if (newRoleId > 0) updated.push(newRoleId);
-      }
-
-      return { ...prev, role_ids: updated };
-    });
-  };
-
-  // ダイアログが開いた際、または jobTitles / roles が読み込まれた際にデフォルト値を初期化する
-  useEffect(() => {
-    if (isOpen) {
-      const defaultJobId = jobTitles[0]?.id || 0;
-      const staffRole = roles.find(r => r.scope === 'STAFF');
-      const defaultRoleIds = staffRole ? [staffRole.id] : [];
-
-      setForm(prev => ({
-        ...prev,
-        main_job_title_id: prev.main_job_title_id || defaultJobId,
-        role_ids: prev.role_ids.length === 0 ? defaultRoleIds : prev.role_ids,
-        job_assignments: prev.job_assignments.length === 0 
-          ? [{ job_title_id: defaultJobId, hours: '40' }] 
-          : prev.job_assignments,
-        is_shift_pattern_enabled: false,
-        shift_patterns: DAYS_OF_WEEK.map(d => ({
-          day_of_week: d.key,
-          start_time: '09:00',
-          end_time: '18:00',
-          break_minutes: 60,
-          is_active: false
-        }))
-      }));
-      setValidationError(null);
-    }
-  }, [isOpen, jobTitles, roles]);
-
   if (!isOpen) return null;
 
   // --- リアルタイム兼務時間合計の算出 ＆ バリデーションチェック ---
   const contractHours = parseFloat(form.weekly_scheduled_hours) || 0;
-  const assignedHoursSum = form.is_multiple_jobs
-    ? form.job_assignments.reduce((sum, item) => sum + (parseFloat(item.hours) || 0), 0)
-    : contractHours;
+  const assignmentsForCalc = form.job_assignments.map(a => ({ job_title_id: a.job_title_id, hours: a.hours }));
+  const isHoursMismatch = validateAssignedHoursMismatch(contractHours, assignmentsForCalc, form.is_multiple_jobs, form.allow_overlap_calculation);
+  const assignedHoursSum = form.is_multiple_jobs ? calculateTotalAssignedHours(assignmentsForCalc) : contractHours;
 
-  const isHoursMismatch = !form.allow_overlap_calculation && form.is_multiple_jobs && assignedHoursSum > contractHours;
-
-  // 曜日ごとの実働時間（時間換算）を計算
-  const calculateShiftWorkingHours = (pattern: typeof form.shift_patterns[0]) => {
-    if (!pattern.is_active || !pattern.start_time || !pattern.end_time) return 0;
-    const [sh, sm] = pattern.start_time.split(':').map(Number);
-    const [eh, em] = pattern.end_time.split(':').map(Number);
-    
-    const startMinutes = sh * 60 + sm;
-    const endMinutes = eh * 60 + em;
-    
-    if (endMinutes <= startMinutes) return 0;
-    
-    const workingMinutes = (endMinutes - startMinutes) - pattern.break_minutes;
-    return Math.max(0, workingMinutes / 60);
-  };
-
-  const totalShiftWorkingHours = form.is_shift_pattern_enabled
-    ? form.shift_patterns.reduce((sum, p) => sum + calculateShiftWorkingHours(p), 0)
-    : 0;
-
-  const isShiftHoursMismatch = form.is_shift_pattern_enabled && Math.abs(totalShiftWorkingHours - contractHours) > 0.01;
+  const totalShiftWorkingHours = form.is_shift_pattern_enabled ? calculateTotalShiftWorkingHours(form.shift_patterns) : 0;
+  const isShiftHoursMismatch = validateShiftHoursMismatch(contractHours, form.shift_patterns, form.is_shift_pattern_enabled);
 
   // --- ハンドラ ---
   const handleAddJobAssignment = () => {
@@ -308,10 +182,8 @@ export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
       bank_account_info: form.bank_account_info || undefined
     };
 
-    const success = await onRegister(payload);
+    const success = await onSave(payload);
     if (success) {
-      // 登録成功時はフォームリセット
-      setForm(getInitialFormState());
       onClose();
     }
   };
@@ -326,8 +198,14 @@ export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
               <UserPlus size={24} />
             </div>
             <div>
-              <h2 className="text-xl font-black text-slate-800">新規スタッフ登録</h2>
-              <p className="text-xs text-slate-400 font-bold">新しく稼働するスタッフのアカウントと職務を作成します</p>
+              <h2 className="text-xl font-black text-slate-800">
+                {mode === 'create' ? '新規スタッフ登録' : 'スタッフ情報の編集'}
+              </h2>
+              <p className="text-xs text-slate-400 font-bold">
+                {mode === 'create' 
+                  ? '新しく稼働するスタッフのアカウントと職務を作成します' 
+                  : 'スタッフのアカウント設定や職務内容を更新します'}
+              </p>
             </div>
           </div>
           <button
@@ -515,16 +393,25 @@ export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
             {/* パスワード & 週所定労働時間 */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <label className="text-xs font-black text-slate-400 uppercase tracking-widest font-bold">初期パスワード</label>
+                <label className="text-xs font-black text-slate-400 uppercase tracking-widest font-bold">
+                  {mode === 'create' ? '初期パスワード' : 'パスワード (変更時のみ入力)'}
+                </label>
                 <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all">
                   <Key size={16} className="text-slate-400 font-bold" />
                   <input
-                    type="password"
-                    placeholder="省略時は password123"
+                    type={showPassword ? "text" : "password"}
+                    placeholder={mode === 'create' ? '省略時は password123' : '変更しない場合は空欄'}
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     className="bg-transparent border-0 outline-none w-full text-slate-800 font-bold placeholder-slate-400"
                   />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="text-slate-400 hover:text-slate-650 transition-colors focus:outline-none shrink-0"
+                  >
+                    {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                  </button>
                 </div>
               </div>
               <div className="space-y-2">
@@ -1076,4 +963,4 @@ export const RegisterStaffModal: React.FC<RegisterStaffModalProps> = ({
   );
 };
 
-export default RegisterStaffModal;
+export default StaffModal;

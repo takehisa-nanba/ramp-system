@@ -5,7 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import SupportPlan, IndividualSupportGoal
 from backend.app.services.support_service import SupportService
-from backend.app.services.core_service import check_permission
+from backend.app.services.core_service import check_permission, parse_jwt_identity
 
 plans_bp = Blueprint('plans', __name__, url_prefix='/api/plans')
 support_service = SupportService()
@@ -19,15 +19,14 @@ support_service = SupportService()
 def create_plan():
     """
     新しい個別支援計画の原案 (DRAFT) を作成する。
-    権限 'サービス管理責任者' が必要。
     """
-    supporter_id = int(get_jwt_identity())
+    role_type, supporter_id = parse_jwt_identity(get_jwt_identity())
     data = request.get_json()
     user_id = data.get('user_id')
     policy_id = data.get('holistic_support_policy_id')
 
-    if not check_permission(supporter_id, 'サービス管理責任者'):
-        return jsonify({"msg": "Permission denied: Requires 'サービス管理責任者'"}), 403
+    if role_type != 'staff':
+        return jsonify({"msg": "Permission denied: Requires 'staff' role"}), 403
 
     if not user_id or not policy_id:
         return jsonify({"msg": "Missing user_id or holistic_support_policy_id"}), 400
@@ -35,7 +34,7 @@ def create_plan():
     try:
         new_plan = support_service.create_plan_draft(
             user_id=user_id,
-            sabikan_id=supporter_id,
+            created_by_id=supporter_id,
             based_on_policy_id=policy_id
         )
         db.session.commit()
@@ -60,7 +59,7 @@ def add_individual_goal(plan_id):
     """
     既存の計画に具体的な個別支援目標を追加する。
     """
-    supporter_id = int(get_jwt_identity())
+    _, supporter_id = parse_jwt_identity(get_jwt_identity())
     data = request.get_json()
     short_term_goal_id = data.get('short_term_goal_id')
     
@@ -106,7 +105,7 @@ def activate_plan(plan_id):
     """
     サビ管承認と利用者同意が完了した計画を ACTIVE にする。
     """
-    supporter_id = int(get_jwt_identity())
+    _, supporter_id = parse_jwt_identity(get_jwt_identity())
     data = request.get_json()
     consent_log_id = data.get('consent_log_id')
     

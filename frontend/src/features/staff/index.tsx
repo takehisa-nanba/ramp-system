@@ -2,8 +2,7 @@ import React, { useState } from 'react';
 import { Search, UserPlus, Sparkles, ShieldCheck } from 'lucide-react';
 import { useStaff } from './hooks/useStaff';
 import { StaffList } from './components/StaffList';
-import { RegisterStaffModal } from './components/RegisterStaffModal';
-import { EditStaffModal } from './components/EditStaffModal';
+import { StaffModal } from './components/StaffModal';
 import type { StaffMember } from './types';
 
 export const StaffManagement: React.FC = () => {
@@ -110,30 +109,26 @@ export const StaffManagement: React.FC = () => {
         />
       </div>
 
-      {/* スタッフ新規登録モーダル */}
-      <RegisterStaffModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        roles={roles}
-        jobTitles={jobTitles}
-        isSaving={isSaving}
-        onRegister={handleRegister}
-      />
-
-      {/* スタッフ情報編集モーダル (新規追加) */}
-      <EditStaffModal
-        isOpen={editingStaff !== null}
-        onClose={() => setEditingStaff(null)}
+      {/* スタッフ統合モーダル (新規・編集兼用) */}
+      <StaffModal
+        isOpen={isModalOpen || editingStaff !== null}
+        mode={editingStaff ? 'edit' : 'create'}
         staff={editingStaff}
+        onClose={() => {
+          setIsModalOpen(false);
+          setEditingStaff(null);
+        }}
         roles={roles}
         jobTitles={jobTitles}
         isSaving={isSaving}
-        onUpdate={async (id, data) => {
-          const success = await handleUpdateStaff(id, data);
-          if (success) {
-            setEditingStaff(null);
+        onSave={async (data) => {
+          if (editingStaff) {
+            const success = await handleUpdateStaff(editingStaff.id, data);
+            if (success) setEditingStaff(null);
+            return success;
+          } else {
+            return await handleRegister(data);
           }
-          return success;
         }}
       />
     </div>
