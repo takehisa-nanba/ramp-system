@@ -1,20 +1,23 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, User, Calendar, MapPin, Phone, Award, Type, Loader2, Mail, Check, Plus, Trash2, Heart, FileText } from 'lucide-react';
-import { updateUserDetails, saveDraft, loadDraft, clearDraft, type UserPiiResponse, type UpdateUserData } from '../../services/userService.ts';
-import { toKatakana, isKanaOrHira, fetchAddressByZip } from '../../utils/inputHelpers.ts';
+import { updateUserDetails, saveDraft, loadDraft, clearDraft, type UserPiiResponse, type UpdateUserData } from '../../services/userService';
+import { toKatakana, isKanaOrHira, fetchAddressByZip } from '../../utils/inputHelpers';
+import { UserCertificateTab } from './UserCertificateTab';
 
 interface EditUserModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: UserPiiResponse | null;
   onUpdateSuccess: () => void;
+  initialTab?: 'basic' | 'extra' | 'certificate';
 }
 
 export const EditUserModal: React.FC<EditUserModalProps> = ({
   isOpen,
   onClose,
   user,
-  onUpdateSuccess
+  onUpdateSuccess,
+  initialTab = 'basic'
 }) => {
   const [form, setForm] = useState({
     display_name: '',
@@ -40,14 +43,14 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
   const [zipLoading, setZipLoading] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
 
-  const [activeTab, setActiveTab] = useState<'basic' | 'extra'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'extra' | 'certificate'>('basic');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // オートセーブ防止フラグ (読み込み中や送信完了時はセーブしない)
   const isLoadedRef = useRef(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ドラフトのユニークキー (edit_user_<userId>)
   const draftKey = user ? `edit_user_${user.id}` : '';
@@ -86,7 +89,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
       setZipError(null);
       setError(null);
       setSuccess(null);
-      setActiveTab('basic');
+      setActiveTab(initialTab);
 
       // サーバーから下書きをフェッチ（前回の一時保存が残っていれば復元）
       const fetchDraft = async () => {
@@ -96,8 +99,8 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             setForm(prev => ({
               ...prev,
               ...draft,
-              emergency_contacts: draft.emergency_contacts || prev.emergency_contacts,
-              profile: draft.profile || prev.profile
+              emergency_contacts: (draft.emergency_contacts as any) || prev.emergency_contacts,
+              profile: (draft.profile as any) || prev.profile
             }));
             setSuccess('サーバーから一時保存されていた書きかけの編集データを復元しました。');
             setTimeout(() => setSuccess(null), 3000);
@@ -111,7 +114,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
 
       fetchDraft();
     }
-  }, [user, isOpen, draftKey]);
+  }, [user, isOpen, draftKey, initialTab]);
 
   // 2. 入力変更検知 ➜ サーバーへのオートセーブ（デバウンス1.5秒）
   useEffect(() => {
@@ -309,7 +312,7 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('basic')}
-              className={`flex-1 pb-3 text-xs font-black tracking-wider transition-all border-b-2 text-center flex items-center justify-center gap-1.5 ${
+              className={`flex-1 pb-3 text-[10px] sm:text-xs font-black tracking-wider transition-all border-b-2 text-center flex items-center justify-center gap-1.5 ${
                 activeTab === 'basic'
                   ? 'border-indigo-600 text-indigo-650'
                   : 'border-transparent text-slate-400 hover:text-slate-655'
@@ -321,14 +324,26 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             <button
               type="button"
               onClick={() => setActiveTab('extra')}
-              className={`flex-1 pb-3 text-xs font-black tracking-wider transition-all border-b-2 text-center flex items-center justify-center gap-1.5 ${
+              className={`flex-1 pb-3 text-[10px] sm:text-xs font-black tracking-wider transition-all border-b-2 text-center flex items-center justify-center gap-1.5 ${
                 activeTab === 'extra'
                   ? 'border-indigo-600 text-indigo-655'
                   : 'border-transparent text-slate-400 hover:text-slate-655'
               }`}
             >
               <Heart size={14} />
-              <span>2. 緊急連絡先・支援プロフィール</span>
+              <span>2. 緊急連絡・プロファイル</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('certificate')}
+              className={`flex-1 pb-3 text-[10px] sm:text-xs font-black tracking-wider transition-all border-b-2 text-center flex items-center justify-center gap-1.5 ${
+                activeTab === 'certificate'
+                  ? 'border-indigo-600 text-indigo-655'
+                  : 'border-transparent text-slate-400 hover:text-slate-655'
+              }`}
+            >
+              <FileText size={14} />
+              <span>3. 受給者証情報</span>
             </button>
           </div>
 
@@ -675,30 +690,43 @@ export const EditUserModal: React.FC<EditUserModalProps> = ({
             </div>
           )}
 
-          {/* アクションボタン */}
-          <div className="flex items-center gap-3 pt-6 border-t border-slate-100 shrink-0">
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="flex-1 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 font-bold text-xs rounded-2xl transition-colors border border-slate-100"
-            >
-              キャンセル
-            </button>
-            <button
-              type="submit"
-              disabled={isSaving}
-              className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 animate-pulse-subtle"
-            >
-              {isSaving ? (
-                <>
-                  <Loader2 size={14} className="animate-spin" />
-                  <span>保存中...</span>
-                </>
-              ) : (
-                <span>変更を保存</span>
-              )}
-            </button>
-          </div>
+          {/* ==========================================
+              タブ3: 受給者証情報
+             ========================================== */}
+          {activeTab === 'certificate' && user && (
+            <UserCertificateTab 
+              userId={user.id} 
+              certificates={user.certificates || []} 
+              onUpdateSuccess={onUpdateSuccess}
+            />
+          )}
+
+          {/* アクションボタン (受給者証タブ以外で表示) */}
+          {activeTab !== 'certificate' && (
+            <div className="flex items-center gap-3 pt-6 border-t border-slate-100 shrink-0">
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="flex-1 py-3 bg-slate-50 hover:bg-slate-100 text-slate-500 font-bold text-xs rounded-2xl transition-colors border border-slate-100"
+              >
+                キャンセル
+              </button>
+              <button
+                type="submit"
+                disabled={isSaving}
+                className="flex-1 py-3 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-1.5 animate-pulse-subtle"
+              >
+                {isSaving ? (
+                  <>
+                    <Loader2 size={14} className="animate-spin" />
+                    <span>保存中...</span>
+                  </>
+                ) : (
+                  <span>変更を保存</span>
+                )}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>

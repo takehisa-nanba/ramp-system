@@ -47,6 +47,21 @@ export interface UserPiiResponse {
     birth_date: string | null;
     certificate_number?: string | null;
   };
+  certificates?: {
+    id: number;
+    certificate_issue_date: string | null;
+    municipality_master_id: number;
+    certificate_type: string | null;
+    disability_support_classification: string | null;
+    certificate_notes: string | null;
+    granted_services: {
+      id: number;
+      service_type_master_id: number;
+      granted_start_date: string | null;
+      granted_end_date: string | null;
+      granted_amount_description: string | null;
+    }[];
+  }[];
 }
 
 export interface StatusMaster {
@@ -180,4 +195,28 @@ export const loadDraft = async (draftKey: string): Promise<Record<string, unknow
  */
 export const clearDraft = async (draftKey: string): Promise<void> => {
   await apiClient.delete(`/users/drafts/${draftKey}`);
+};
+
+export interface ServiceCertificateData {
+  certificate_issue_date: string;
+  municipality_master_id: number;
+  certificate_type: string;
+  disability_support_classification: string;
+  certificate_notes?: string;
+  granted_services: {
+    service_type_master_id: number;
+    granted_start_date: string;
+    granted_end_date: string;
+    granted_amount_description: string;
+  }[];
+}
+
+export const addServiceCertificate = async (userId: number, data: ServiceCertificateData): Promise<{ msg: string, id: number }> => {
+  const response = await apiClient.post<{ msg: string, id: number }>(`/users/${userId}/certificates`, data);
+  return response.data;
+};
+
+export const updateServiceCertificate = async (userId: number, certId: number, data: ServiceCertificateData): Promise<{ msg: string, id: number }> => {
+  const response = await apiClient.put<{ msg: string, id: number }>(`/users/${userId}/certificates/${certId}`, data);
+  return response.data;
 };

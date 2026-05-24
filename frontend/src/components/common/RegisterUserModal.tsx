@@ -45,7 +45,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
 
   // オートセーブ防止フラグ (読み込み中や送信完了時はセーブしない)
   const isLoadedRef = useRef(false);
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 1. モーダル起動時の初期化 ＆ サーバー下書き読み込み
   useEffect(() => {
@@ -86,8 +86,8 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
             setForm(prev => ({
               ...prev,
               ...draft,
-              emergency_contacts: draft.emergency_contacts || [{ name: '', phone_number: '', relation: '' }],
-              profile: draft.profile || { emergency_contact_notes: '', insurance_details: '' }
+              emergency_contacts: (draft.emergency_contacts as any) || [{ name: '', phone_number: '', relation: '' }],
+              profile: (draft.profile as any) || { emergency_contact_notes: '', insurance_details: '' }
             }));
             setSuccess('サーバーから入力途中の下書きデータを復元しました。');
             setTimeout(() => setSuccess(null), 3000);

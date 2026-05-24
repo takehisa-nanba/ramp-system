@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import type { StaffMember, Role, JobTitle, NewStaffData, JobAssignment } from '../types';
+import type { StaffMember, Role, JobTitle } from '../types';
 
 const DAYS_OF_WEEK = [
   { key: 'Monday', label: '月曜日' },
@@ -107,15 +107,15 @@ export const useStaffForm = (
     if (isOpen) {
       if (mode === 'edit' && staff) {
         // Edit mode initial population
-        const hasShiftPatterns = staff.shift_patterns && staff.shift_patterns.length > 0;
+        const hasShiftPatterns = !!(staff.shift_patterns && staff.shift_patterns.length > 0);
         
         const mergedShiftPatterns = DAYS_OF_WEEK.map(d => {
           const existing = (staff.shift_patterns || []).find(p => p.day_of_week === d.key);
           if (existing) {
             return {
               day_of_week: existing.day_of_week,
-              start_time: existing.start_time,
-              end_time: existing.end_time,
+              start_time: existing.start_time || '09:00',
+              end_time: existing.end_time || '18:00',
               break_minutes: existing.break_minutes,
               is_active: true
             };

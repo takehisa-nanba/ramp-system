@@ -55,12 +55,13 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({
 }) => {
   const styles = THEME_STYLES[themeColor];
   const [userData, setUserData] = useState<UserPiiResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<'basic' | 'plan' | 'interview' | 'assessment'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'plan' | 'interview' | 'assessment' | 'certificate'>('basic');
   
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [initialEditTab, setInitialEditTab] = useState<'basic' | 'extra' | 'certificate'>('basic');
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -197,6 +198,17 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({
                   <FileText size={16} />
                   アセスメントシート
                 </button>
+                <button
+                  onClick={() => setActiveTab('certificate')}
+                  className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-black text-xs transition-all ${
+                    activeTab === 'certificate'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <Award size={16} />
+                  受給者証情報
+                </button>
               </nav>
             </div>
           )}
@@ -239,7 +251,10 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({
                     {headerActions && headerActions(userData, () => setRefreshTrigger(prev => prev + 1))}
                     
                     <button
-                      onClick={() => setIsEditModalOpen(true)}
+                      onClick={() => {
+                        setInitialEditTab('basic');
+                        setIsEditModalOpen(true);
+                      }}
                       className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-850 transition-all rounded-xl border border-slate-205 shadow-sm text-xs font-black"
                     >
                       <Edit3 size={14} className={styles.text} />
@@ -459,6 +474,70 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({
                   </div>
                 )}
 
+                {activeTab === 'certificate' && (
+                  <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                    <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
+                      <div>
+                        <h3 className="text-sm font-black text-slate-800">受給者証情報</h3>
+                        <p className="text-xs text-slate-500 font-bold mt-1">
+                          登録されている受給者証の履歴と支給決定内容を確認できます。
+                        </p>
+                      </div>
+                      <button 
+                        onClick={() => {
+                          setInitialEditTab('certificate');
+                          setIsEditModalOpen(true);
+                        }}
+                        className="px-4 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl flex items-center gap-2 transition-colors border border-indigo-100/50"
+                      >
+                        <Edit3 size={16} /> 受給者証情報を編集・追加
+                      </button>
+                    </div>
+
+                    <div className="space-y-4">
+                      {userData.certificates && userData.certificates.length > 0 ? (
+                        userData.certificates.map((cert, idx) => (
+                          <div key={cert.id} className={`p-6 rounded-[2rem] border transition-all ${idx === 0 ? 'bg-indigo-50/30 border-indigo-100' : 'bg-white border-slate-100'}`}>
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                {idx === 0 && <span className="inline-block px-2 py-0.5 bg-indigo-500 text-white text-[9px] font-black rounded-full mb-2">最新の受給者証</span>}
+                                <h4 className="font-black text-slate-800 text-sm">交付日: {cert.certificate_issue_date}</h4>
+                                <p className="text-xs text-slate-500 font-bold mt-1">種別: {cert.certificate_type} {cert.disability_support_classification && `/ 区分: ${cert.disability_support_classification}`}</p>
+                              </div>
+                            </div>
+                            {cert.granted_services && cert.granted_services.length > 0 && (
+                              <div className="mt-4 bg-white/50 rounded-xl border border-slate-100 overflow-hidden">
+                                <table className="w-full text-left text-xs">
+                                  <thead className="bg-slate-50 text-[10px] font-black text-slate-400 uppercase">
+                                    <tr>
+                                      <th className="px-4 py-2">サービス種別ID</th>
+                                      <th className="px-4 py-2">期間</th>
+                                      <th className="px-4 py-2">支給量</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody className="divide-y divide-slate-100 font-bold text-slate-700">
+                                    {cert.granted_services.map(g => (
+                                      <tr key={g.id}>
+                                        <td className="px-4 py-3">ID: {g.service_type_master_id}</td>
+                                        <td className="px-4 py-3">{g.granted_start_date} 〜 {g.granted_end_date}</td>
+                                        <td className="px-4 py-3">{g.granted_amount_description}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-12 text-slate-400 font-bold text-xs bg-white rounded-3xl border border-slate-100">
+                          受給者証情報が登録されていません
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-slate-300 space-y-4 opacity-50">
@@ -484,6 +563,7 @@ const UserDetailModal: React.FC<UserDetailModalProps> = ({
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         user={userData}
+        initialTab={initialEditTab}
         onUpdateSuccess={() => {
           setRefreshTrigger(prev => prev + 1);
         }}

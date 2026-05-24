@@ -526,4 +526,25 @@ def register_staff():
         logging.error(f"Registration Error: {str(e)}")
         return jsonify({"msg": f"登録に失敗しました: {str(e)}"}), 500
 
+@management_bp.route('/masters', methods=['GET'])
+@jwt_required()
+def get_masters():
+    """
+    フロントエンドのセレクトボックス等で使用するマスターデータを一括で取得する。
+    """
+    from backend.app.models.masters.master_definitions import (
+        MunicipalityMaster, ServiceTypeMaster, GenderLegalMaster, DisabilityTypeMaster
+    )
+    
+    municipalities = MunicipalityMaster.query.order_by(MunicipalityMaster.id).all()
+    service_types = ServiceTypeMaster.query.order_by(ServiceTypeMaster.id).all()
+    genders = GenderLegalMaster.query.order_by(GenderLegalMaster.id).all()
+    disabilities = DisabilityTypeMaster.query.order_by(DisabilityTypeMaster.id).all()
+    
+    return jsonify({
+        "municipalities": [{"id": m.id, "city_name": m.city_name, "city_code": m.city_code} for m in municipalities],
+        "service_types": [{"id": s.id, "service_name": s.service_name, "service_code": s.service_code} for s in service_types],
+        "genders": [{"id": g.id, "name": g.name} for g in genders],
+        "disabilities": [{"id": d.id, "name": d.name} for d in disabilities]
+    }), 200
 
