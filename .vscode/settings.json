@@ -16,5 +16,6 @@
       "password": "ramp_pass",
       "askForPassword": false
     }
-  ]
+  ],
+  "css.lint.unknownAtRules": "ignore"
 }

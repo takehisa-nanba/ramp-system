@@ -1,79 +1,80 @@
 import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { PiiSecureWrapper } from './common/PiiSecureWrapper';
-import { EditUserModal } from './common/EditUserModal';
-import { RegisterUserModal } from './common/RegisterUserModal';
 import { 
-  ShieldCheck, Search, Loader2, AlertCircle, 
+  ShieldCheck, Loader2, AlertCircle, 
   Phone, Mail, MapPin, User, Fingerprint, Lock,
-  FileText, Users, ChevronRight, Award, HelpCircle, Edit3, UserPlus, Trash2
+  FileText, Users, Award, HelpCircle, Edit3, Trash2, ArrowLeft
 } from 'lucide-react';
-import { fetchUserPii, fetchUserList, type UserPiiResponse, type UserListItem } from '../services/userService.ts';
+import { fetchUserPii, type UserPiiResponse } from '../services/userService';
+import { UserBasicEditForm } from './UserBasicEditForm';
+import { UserCertificateTab } from './common/UserCertificateTab';
 
-const UserPiiViewer: React.FC = () => {
-  const [users, setUsers] = useState<UserListItem[]>([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+const THEME_STYLES = {
+  indigo: {
+    bgLight: 'bg-indigo-50', text: 'text-indigo-600', textDark: 'text-indigo-800', borderLight: 'border-indigo-100/50', hoverBg: 'hover:bg-indigo-100',
+    ring: 'focus-within:ring-indigo-500/20', gradient: 'bg-gradient-to-tr from-indigo-600 to-indigo-500', border: 'border-indigo-600',
+    shadow: 'shadow-indigo-100', textLight: 'text-indigo-200', badgeText: 'text-indigo-700', badgeBorder: 'border-indigo-100', bgLine: 'bg-indigo-600'
+  },
+  emerald: {
+    bgLight: 'bg-emerald-50', text: 'text-emerald-600', textDark: 'text-emerald-800', borderLight: 'border-emerald-100/50', hoverBg: 'hover:bg-emerald-100',
+    ring: 'focus-within:ring-emerald-500/20', gradient: 'bg-gradient-to-tr from-emerald-600 to-emerald-500', border: 'border-emerald-600',
+    shadow: 'shadow-emerald-100', textLight: 'text-emerald-200', badgeText: 'text-emerald-700', badgeBorder: 'border-emerald-100', bgLine: 'bg-emerald-600'
+  },
+  orange: {
+    bgLight: 'bg-orange-50', text: 'text-orange-600', textDark: 'text-orange-800', borderLight: 'border-orange-100/50', hoverBg: 'hover:bg-orange-100',
+    ring: 'focus-within:ring-orange-500/20', gradient: 'bg-gradient-to-tr from-orange-600 to-orange-500', border: 'border-orange-600',
+    shadow: 'shadow-orange-100', textLight: 'text-orange-200', badgeText: 'text-orange-700', badgeBorder: 'border-orange-100', bgLine: 'bg-orange-600'
+  },
+  slate: {
+    bgLight: 'bg-slate-50', text: 'text-slate-600', textDark: 'text-slate-800', borderLight: 'border-slate-200/50', hoverBg: 'hover:bg-slate-100',
+    ring: 'focus-within:ring-slate-500/20', gradient: 'bg-gradient-to-tr from-slate-600 to-slate-500', border: 'border-slate-600',
+    shadow: 'shadow-slate-100', textLight: 'text-slate-200', badgeText: 'text-slate-700', badgeBorder: 'border-slate-200', bgLine: 'bg-slate-600'
+  },
+  rose: {
+    bgLight: 'bg-rose-50', text: 'text-rose-600', textDark: 'text-rose-800', borderLight: 'border-rose-100/50', hoverBg: 'hover:bg-rose-100',
+    ring: 'focus-within:ring-rose-500/20', gradient: 'bg-gradient-to-tr from-rose-600 to-rose-500', border: 'border-rose-600',
+    shadow: 'shadow-rose-100', textLight: 'text-rose-200', badgeText: 'text-rose-700', badgeBorder: 'border-rose-100', bgLine: 'bg-rose-600'
+  }
+};
+
+const UserDetailPage: React.FC = () => {
+  const { id } = useParams<{ id: string }>();
+  const userId = id ? parseInt(id, 10) : null;
+  const navigate = useNavigate();
+  const themeColor = 'indigo';
+  const styles = THEME_STYLES[themeColor];
   const [userData, setUserData] = useState<UserPiiResponse | null>(null);
-  const [activeTab, setActiveTab] = useState<'basic' | 'plan' | 'interview' | 'assessment'>('basic');
+  const [activeTab, setActiveTab] = useState<'basic' | 'plan' | 'interview' | 'assessment' | 'certificate'>('basic');
+  const [isEditing, setIsEditing] = useState(false);
   
-  const [listLoading, setListLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
 
-  // 編集モーダルの状態
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const loadDetail = async () => {
+    if (userId === null) return;
+    setDetailLoading(true);
+    setDetailError(null);
+    try {
+      const data = await fetchUserPii(userId);
+      setUserData(data);
+    } catch (err: any) {
+      const msg = err.response?.data?.msg || err.message || '情報の取得に失敗しました';
+      setDetailError(msg);
+      setUserData(null);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
 
-  // 1. 利用者一覧の初期フェッチ
   useEffect(() => {
-    const loadUsers = async () => {
-      setListLoading(true);
-      setError(null);
-      try {
-        const data = await fetchUserList();
-        setUsers(data);
-        // 初期選択として最初の利用者を読み込む
-        if (data.length > 0 && selectedUserId === null) {
-          setSelectedUserId(data[0].id);
-        }
-      } catch (err: any) {
-        setError('利用者一覧の取得に失敗しました。');
-      } finally {
-        setListLoading(false);
-      }
-    };
-    loadUsers();
-  }, [refreshTrigger]);
-
-  // 2. 選択された利用者の詳細フェッチ
-  useEffect(() => {
-    if (selectedUserId === null) return;
-
-    const loadDetail = async () => {
-      setDetailLoading(true);
-      setDetailError(null);
-      try {
-        const data = await fetchUserPii(selectedUserId);
-        setUserData(data);
-      } catch (err: any) {
-        const msg = err.response?.data?.msg || err.message || '情報の取得に失敗しました';
-        setDetailError(msg);
-        setUserData(null);
-      } finally {
-        setDetailLoading(false);
-      }
-    };
-
     loadDetail();
-  }, [selectedUserId, refreshTrigger]);
+  }, [userId]);
 
-  // 検索フィルター
-  const filteredUsers = users.filter(u => 
-    u.display_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    String(u.id).includes(searchTerm)
-  );
+  // タブ切り替え時に編集モードを解除
+  useEffect(() => {
+    setIsEditing(false);
+  }, [activeTab]);
 
   // 利用者削除ハンドラ
   const handleDeleteUser = async () => {
@@ -93,120 +94,43 @@ const UserPiiViewer: React.FC = () => {
         throw new Error(errorData.msg || '削除に失敗しました');
       }
       alert('利用者を完全に削除しました。');
-      setSelectedUserId(null);
-      setRefreshTrigger(prev => prev + 1);
+      navigate('/users');
     } catch (err: any) {
       alert(`削除エラー: ${err.message}`);
     }
   };
 
+  if (userId === null) return <div className="p-8 text-center">Invalid User ID</div>;
+
   return (
-    <div className="flex h-[calc(100vh-120px)] bg-slate-50/50 rounded-[2.5rem] shadow-xl border border-slate-200 overflow-hidden animate-in fade-in duration-500">
+    <div className="h-full flex flex-col bg-slate-50 relative overflow-hidden">
       
-      {/* ==========================================
-          左ペイン：利用者一覧 (マスター)
-         ========================================== */}
-      <div className="w-80 border-r border-slate-200 bg-white flex flex-col h-full shrink-0">
-        {/* ヘッダーエリア: タイトルと検索 */}
-        <div className="p-6 border-b border-slate-100 space-y-4">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shrink-0">
-              <Users size={18} />
-            </div>
-            <div className="flex items-center justify-between w-full min-w-0">
-              <div>
-                <h2 className="text-sm font-black text-slate-800">利用者一覧</h2>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Client Directory</p>
-              </div>
-              <button
-                onClick={() => setIsRegisterModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-650 hover:text-indigo-800 transition-all rounded-xl text-[10px] font-black border border-indigo-100/50 shadow-sm shrink-0"
-              >
-                <UserPlus size={12} />
-                <span>追加</span>
-              </button>
-            </div>
-          </div>
-
-          {/* 検索ボックス */}
-          <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-xl px-3 py-2 focus-within:bg-white focus-within:ring-2 focus-within:ring-indigo-500/20 transition-all">
-            <Search size={14} className="text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="名前で検索..." 
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="bg-transparent border-none text-xs outline-none w-full text-slate-700 font-bold placeholder-slate-350"
-            />
-          </div>
-        </div>
-
-        {/* リスト表示部 */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-2">
-          {listLoading ? (
-            <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-2">
-              <Loader2 className="animate-spin text-indigo-500" size={24} />
-              <span className="text-[10px] font-bold">リスト読み込み中...</span>
-            </div>
-          ) : error ? (
-            <div className="p-4 bg-rose-50 text-rose-800 text-xs font-bold rounded-xl border border-rose-100 text-center">
-              {error}
-            </div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="text-center py-12 text-slate-400 text-xs font-bold">
-              該当する利用者がいません
-            </div>
-          ) : (
-            filteredUsers.map(user => {
-              const isSelected = selectedUserId === user.id;
-              return (
-                <button
-                  key={user.id}
-                  onClick={() => setSelectedUserId(user.id)}
-                  className={`w-full text-left p-3.5 rounded-2xl transition-all flex items-center justify-between gap-3 border ${
-                    isSelected 
-                      ? 'bg-gradient-to-tr from-indigo-600 to-indigo-500 text-white border-indigo-600 shadow-md shadow-indigo-100' 
-                      : 'bg-white text-slate-700 hover:bg-slate-50 border-slate-100 hover:border-slate-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                      isSelected ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500'
-                    }`}>
-                      <User size={16} />
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs font-black truncate">{user.display_name}</p>
-                      <p className={`text-[9px] font-bold mt-0.5 ${isSelected ? 'text-indigo-200' : 'text-slate-400'}`}>
-                        ID: {user.id}
-                      </p>
-                    </div>
-                  </div>
-                  <ChevronRight size={14} className={isSelected ? 'text-white' : 'text-slate-350'} />
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-
-      {/* ==========================================
-          右ペイン：詳細情報 (ディテール)
-         ========================================== */}
-      <div className="flex-1 flex flex-col h-full bg-slate-50/50">
+      {/* ページ全体 */}
+      <div className="w-full h-full flex flex-col overflow-hidden">
         
         {/* ディテールヘッダー */}
-        <header className="px-8 py-6 bg-white border-b border-slate-200 flex items-center justify-between shrink-0">
-          <div className="space-y-1">
-            <h1 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <ShieldCheck className="text-indigo-600" size={22} />
-              個人情報セキュア閲覧
-            </h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">PII Secured Access Console</p>
-          </div>
-          <div className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-full font-black tracking-widest uppercase flex items-center gap-1.5 shadow-sm">
-            <Fingerprint size={12} />
-            MFA / AUDIT ACTIVE
+        <header className="px-6 py-4 bg-white border-b border-slate-200 shrink-0 shadow-sm z-10">
+          <div className="max-w-5xl mx-auto w-full flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => navigate('/users')}
+                className="p-2 bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-700 rounded-xl transition-all border border-slate-200 shadow-sm flex items-center gap-2 text-xs font-black"
+              >
+                <ArrowLeft size={16} />
+                一覧に戻る
+              </button>
+              <div className="h-6 w-px bg-slate-200"></div>
+              <div className="space-y-0.5">
+                <h1 className="text-base font-black text-slate-800 flex items-center gap-2">
+                  <ShieldCheck className="text-indigo-600" size={18} />
+                  個人情報セキュア閲覧
+                </h1>
+              </div>
+            </div>
+            <div className="text-[10px] bg-indigo-50 text-indigo-700 border border-indigo-100 px-3 py-1 rounded-full font-black tracking-widest uppercase flex items-center gap-1.5 shadow-sm">
+              <Fingerprint size={12} />
+              MFA / AUDIT ACTIVE
+            </div>
           </div>
         </header>
 
@@ -215,8 +139,9 @@ const UserPiiViewer: React.FC = () => {
           
           {/* タブナビゲーション */}
           {userData && !detailLoading && !detailError && (
-            <div className="px-8 bg-white border-b border-slate-200 shrink-0">
-              <nav className="flex space-x-8" aria-label="Tabs">
+            <div className="bg-white border-b border-slate-200 shrink-0">
+              <div className="max-w-5xl mx-auto w-full px-8">
+                <nav className="flex space-x-8" aria-label="Tabs">
                 <button
                   onClick={() => setActiveTab('basic')}
                   className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-black text-xs transition-all ${
@@ -261,11 +186,23 @@ const UserPiiViewer: React.FC = () => {
                   <FileText size={16} />
                   アセスメントシート
                 </button>
-              </nav>
+                <button
+                  onClick={() => setActiveTab('certificate')}
+                  className={`py-4 px-1 inline-flex items-center gap-2 border-b-2 font-black text-xs transition-all ${
+                    activeTab === 'certificate'
+                      ? 'border-indigo-500 text-indigo-600'
+                      : 'border-transparent text-slate-400 hover:text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  <Award size={16} />
+                  受給者証情報
+                </button>
+                </nav>
+              </div>
             </div>
           )}
 
-          <div className="flex-1 overflow-y-auto p-8">
+          <div className="flex-1 overflow-y-auto px-4 py-6 sm:px-8">
             {detailLoading ? (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-3">
                 <Loader2 className="animate-spin text-indigo-500" size={32} />
@@ -280,12 +217,12 @@ const UserPiiViewer: React.FC = () => {
                 </div>
               </div>
             ) : userData ? (
-              <div className="max-w-4xl mx-auto space-y-6 animate-in fade-in duration-300">
+              <div className="max-w-5xl mx-auto space-y-6 animate-in fade-in duration-300 w-full">
                 
                 {/* 常に表示する利用者ヘッダーカード */}
-                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden mb-8">
-                  <div className="absolute top-0 left-0 w-2 h-full bg-indigo-600" />
-                  <div className="w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shadow-inner shrink-0">
+                <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-center gap-6 relative overflow-hidden">
+                  <div className={`absolute top-0 left-0 w-2 h-full ${styles.bgLine}`} />
+                  <div className={`w-16 h-16 rounded-2xl ${styles.bgLight} ${styles.text} flex items-center justify-center shadow-inner shrink-0`}>
                     <User size={32} />
                   </div>
                   <div className="text-center sm:text-left flex-1 min-w-0">
@@ -300,104 +237,132 @@ const UserPiiViewer: React.FC = () => {
                   
                   {/* 編集ボタンとバッジ */}
                   <div className="flex items-center gap-3 shrink-0 self-start sm:self-auto">
-                    <button
-                      onClick={() => setIsEditModalOpen(true)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-slate-50 hover:bg-slate-100 text-slate-600 hover:text-slate-850 transition-all rounded-xl border border-slate-205 shadow-sm text-xs font-black"
-                    >
-                      <Edit3 size={14} className="text-indigo-600" />
-                      <span>情報を編集</span>
-                    </button>
+                    {!isEditing && (
+                      <button
+                        onClick={() => {
+                          if (activeTab === 'basic') {
+                            setIsEditing(true);
+                          } else if (activeTab === 'certificate') {
+                            alert('受給者証情報は、タブ内の追加・編集ボタンから直接編集してください。');
+                          } else {
+                            alert('この機能は現在開発中です。');
+                          }
+                        }}
+                        className="flex items-center gap-2 px-6 py-2.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 transition-all rounded-xl border border-indigo-200 shadow-sm text-sm font-black"
+                      >
+                        <Edit3 size={16} />
+                        <span>情報を編集</span>
+                      </button>
+                    )}
                     <button
                       onClick={handleDeleteUser}
                       className="flex items-center gap-1.5 px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-800 transition-all rounded-xl border border-rose-100 shadow-sm text-xs font-black"
                       title="間違えて登録した場合など、実績がない利用者を完全に削除します"
                     >
                       <Trash2 size={14} />
-                      <span>削除</span>
                     </button>
-                    <div className="px-4 py-2 bg-emerald-50 text-emerald-700 border border-emerald-100 rounded-xl text-[10px] font-black tracking-widest uppercase hidden sm:block">
-                      ACTIVE
+                    <div className={`px-4 py-2 ${styles.bgLight} ${styles.badgeText} border ${styles.badgeBorder} rounded-xl text-[10px] font-black tracking-widest uppercase hidden sm:block`}>
+                      {userData.status_name || 'UNKNOWN'}
                     </div>
                   </div>
                 </div>
 
                 {/* タブコンテンツ */}
                 {activeTab === 'basic' && (
-                  <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  isEditing ? (
+                    <UserBasicEditForm 
+                      user={userData}
+                      onSave={() => {
+                        setIsEditing(false);
+                        loadDetail();
+                      }}
+                      onCancel={() => setIsEditing(false)}
+                    />
+                  ) : (
+                    <div className="bg-white px-8 py-10 rounded-[2rem] border border-slate-100 shadow-sm space-y-10 animate-in slide-in-from-right-4 duration-300">
                       
-                      {/* 2. 受給者証番号セクション */}
-                      <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4 flex flex-col justify-between">
-                        <div className="space-y-4">
-                          <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                            <Award size={14} className="text-indigo-500" />
-                            受給者証番号
-                          </h3>
-                          <div className="space-y-1">
-                            <PiiSecureWrapper value={userData.pii?.certificate_number || '未登録'} />
-                            <p className="text-[9px] text-slate-400 font-bold mt-2">受給者証番号（暗号化解除が必要）</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 空きスペース用 (レイアウト調整) */}
-                      <div className="hidden md:block"></div>
-
-                      {/* 3. 暗号化個人情報 (PII) */}
-                      <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4 md:col-span-2">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                          <Lock size={14} className="text-indigo-500" />
-                          暗号化個人情報 (PII)
+                      {/* --- Section 1: 受給者証情報 --- */}
+                      <section>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-6 pb-3 border-b border-slate-100">
+                          <Award size={18} className="text-indigo-500" />
+                          公的情報（受給者証）
                         </h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
-                              <User size={12} className="text-indigo-400" />
-                              氏名 (正式漢字表記)
-                            </span>
-                            <PiiSecureWrapper value={`${userData.pii?.last_name || ''} ${userData.pii?.first_name || ''}`.trim() || '未登録'} />
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-8">
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">受給者証番号 (暗号化)</span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                              <PiiSecureWrapper value={userData.pii?.certificate_number || '未登録'} />
+                            </div>
                           </div>
-
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
-                              <Phone size={12} className="text-indigo-400" />
-                              本人電話番号
-                            </span>
-                            <PiiSecureWrapper value={userData.pii?.phone_number || '未登録'} />
-                          </div>
-
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
-                              <Mail size={12} className="text-indigo-400" />
-                              本人メールアドレス
-                            </span>
-                            <PiiSecureWrapper value={userData.pii?.email || '未登録'} />
-                          </div>
-
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100 space-y-2">
-                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
-                              <MapPin size={12} className="text-indigo-400" />
-                              現住所
-                            </span>
-                            <PiiSecureWrapper value={userData.pii?.address || '未登録'} />
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em]">最新の有効期間 (先頭サービス)</span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100 flex items-center h-[52px]">
+                              <span className="text-sm font-bold text-slate-700 font-mono">
+                                {userData.certificates?.[0]?.granted_services?.[0]
+                                  ? `${userData.certificates[0].granted_services[0].granted_start_date || '未設定'} 〜 ${userData.certificates[0].granted_services[0].granted_end_date || '未設定'}`
+                                  : '未設定'}
+                              </span>
+                            </div>
                           </div>
                         </div>
-                      </div>
+                      </section>
 
-                      {/* 4. 緊急連絡先セクション */}
-                      <div className="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm space-y-4 md:col-span-2">
-                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] flex items-center gap-2">
-                          <Phone size={14} className="text-indigo-500" />
-                          緊急連絡先リスト
+                      {/* --- Section 2: 暗号化個人情報 (PII) --- */}
+                      <section>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-6 pb-3 border-b border-slate-100">
+                          <Lock size={18} className="text-indigo-500" />
+                          基本個人情報・連絡先 (PII)
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
+                              <User size={12} className="text-indigo-400" /> 氏名 (正式漢字表記)
+                            </span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                              <PiiSecureWrapper value={`${userData.pii?.last_name || ''} ${userData.pii?.first_name || ''}`.trim() || '未登録'} />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
+                              <Phone size={12} className="text-indigo-400" /> 本人電話番号
+                            </span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                              <PiiSecureWrapper value={userData.pii?.phone_number || '未登録'} />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
+                              <Mail size={12} className="text-indigo-400" /> 本人メールアドレス
+                            </span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                              <PiiSecureWrapper value={userData.pii?.email || '未登録'} />
+                            </div>
+                          </div>
+                          <div className="space-y-1.5">
+                            <span className="text-[9px] font-black text-slate-400 flex items-center gap-1.5">
+                              <MapPin size={12} className="text-indigo-400" /> 現住所
+                            </span>
+                            <div className="bg-slate-50/50 p-3 rounded-xl border border-slate-100">
+                              <PiiSecureWrapper value={userData.pii?.address || '未登録'} />
+                            </div>
+                          </div>
+                        </div>
+                      </section>
+
+                      {/* --- Section 3: 緊急連絡先リスト --- */}
+                      <section>
+                        <h3 className="text-sm font-black text-slate-800 flex items-center gap-2 mb-6 pb-3 border-b border-slate-100">
+                          <Phone size={18} className="text-indigo-500" />
+                          緊急連絡先
                         </h3>
                         {userData.emergency_contacts && userData.emergency_contacts.length > 0 ? (
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {userData.emergency_contacts.map(contact => (
-                              <div key={contact.id} className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col justify-between gap-3 shadow-inner">
+                              <div key={contact.id} className="bg-slate-50 p-4 rounded-xl border border-slate-200 flex flex-col justify-between gap-3 shadow-sm">
                                 <div>
                                   <div className="flex items-center justify-between">
                                     <h4 className="text-xs font-black text-slate-800">{contact.name}</h4>
-                                    <span className="px-2 py-0.5 bg-slate-205 text-slate-600 rounded-lg text-[9px] font-bold">
+                                    <span className="px-2 py-0.5 bg-white border border-slate-200 text-slate-600 rounded-md text-[9px] font-bold">
                                       {contact.relation || 'その他親族等'}
                                     </span>
                                   </div>
@@ -409,14 +374,14 @@ const UserPiiViewer: React.FC = () => {
                             ))}
                           </div>
                         ) : (
-                          <div className="bg-slate-50/50 p-4 rounded-2xl border border-slate-100/50 text-center py-6">
+                          <div className="bg-slate-50/50 p-6 rounded-2xl border border-slate-100/50 text-center">
                             <HelpCircle size={20} className="text-slate-300 mx-auto mb-2" />
                             <p className="text-[10px] text-slate-400 font-bold">緊急連絡先が登録されていません</p>
                           </div>
                         )}
-                      </div>
+                      </section>
                     </div>
-                  </div>
+                  )
                 )}
 
                 {activeTab === 'plan' && (
@@ -522,6 +487,16 @@ const UserPiiViewer: React.FC = () => {
                   </div>
                 )}
 
+                {activeTab === 'certificate' && (
+                  <div className="space-y-6 animate-in slide-in-from-right-4 duration-300">
+                    <UserCertificateTab
+                      userId={userData.id}
+                      certificates={userData.certificates || []}
+                      onUpdateSuccess={() => loadDetail()}
+                    />
+                  </div>
+                )}
+
               </div>
             ) : (
               <div className="flex flex-col items-center justify-center h-full text-slate-300 space-y-4 opacity-50">
@@ -532,8 +507,7 @@ const UserPiiViewer: React.FC = () => {
           </div>
         </div>
 
-        {/* フッター */}
-        <footer className="px-8 py-4 bg-slate-900 border-t border-slate-800 flex items-center justify-between text-white/50 text-[9px] font-black uppercase tracking-widest shrink-0">
+        <footer className="px-8 py-4 bg-slate-900 flex items-center justify-between text-white/50 text-[9px] font-black uppercase tracking-widest shrink-0">
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
             Audit Logging Active
@@ -541,29 +515,8 @@ const UserPiiViewer: React.FC = () => {
           <div>Encrypted with Envelope & System AES-256</div>
         </footer>
       </div>
-
-      {/* 🔒 利用者情報編集モーダル */}
-      <EditUserModal
-        isOpen={isEditModalOpen}
-        onClose={() => setIsEditModalOpen(false)}
-        user={userData}
-        onUpdateSuccess={() => {
-          setRefreshTrigger(prev => prev + 1);
-        }}
-      />
-
-      {/* 🔒 新規利用者登録モーダル */}
-      <RegisterUserModal
-        isOpen={isRegisterModalOpen}
-        onClose={() => setIsRegisterModalOpen(false)}
-        onRegisterSuccess={(newUserId) => {
-          setRefreshTrigger(prev => prev + 1);
-          setSelectedUserId(newUserId); // 自動で新規追加した利用者に切り替える
-        }}
-      />
-
     </div>
   );
 };
 
-export default UserPiiViewer;
+export default UserDetailPage;

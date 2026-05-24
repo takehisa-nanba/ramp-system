@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, Download, Upload, Eye, Loader2, Trash2, User } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Search, Plus, Download, Upload, Eye, Loader2, Trash2 } from 'lucide-react';
 import { fetchUserList, fetchStatusMaster, decryptUserPii, type UserListItem, type StatusMaster } from '../services/userService';
-import UserDetailModal from './common/UserDetailModal';
 import { RegisterUserModal } from './common/RegisterUserModal';
 import { StatusTransitionModal } from './common/StatusTransitionModal';
+import { PremiumTable } from './common/PremiumTable';
 
 const TABS = [
   { id: 'active', label: '利用中', title: '利用者情報', subtitle: '対象者を選択してください' },
@@ -20,10 +21,10 @@ export const UserManager: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const navigate = useNavigate();
 
   // Modals
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
-  const [detailModalUserId, setDetailModalUserId] = useState<number | null>(null);
   const [transitionUser, setTransitionUser] = useState<any | null>(null);
 
   // Decrypted Certificates state
@@ -176,163 +177,195 @@ export const UserManager: React.FC = () => {
         </div>
 
         {/* テーブル本体 */}
-        <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="border-b border-slate-100 bg-slate-50/50">
-                <th className="py-4 px-6 text-xs font-black text-slate-600">氏名</th>
-                {activeTab !== 'inquiry' && <th className="py-4 px-6 text-xs font-black text-slate-600">受給者番号</th>}
-                {activeTab !== 'inquiry' && <th className="py-4 px-6 text-xs font-black text-slate-600">サービス提供開始日</th>}
-                {activeTab !== 'inquiry' && <th className="py-4 px-6 text-xs font-black text-slate-600">個別支援計画の期限</th>}
-                {activeTab === 'inquiry' && <th className="py-4 px-6 text-xs font-black text-slate-600">現在のステータス</th>}
-                <th className="py-4 px-6"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <Loader2 className="animate-spin text-indigo-500 mx-auto mb-2" size={24} />
-                    <p className="text-xs font-bold">読み込み中...</p>
-                  </td>
-                </tr>
-              ) : filteredUsers.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-400">
-                    <p className="text-xs font-bold">該当する利用者がいません</p>
-                  </td>
-                </tr>
-              ) : (
-                filteredUsers.map(user => (
-                  <tr key={user.id} className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors">
-                    <td className="py-4 px-6">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
-                          <User size={14} />
-                        </div>
-                        <span className="text-sm font-black text-slate-700">{user.display_name}</span>
-                      </div>
-                    </td>
-                    
-                    {activeTab !== 'inquiry' && (
-                      <td className="py-4 px-6">
-                        {user.has_certificate_number ? (
-                          <div className="flex items-center gap-2">
-                            {decryptedCerts[user.id] ? (
-                              <span className="text-sm font-bold text-slate-700 font-mono tracking-wider">{decryptedCerts[user.id]}</span>
-                            ) : (
-                              <>
-                                <span className="text-sm font-bold text-slate-400 tracking-widest">*********</span>
-                                <button 
-                                  onClick={() => handleDecryptCert(user.id)}
-                                  disabled={decryptingIds.has(user.id)}
-                                  className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
-                                >
-                                  {decryptingIds.has(user.id) ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
-                                </button>
-                              </>
-                            )}
-                          </div>
+        <PremiumTable
+          data={filteredUsers}
+          isLoading={loading}
+          keyExtractor={(u) => u.id}
+          emptyMessage={
+            activeTab === 'inquiry' ? '現在、新規の問い合わせはありません' : '該当する利用者がいません'
+          }
+          columns={[
+            {
+              header: '氏名',
+              headerClassName: 'pl-8',
+              className: 'pl-8',
+              render: (user) => (
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-50/70 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0 shadow-inner">
+                    {user.display_name.charAt(0)}
+                  </div>
+                  <span className="text-sm font-black text-slate-700">{user.display_name}</span>
+                </div>
+              )
+            },
+            ...(activeTab !== 'inquiry' ? [{
+              header: '受給者番号',
+              render: (user: UserListItem) => (
+                <div className="flex items-center gap-2">
+                  {user.has_certificate_number ? (
+                    decryptedCerts[user.id] ? (
+                      <span className="text-sm font-bold text-slate-700 font-mono tracking-wider">{decryptedCerts[user.id]}</span>
+                    ) : (
+                      <>
+                        <span className="text-sm font-bold text-slate-400 tracking-widest">*********</span>
+                        <button 
+                          onClick={() => handleDecryptCert(user.id)}
+                          disabled={decryptingIds.has(user.id)}
+                          className="p-1.5 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                        >
+                          {decryptingIds.has(user.id) ? <Loader2 size={14} className="animate-spin" /> : <Eye size={14} />}
+                        </button>
+                      </>
+                    )
+                  ) : (
+                    <span className="text-xs font-bold text-slate-300">未登録</span>
+                  )}
+                </div>
+              )
+            },
+            {
+              header: 'サービス提供開始日',
+              render: (user: UserListItem) => (
+                <span className="text-sm font-bold text-slate-600">
+                  {user.service_start_date ? user.service_start_date.replace(/-/g, '/') : '-'}
+                </span>
+              )
+            },
+            {
+              header: '個別支援計画の期限',
+              render: (user: UserListItem) => (
+                <span className="text-sm font-bold text-slate-600">
+                  {user.active_plan_end_date ? user.active_plan_end_date.replace(/-/g, '/') : '-'}
+                </span>
+              )
+            }] : []),
+            ...(activeTab === 'inquiry' ? [{
+              header: '現在のステータス',
+              render: (user: UserListItem) => (
+                <span className="px-3 py-1 bg-orange-50 text-orange-600 rounded-full text-xs font-black border border-orange-100">
+                  {user.status_name}
+                </span>
+              )
+            }] : []),
+            {
+              header: '操作',
+              headerClassName: 'text-right pr-8',
+              className: 'text-right pr-8',
+              render: (user) => (
+                <div className="flex items-center justify-end gap-3">
+                  {activeTab === 'inquiry' && (
+                     <button
+                       onClick={() => setTransitionUser(user)}
+                       className="text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
+                     >
+                       利用開始にする
+                     </button>
+                  )}
+                  <button 
+                    onClick={() => handleDelete(user.id, user.display_name)}
+                    className="flex items-center gap-1.5 text-xs font-black text-slate-400 hover:text-rose-500 transition-colors"
+                  >
+                    <Trash2 size={12} />
+                    削除
+                  </button>
+                  <button 
+                    onClick={() => navigate(`/users/${user.id}`)}
+                    className="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-black shadow-sm transition-all"
+                  >
+                    閲覧する
+                  </button>
+                </div>
+              )
+            }
+          ]}
+          renderMobileCard={(user) => (
+            <div className="bg-white p-5 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center font-black text-sm shrink-0">
+                    {user.display_name.charAt(0)}
+                  </div>
+                  <h3 className="font-black text-slate-800 text-base leading-tight">{user.display_name}</h3>
+                </div>
+                {activeTab === 'inquiry' ? (
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full border bg-orange-50 text-orange-600 border-orange-100">
+                    {user.status_name}
+                  </span>
+                ) : (
+                  <span className="text-[9px] font-black px-2 py-0.5 rounded-full border bg-indigo-50 text-indigo-600 border-indigo-100">
+                    {activeTab === 'active' ? '利用中' : '利用終了'}
+                  </span>
+                )}
+              </div>
+
+              {activeTab !== 'inquiry' && (
+                <div className="grid grid-cols-1 gap-2 pt-2 border-t border-slate-50 text-xs font-bold text-slate-500">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">受給者番号</span>
+                    <div className="flex items-center gap-2">
+                      {user.has_certificate_number ? (
+                        decryptedCerts[user.id] ? (
+                          <span className="text-sm font-bold text-slate-700 font-mono tracking-wider">{decryptedCerts[user.id]}</span>
                         ) : (
-                          <span className="text-xs font-bold text-slate-300">未登録</span>
-                        )}
-                      </td>
-                    )}
-
-                    {activeTab !== 'inquiry' && (
-                      <td className="py-4 px-6">
-                        <span className="text-sm font-bold text-slate-600">
-                          {user.service_start_date ? user.service_start_date.replace(/-/g, '/') : '-'}
-                        </span>
-                      </td>
-                    )}
-
-                    {activeTab !== 'inquiry' && (
-                      <td className="py-4 px-6">
-                        <span className="text-sm font-bold text-slate-600">
-                          {user.active_plan_end_date ? user.active_plan_end_date.replace(/-/g, '/') : '-'}
-                        </span>
-                      </td>
-                    )}
-
-                    {activeTab === 'inquiry' && (
-                      <td className="py-4 px-6">
-                        <span className="px-3 py-1 bg-orange-50 text-orange-600 rounded-full text-xs font-black border border-orange-100">
-                          {user.status_name}
-                        </span>
-                      </td>
-                    )}
-
-                    <td className="py-4 px-6">
-                      <div className="flex items-center justify-end gap-3">
-                        {activeTab === 'inquiry' && (
-                           <button
-                             onClick={() => setTransitionUser(user)}
-                             className="text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-3 py-1.5 rounded-lg transition-colors"
-                           >
-                             利用開始にする
-                           </button>
-                        )}
-                        <button 
-                          onClick={() => handleDelete(user.id, user.display_name)}
-                          className="flex items-center gap-1.5 text-xs font-black text-slate-400 hover:text-rose-500 transition-colors"
-                        >
-                          <Trash2 size={12} />
-                          削除する
-                        </button>
-                        <button 
-                          onClick={() => setDetailModalUserId(user.id)}
-                          className="px-4 py-1.5 bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 rounded-lg text-xs font-black shadow-sm transition-all"
-                        >
-                          閲覧する
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                          <>
+                            <span className="text-sm font-bold text-slate-400 tracking-widest">*********</span>
+                            <button 
+                              onClick={() => handleDecryptCert(user.id)}
+                              disabled={decryptingIds.has(user.id)}
+                              className="p-1 text-indigo-500 hover:bg-indigo-50 rounded-lg transition-colors"
+                            >
+                              {decryptingIds.has(user.id) ? <Loader2 size={12} className="animate-spin" /> : <Eye size={12} />}
+                            </button>
+                          </>
+                        )
+                      ) : (
+                        <span className="text-xs font-bold text-slate-300">未登録</span>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">個別支援計画期限</span>
+                    <span className="text-slate-700">{user.active_plan_end_date ? user.active_plan_end_date.replace(/-/g, '/') : '-'}</span>
+                  </div>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+
+              <div className="pt-3 border-t border-slate-50 flex items-center justify-between gap-2">
+                <button 
+                  onClick={() => handleDelete(user.id, user.display_name)}
+                  className="flex items-center gap-1 text-xs font-black text-rose-400 hover:text-rose-500 transition-colors p-2"
+                >
+                  <Trash2 size={14} />
+                </button>
+                <div className="flex items-center gap-2">
+                  {activeTab === 'inquiry' && (
+                     <button
+                       onClick={() => setTransitionUser(user)}
+                       className="text-xs font-black text-emerald-600 hover:text-emerald-700 bg-emerald-50 hover:bg-emerald-100 px-4 py-2 rounded-xl transition-colors"
+                     >
+                       利用開始にする
+                     </button>
+                  )}
+                  <button 
+                    onClick={() => navigate(`/users/${user.id}`)}
+                    className="px-5 py-2.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl text-xs font-black shadow-md transition-all flex items-center justify-center min-w-[80px]"
+                  >
+                    閲覧
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        />
       </div>
 
       {/* モーダル群 */}
-      <UserDetailModal
-        isOpen={detailModalUserId !== null}
-        onClose={() => setDetailModalUserId(null)}
-        userId={detailModalUserId}
-        themeColor={activeTab === 'active' ? 'emerald' : activeTab === 'alumni' ? 'slate' : 'orange'}
-        onDeleteSuccess={() => setRefreshTrigger(prev => prev + 1)}
-        headerActions={(userData) => {
-          if (activeTab === 'active') {
-            return (
-              <button
-                onClick={() => setTransitionUser(userData)}
-                className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 hover:text-rose-700 transition-all rounded-xl border border-rose-100 shadow-sm text-xs font-black"
-              >
-                利用終了にする
-              </button>
-            );
-          } else if (activeTab === 'alumni' && userData.status_name === '利用終了（定着支援中）') {
-             return (
-              <button
-                onClick={() => setTransitionUser(userData)}
-                className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-600 hover:text-emerald-700 transition-all rounded-xl border border-emerald-100 shadow-sm text-xs font-black"
-              >
-                定着完了にする
-              </button>
-            );
-          }
-          return null;
-        }}
-      />
-
       <RegisterUserModal
         isOpen={isRegisterModalOpen}
         onClose={() => setIsRegisterModalOpen(false)}
         onRegisterSuccess={(newUserId) => {
           setRefreshTrigger(prev => prev + 1);
-          setDetailModalUserId(newUserId);
+          navigate(`/users/${newUserId}`);
         }}
       />
 

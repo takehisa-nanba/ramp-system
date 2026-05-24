@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Copy, Save, AlertCircle, FileText, Trash2, Calendar } from 'lucide-react';
+import { Plus, Copy, Save, AlertCircle, FileText, Trash2, Calendar, Edit3 } from 'lucide-react';
 import { useMasters } from '../../hooks/useMasters';
 import { addServiceCertificate, updateServiceCertificate, type ServiceCertificateData } from '../../services/userService';
 
@@ -160,11 +160,6 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
               <FileText size={16} className="text-indigo-500" />
               {editingCertificateId ? '受給者証情報の修正' : '受給者証情報の入力'}
             </h3>
-            {certificates.length > 0 && (
-              <button onClick={() => setIsFormVisible(false)} className="text-xs text-slate-400 hover:text-slate-600 font-bold">
-                キャンセル
-              </button>
-            )}
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -300,13 +295,22 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
             </div>
           </div>
 
-          <div className="flex justify-end pt-3">
+          <div className="flex items-center justify-end gap-3 pt-4 border-t border-indigo-100">
+            {certificates.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsFormVisible(false)}
+                className="bg-white hover:bg-slate-50 text-slate-600 font-bold px-6 py-2.5 rounded-xl border border-slate-200 transition-colors text-sm shadow-sm"
+              >
+                キャンセル
+              </button>
+            )}
             <button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-black px-4 py-2 rounded-xl flex items-center gap-2 transition-colors disabled:opacity-50"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-black px-8 py-2.5 rounded-xl flex items-center gap-2 transition-all disabled:opacity-50 shadow-md"
             >
-              {isSubmitting ? '保存中...' : <><Save size={14} /> 保存する</>}
+              {isSubmitting ? '保存中...' : <><Save size={16} /> 保存する</>}
             </button>
           </div>
         </div>
@@ -343,19 +347,19 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                         {municipality} / {cert.certificate_type} {cert.disability_support_classification && `/ ${cert.disability_support_classification}`}
                       </p>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-3">
                       <button 
                         onClick={() => handleEdit(cert)}
-                        className="text-xs font-black text-slate-500 bg-white border border-slate-200 hover:bg-slate-50 px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
+                        className="text-sm font-black text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
                       >
-                        修正
+                        <Edit3 size={16} className="text-slate-500" /> 修正
                       </button>
                       {isLatest && (
                         <button 
                           onClick={() => handleCopy(cert)}
-                          className="text-xs font-black text-indigo-600 bg-white border border-indigo-200 hover:bg-indigo-50 px-3 py-1.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
+                          className="text-sm font-black text-indigo-700 bg-indigo-50 border border-indigo-200 hover:bg-indigo-100 px-5 py-2.5 rounded-xl shadow-sm flex items-center gap-2 transition-all"
                         >
-                          <Copy size={14} /> 変更をコピーして更新
+                          <Copy size={16} className="text-indigo-500" /> 変更をコピーして更新
                         </button>
                       )}
                     </div>

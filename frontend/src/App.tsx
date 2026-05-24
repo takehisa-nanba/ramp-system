@@ -10,6 +10,7 @@ import Dashboard from './components/Dashboard';
 import Timecard from './components/Timecard';
 import PlanCreator from './components/PlanCreator';
 import UserManager from './components/UserManager';
+import UserDetailPage from './components/UserDetailPage';
 import MainLayout from './components/layout/MainLayout';
 import DailyLogCreator from './components/DailyLogCreator';
 import UserDashboard from './components/UserDashboard';
@@ -78,6 +79,7 @@ const App: React.FC = () => {
           />
           <Route path="timecard" element={<Timecard supporterName={auth.supporterName} />} />
           <Route path="users" element={<UserManager />} />
+          <Route path="users/:id" element={<UserDetailPage />} />
           <Route path="plans" element={<PlanCreator />} />
           <Route path="daily-log" element={<DailyLogCreator />} />
           <Route path="settings/log" element={<LogSettings />} />
