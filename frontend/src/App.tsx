@@ -1,6 +1,6 @@
 // frontend/src/App.tsx
 
-import React, { useState } from 'react';
+import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import './index.css'; 
 
@@ -17,41 +17,22 @@ import UserDashboard from './components/UserDashboard';
 import LogSettings from './components/staff/LogSettings';
 import StaffManagement from './components/StaffManagement';
 import OfficeSettings from './components/OfficeSettings';
+import { useAuth } from './context/AuthContext';
 
-
-
-// 認証状態の型定義 (各コンポーネントと共有)
-type AuthState = {
-  isLoggedIn: boolean;
-  token: string | null;
-  supporterName: string | null;
-  role: string | null;
-  error: string | null;
-  role_scopes?: string[];
-};
 
 // =================================================================
 // App コンポーネント (ルーター/レイアウトの役割のみ)
 // =================================================================
 const App: React.FC = () => {
-  const [auth, setAuth] = useState<AuthState>({
-    isLoggedIn: false,
-    token: null,
-    supporterName: null,
-    role: null,
-    error: null,
-  });
+  const { user, isAuthenticated, isLoading, logout } = useAuth();
 
-  const handleLogout = () => {
-    localStorage.removeItem('user_role');
-    localStorage.removeItem('user_role_scopes');
-    localStorage.removeItem('user_full_name');
-    setAuth({ isLoggedIn: false, token: null, supporterName: null, role: null, error: null });
-  };
+  if (isLoading) {
+    return <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white font-bold text-xl">読み込み中...</div>;
+  }
 
   // 1. ログイン画面の表示 (LoginFormに処理を委譲)
-  if (!auth.isLoggedIn) {
-    return <LoginForm onLoginSuccess={setAuth} />;
+  if (!isAuthenticated || !user) {
+    return <LoginForm />;
   }
 
   // 2. 認証後のダッシュボードレイアウト (MainLayoutによるレスポンシブなサイドバー型)
@@ -62,9 +43,9 @@ const App: React.FC = () => {
           path="/" 
           element={
             <MainLayout 
-              supporterName={auth.supporterName} 
-              role={auth.role} 
-              onLogout={handleLogout} 
+              supporterName={user.fullName} 
+              role={user.roleName} 
+              onLogout={logout} 
             />
           }
         >
@@ -72,12 +53,12 @@ const App: React.FC = () => {
           <Route 
             index 
             element={
-              auth.role === 'STAFF' 
-                ? <Dashboard supporterName={auth.supporterName} /> 
-                : <UserDashboard userName={auth.supporterName} />
+              user.roleName === 'STAFF' 
+                ? <Dashboard supporterName={user.fullName} /> 
+                : <UserDashboard userName={user.fullName} />
             } 
           />
-          <Route path="timecard" element={<Timecard supporterName={auth.supporterName} />} />
+          <Route path="timecard" element={<Timecard supporterName={user.fullName} />} />
           <Route path="users" element={<UserManager />} />
           <Route path="users/:id" element={<UserDetailPage />} />
           <Route path="plans" element={<PlanCreator />} />

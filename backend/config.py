@@ -27,35 +27,43 @@ class Config:
     アプリケーションの設定（コンフィグ）を管理するクラス。
     """
     
-    # --- 必須設定 ---
-    
-    # セキュリティキー (Flaskのセッション管理などに必須)
-    #  本番環境では、これは必ず環境変数から読み込む強力なキーに変更してください
-    SECRET_KEY = os.environ.get('SECRET_KEY') or 'a-very-secret-key-that-you-should-change'
-    
     # SQLAlchemyの設定
     SQLALCHEMY_DATABASE_URI = DATABASE_URL
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # ★★★ PIIおよびFERNETキーをアプリケーション設定に追加 ★★★
-    # .envにあればその値を使用。なければ、テスト実行時に警告を出すためのFALLBACKキーを設定。
-    PII_ENCRYPTION_KEY = os.environ.get('PII_ENCRYPTION_KEY') or 'FALLBACK_PII_KEY_FOR_TESTS_ONLY'
-    FERNET_ENCRYPTION_KEY = os.environ.get('FERNET_ENCRYPTION_KEY') or 'FALLBACK_FERNET_KEY_FOR_TESTS_ONLY'
+    # 本番環境では必須。開発環境ではフォールバックを使用。
+    is_production = os.environ.get('FLASK_ENV') == 'production'
+    
+    _secret_key = os.environ.get('SECRET_KEY')
+    _pii_key = os.environ.get('PII_ENCRYPTION_KEY')
+    _fernet_key = os.environ.get('FERNET_ENCRYPTION_KEY')
+    
+    if is_production and (not _secret_key or not _pii_key or not _fernet_key):
+        raise ValueError("CRITICAL: Missing encryption keys in production environment. System halting.")
+
+    SECRET_KEY = _secret_key or 'a-very-secret-key-that-you-should-change'
+    PII_ENCRYPTION_KEY = _pii_key or 'FALLBACK_PII_KEY_FOR_TESTS_ONLY'
+    FERNET_ENCRYPTION_KEY = _fernet_key or 'FALLBACK_FERNET_KEY_FOR_TESTS_ONLY'
     # ★★★ ここまで ★★★
     
     # --- JWT-Extended 設定 (NEW) --- ★追加
     import datetime
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'a-default-jwt-secret-for-testing'
-    # JWTの有効期限を 1日 に延長（デフォルト15分による開発中のトークン切れを防止）
-    JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(days=1)
+    # JWTの有効期限を 30分 に短縮（本番運用向け）
+    JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(minutes=30)
     # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）
     JWT_TOKEN_LOCATION = ["cookies", "headers"]
 
-    JWT_COOKIE_SECURE = False # 開発中はFalse (HTTPS不要)
+    JWT_COOKIE_SECURE = is_production # 本番環境ではTrue (HTTPS必須)
     JWT_COOKIE_SAMESITE = 'Lax'
-    JWT_COOKIE_CSRF_PROTECT = False
+    JWT_COOKIE_CSRF_PROTECT = is_production # 本番環境ではCSRF保護を有効化
 
     JWT_CSRF_CHECK_FOR_FORM_FIELDS = False
+    
+    # --- CORS設定 ---
+    # CORS_ORIGINS が指定されていない場合は、開発用に localhost を許可する
+    CORS_ORIGINS = os.environ.get('CORS_ORIGINS', 'http://localhost:5173').split(',')
     # --- JWT設定ここまで ---
 
     # --- その他の設定（必要に応じて追加） ---

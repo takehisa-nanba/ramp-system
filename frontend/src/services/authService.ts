@@ -60,3 +60,15 @@ export const fetchTestRoute = async (): Promise<any> => {
       throw new Error('認証チェック通信エラー');
     }
 };
+
+/**
+ * 現在のセッション（ログイン状態）を確認・復元する
+ */
+export const checkSession = async (): Promise<LoginResponse> => {
+  try {
+    const response = await apiClient.get<LoginResponse>('/auth/me');
+    return response.data;
+  } catch (error) {
+    throw new Error('セッションが無効です');
+  }
+};

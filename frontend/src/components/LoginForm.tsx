@@ -1,27 +1,19 @@
 // frontend/src/components/LoginForm.tsx
 
 import React, { useState, type FormEvent } from 'react';
-// 🛠️ 修正: パスが正しくないため、拡張子 '.ts' を追加して解決を助ける
-import { login } from '../services/authService';
-
-// App.tsx から AuthState 型をコピーして使用
-type AuthState = {
-  isLoggedIn: boolean;
-  token: string | null;
-  supporterName: string | null;
-  role: string | null;
-  error: string | null;
-  role_scopes?: string[];
-};
+import { useAuth } from '../context/AuthContext';
 
 // =================================================================
 // LoginForm コンポーネント
 // =================================================================
-const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = ({ onLoginSuccess }) => {
+
+const LoginForm: React.FC = () => {
   const [loginId, setLoginId] = useState('admin@example.com');
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  const { login: authLogin } = useAuth();
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -29,20 +21,8 @@ const LoginForm: React.FC<{ onLoginSuccess: (authData: AuthState) => void }> = (
     setError(null);
 
     try {
-      const data = await login({ login_id: loginId, password });
-      
-      localStorage.setItem('user_role', data.role_name);
-      localStorage.setItem('user_role_scopes', JSON.stringify(data.role_scopes || []));
-      localStorage.setItem('user_full_name', data.full_name);
-
-      onLoginSuccess({
-        isLoggedIn: true,
-        token: null, 
-        supporterName: data.full_name,
-        role: data.role_name,
-        error: null,
-        role_scopes: data.role_scopes,
-      });
+      // AuthContext の login メソッドを呼び出す
+      await authLogin({ login_id: loginId, password, user_type: 'staff' });
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'ログインに失敗しました。');

@@ -2,6 +2,7 @@
 export interface LoginRequest {
   login_id: string; // email または user_code
   password: string;
+  user_type: 'staff' | 'user';
 }
 
 // ログイン成功時にAPIから返されるデータ

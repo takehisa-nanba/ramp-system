@@ -6,6 +6,9 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateT
 # 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
 # 各メソッド内で実行時にインポートします。
 import datetime
+from flask import current_app
+from backend.app.services.security_service import encrypt_data_pii, decrypt_data_pii, encrypt_data_envelope, decrypt_data_envelope
+
 
 # ====================================================================
 # 1. User (利用者の業務データ / システムの核)
@@ -208,72 +211,52 @@ class UserPII(db.Model):
     
     @property
     def last_name(self):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import decrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         return decrypt_data_pii(self.encrypted_last_name, key)
 
     @last_name.setter
     def last_name(self, plaintext):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import encrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         self.encrypted_last_name = encrypt_data_pii(plaintext, key)
 
     @property
     def first_name(self):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import decrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         return decrypt_data_pii(self.encrypted_first_name, key)
 
     @first_name.setter
     def first_name(self, plaintext):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import encrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         self.encrypted_first_name = encrypt_data_pii(plaintext, key)
 
     @property
     def last_name_kana(self):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import decrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         return decrypt_data_pii(self.encrypted_last_name_kana, key)
 
     @last_name_kana.setter
     def last_name_kana(self, plaintext):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import encrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         self.encrypted_last_name_kana = encrypt_data_pii(plaintext, key)
 
     @property
     def first_name_kana(self):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import decrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         return decrypt_data_pii(self.encrypted_first_name_kana, key)
 
     @first_name_kana.setter
     def first_name_kana(self, plaintext):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import encrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         self.encrypted_first_name_kana = encrypt_data_pii(plaintext, key)
         
     @property
     def address(self):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import decrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         return decrypt_data_pii(self.encrypted_address, key)
 
     @address.setter
     def address(self, plaintext):
-        from backend.app.services.core_service import get_system_pii_key
-        from backend.app.services.security_service import encrypt_data_pii
-        key = get_system_pii_key()
+        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
         self.encrypted_address = encrypt_data_pii(plaintext, key)
 
     # --- 階層3：認証 ---

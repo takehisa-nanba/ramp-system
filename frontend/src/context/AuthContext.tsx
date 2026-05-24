@@ -4,7 +4,7 @@ import Cookies from 'js-cookie';
 // ★修正: 共通型定義から型をインポート
 import type { AuthUser, LoginRequest, LoginResponse } from '../context/type'; 
 // パスに拡張子 .ts を追加して解決を確実にします。
-import { login as apiLogin, logout as apiLogout } from '../services/authService'; 
+import { login as apiLogin, logout as apiLogout, checkSession } from '../services/authService'; 
 
 
 // ====================================================================
@@ -64,6 +64,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         roleName: response.role_name
       };
 
+      // localStorageの同期（既存コンポーネントとの互換性のため）
+      localStorage.setItem('user_role', response.role_name);
+      localStorage.setItem('user_role_scopes', JSON.stringify(response.role_scopes || []));
+      localStorage.setItem('user_full_name', response.full_name);
+
 
       setUser(newUser);
       
@@ -86,6 +91,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null); // 状態をリセット
       // JWTトークンがHTTP-Onlyの場合、ブラウザは自動で削除しますが、CSRFトークンは手動で削除
       Cookies.remove('csrf_access_token'); 
+      localStorage.removeItem('user_role');
+      localStorage.removeItem('user_role_scopes');
+      localStorage.removeItem('user_full_name');
     } catch (err: any) {
       console.error("Logout failed:", err);
       // ログアウトAPIが失敗しても、クライアント状態は強制的にリセットする
@@ -97,10 +105,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
   // 初期ロード時の処理
   useEffect(() => {
-    // Note: HTTP-Only Cookieベースのため、セッションの自動復元はサーバーへの
-    // /api/check_session のようなエンドポイントに依存します。
-    // 現時点ではサーバー側でこのエンドポイントが未実装のため、初期状態はログアウトとして処理します。
-    setIsLoading(false);
+    const restoreSession = async () => {
+      try {
+        const response = await checkSession();
+        const restoredUser: AuthUser = {
+          id: response.user_id,
+          fullName: response.full_name,
+          roleId: 0,
+          roleName: response.role_name
+        };
+        
+        // localStorageの同期
+        localStorage.setItem('user_role', response.role_name);
+        localStorage.setItem('user_role_scopes', JSON.stringify(response.role_scopes || []));
+        localStorage.setItem('user_full_name', response.full_name);
+        
+        setUser(restoredUser);
+      } catch (err) {
+        // セッションがない場合はそのままログアウト状態
+        setUser(null);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    restoreSession();
   }, []);
 
   const value = {
