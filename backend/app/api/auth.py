@@ -13,52 +13,24 @@ def login():
     data = request.get_json()
     login_id = data.get('email') or data.get('login_id') # emailまたはlogin_id
     password = data.get('password')
-
     user_type = data.get('user_type') # 'staff' or 'user'
     
-    if not login_id or not password or not user_type:
+    if not all([login_id, password, user_type]):
         return jsonify({"msg": "Missing credentials or user_type"}), 400
 
-    from backend.app.services.core_service import authenticate_user, authenticate_supporter
+    from backend.app.services.auth_service import perform_login
     
-    if user_type == 'staff':
-        supporter = authenticate_supporter(login_id, password)
-        if supporter:
-            role_name = "STAFF"
-            identity = f"staff:{supporter.id}"
-            full_name = f"{supporter.last_name} {supporter.first_name}"
-            user_id = supporter.id
-            role_scopes = [r.role_scope for r in supporter.roles]
-        else:
-            return jsonify({"msg": "Invalid credentials"}), 401
-    elif user_type == 'user':
-        user = authenticate_user(login_id, password)
-        if user:
-            role_name = "USER"
-            identity = f"user:{user.id}"
-            full_name = user.display_name
-            user_id = user.id
-            role_scopes = []
-        else:
-            return jsonify({"msg": "Invalid credentials"}), 401
-    else:
-        return jsonify({"msg": "Invalid user_type. Must be 'staff' or 'user'."}), 400
+    success, token_data, error_msg = perform_login(login_id, password, user_type)
+    
+    if not success:
+        return jsonify({"msg": error_msg}), 401
 
-    additional_claims = {
-        "role_name": role_name,
-        "full_name": full_name,
-        "role_scopes": role_scopes
-    }
-    access_token = create_access_token(identity=identity, additional_claims=additional_claims)
+    access_token = create_access_token(
+        identity=token_data['identity'], 
+        additional_claims=token_data['claims']
+    )
     
-    response = jsonify({
-        "msg": "Login successful", 
-        "user_id": user_id, 
-        "role_name": role_name, 
-        "full_name": full_name,
-        "role_scopes": role_scopes
-    })
-    
+    response = jsonify({"msg": "Login successful", **token_data['response_data']})
     set_access_cookies(response, access_token)
     return response, 200
 

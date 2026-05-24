@@ -4,7 +4,7 @@
 from backend.app.extensions import db, bcrypt
 
 from backend.config import Config
-from backend.app.services.security_service import encrypt_data_pii, decrypt_data_pii
+from backend.app.utils.custom_types import EncryptedString
 
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func, CheckConstraint
 
@@ -132,49 +132,17 @@ class SupporterPII(db.Model):
     sso_account_id = Column(String(255), index=True) # GoogleのSubject IDなど
     
     # --- 機密個人情報 (階層2：システム共通鍵で暗号化) ---
-    encrypted_personal_phone = Column(String(255))
-    encrypted_address = Column(String(512))
-    encrypted_bank_account_info = Column(String(512)) # 給与振込先など
+    personal_phone = Column('encrypted_personal_phone', EncryptedString(255))
+    address = Column('encrypted_address', EncryptedString(512))
+    bank_account_info = Column('encrypted_bank_account_info', EncryptedString(512)) # 給与振込先など
     
     # --- 契約書類 (証憑) ---
-    encrypted_employment_contract_url = Column(String(500)) # 雇用契約書URL
-    encrypted_resume_url = Column(String(500)) # 履歴書URL
+    employment_contract_url = Column('encrypted_employment_contract_url', EncryptedString(500)) # 雇用契約書URL
+    resume_url = Column('encrypted_resume_url', EncryptedString(500)) # 履歴書URL
     
     supporter = db.relationship('Supporter', back_populates='pii', uselist=False)
 
-    # === 暗号化プロパティ ===
-    
-    @property
-    def personal_phone(self):
-        return decrypt_data_pii(self.encrypted_personal_phone, Config.PII_ENCRYPTION_KEY)
-
-    @personal_phone.setter
-    def personal_phone(self, plaintext):
-        self.encrypted_personal_phone = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def address(self):
-        return decrypt_data_pii(self.encrypted_address, Config.PII_ENCRYPTION_KEY)
-
-    @address.setter
-    def address(self, plaintext):
-        self.encrypted_address = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def employment_contract_url(self):
-        return decrypt_data_pii(self.encrypted_employment_contract_url, Config.PII_ENCRYPTION_KEY)
-
-    @employment_contract_url.setter
-    def employment_contract_url(self, plaintext):
-        self.encrypted_employment_contract_url = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def bank_account_info(self):
-        return decrypt_data_pii(self.encrypted_bank_account_info, Config.PII_ENCRYPTION_KEY)
-
-    @bank_account_info.setter
-    def bank_account_info(self, plaintext):
-        self.encrypted_bank_account_info = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
+    # (機密PIIのプロパティ群は EncryptedString 型の導入により削除されました)
 
     # --- 認証メソッド ---
     def set_password(self, password):

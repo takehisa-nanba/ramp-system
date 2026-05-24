@@ -7,7 +7,8 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateT
 # 各メソッド内で実行時にインポートします。
 import datetime
 from backend.config import Config
-from backend.app.services.security_service import encrypt_data_pii, decrypt_data_pii, encrypt_data_envelope, decrypt_data_envelope
+from backend.app.services.security_service import encrypt_data_envelope, decrypt_data_envelope
+from backend.app.utils.custom_types import EncryptedString
 
 
 # ====================================================================
@@ -128,11 +129,11 @@ class UserPII(db.Model):
 
     # --- 階層2：機密PII（システム共通鍵暗号化） ---
     # 氏名、住所、連絡先などは「階層2」の鍵で暗号化
-    encrypted_last_name = Column(String(255))
-    encrypted_first_name = Column(String(255))
-    encrypted_last_name_kana = Column(String(255))
-    encrypted_first_name_kana = Column(String(255))
-    encrypted_address = Column(String(512))
+    last_name = Column('encrypted_last_name', EncryptedString(255))
+    first_name = Column('encrypted_first_name', EncryptedString(255))
+    last_name_kana = Column('encrypted_last_name_kana', EncryptedString(255))
+    first_name_kana = Column('encrypted_first_name_kana', EncryptedString(255))
+    address = Column('encrypted_address', EncryptedString(512))
     
     # --- 平文（検索・計算・ユニーク制約用） ---
     # 原理4（パフォーマンス）と原理6（セキュリティ）のバランス調整結果
@@ -199,47 +200,7 @@ class UserPII(db.Model):
             self.encrypted_certificate_number = None
             self.encrypted_data_key = None
 
-    # --- 階層2：機密PII (システム共通鍵) ---
-    
-    @property
-    def last_name(self):
-        return decrypt_data_pii(self.encrypted_last_name, Config.PII_ENCRYPTION_KEY)
-
-    @last_name.setter
-    def last_name(self, plaintext):
-        self.encrypted_last_name = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def first_name(self):
-        return decrypt_data_pii(self.encrypted_first_name, Config.PII_ENCRYPTION_KEY)
-
-    @first_name.setter
-    def first_name(self, plaintext):
-        self.encrypted_first_name = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def last_name_kana(self):
-        return decrypt_data_pii(self.encrypted_last_name_kana, Config.PII_ENCRYPTION_KEY)
-
-    @last_name_kana.setter
-    def last_name_kana(self, plaintext):
-        self.encrypted_last_name_kana = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-
-    @property
-    def first_name_kana(self):
-        return decrypt_data_pii(self.encrypted_first_name_kana, Config.PII_ENCRYPTION_KEY)
-
-    @first_name_kana.setter
-    def first_name_kana(self, plaintext):
-        self.encrypted_first_name_kana = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
-        
-    @property
-    def address(self):
-        return decrypt_data_pii(self.encrypted_address, Config.PII_ENCRYPTION_KEY)
-
-    @address.setter
-    def address(self, plaintext):
-        self.encrypted_address = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
+    # (機密PIIのプロパティ群は EncryptedString 型の導入により削除されました)
 
     # --- 階層3：認証 ---
     def set_password(self, password):

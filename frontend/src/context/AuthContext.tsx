@@ -5,6 +5,7 @@ import Cookies from 'js-cookie';
 import type { AuthUser, LoginRequest, LoginResponse } from '../context/type'; 
 // パスに拡張子 .ts を追加して解決を確実にします。
 import { login as apiLogin, logout as apiLogout, checkSession } from '../services/authService'; 
+import axios from 'axios';
 
 
 // ====================================================================
@@ -68,9 +69,17 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       setUser(newUser);
       
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Login failed:", err);
-      setError(err.message || "ログインに失敗しました。");
+      
+      let errorMessage = "ログインに失敗しました。";
+      if (axios.isAxiosError(err) && err.response?.data?.msg) {
+        errorMessage = err.response.data.msg;
+      } else if (err instanceof Error) {
+        errorMessage = err.message;
+      }
+
+      setError(errorMessage);
       setUser(null);
       throw err; // コンポーネント側でエラー処理できるように再スロー
     } finally {
@@ -87,7 +96,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       setUser(null); // 状態をリセット
       // JWTトークンがHTTP-Onlyの場合、ブラウザは自動で削除しますが、CSRFトークンは手動で削除
       Cookies.remove('csrf_access_token');
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error("Logout failed:", err);
       // ログアウトAPIが失敗しても、クライアント状態は強制的にリセットする
       setUser(null); 
