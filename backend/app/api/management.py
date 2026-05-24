@@ -27,8 +27,16 @@ def list_staff():
     # SYSTEM または CORPORATE ロールの場合は全スタッフを取得、JOBロール（事業所管理者）の場合は自身の事業所のスタッフのみ取得
     is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] for r in current.roles)
     
+    # Eager loading を使用して LEFT OUTER JOIN で一括取得 (N+1問題の解決)
+    # ※ lazy='dynamic' である job_assignments は joinedload できないため除外
+    query = Supporter.query.options(
+        joinedload(Supporter.pii),
+        joinedload(Supporter.roles),
+        joinedload(Supporter.shift_patterns)
+    )
+    
     if is_global_admin:
-        staff_members = Supporter.query.all()
+        staff_members = query.all()
     else:
         office_id = current.office_id
         if not office_id:
@@ -37,7 +45,7 @@ def list_staff():
             office_id = first_office.id if first_office else None
             
         if office_id:
-            staff_members = Supporter.query.filter_by(office_id=office_id).all()
+            staff_members = query.filter_by(office_id=office_id).all()
         else:
             staff_members = []
     
@@ -161,7 +169,20 @@ def update_staff(staff_id):
             from datetime import date
             
             service_config = OfficeServiceConfiguration.query.filter_by(office_id=staff.office_id).first()
-            service_config_id = service_config.id if service_config else 1
+            if not service_config:
+                # セーフティネット: サービス設定がない場合はデフォルトを自動生成して保存 (自己回復設計)
+                from backend.app.models import ServiceTypeMaster
+                st = ServiceTypeMaster.query.first()
+                # 重複回避のために office_id を含む事業所番号を生成
+                service_config = OfficeServiceConfiguration(
+                    office_id=staff.office_id, 
+                    service_type_master_id=st.id if st else 1,
+                    jigyosho_bango=f"GEN-{staff.office_id}-0001",
+                    capacity=20
+                )
+                db.session.add(service_config)
+                db.session.flush()
+            service_config_id = service_config.id
             
             def match_job(existing, incoming):
                 return existing.job_title_id == int(incoming['job_title_id'])
@@ -465,7 +486,20 @@ def register_staff():
         if 'job_assignments' in data:
             # 所属事業所の OfficeServiceConfiguration を取得
             service_config = OfficeServiceConfiguration.query.filter_by(office_id=new_staff.office_id).first()
-            service_config_id = service_config.id if service_config else 1
+            if not service_config:
+                # セーフティネット: サービス設定がない場合はデフォルトを自動生成して保存 (自己回復設計)
+                from backend.app.models import ServiceTypeMaster
+                st = ServiceTypeMaster.query.first()
+                # 重複回避のために office_id を含む事業所番号を生成
+                service_config = OfficeServiceConfiguration(
+                    office_id=new_staff.office_id, 
+                    service_type_master_id=st.id if st else 1,
+                    jigyosho_bango=f"GEN-{new_staff.office_id}-0001",
+                    capacity=20
+                )
+                db.session.add(service_config)
+                db.session.flush()
+            service_config_id = service_config.id
             
             for a in data['job_assignments']:
                 expiry_val = None

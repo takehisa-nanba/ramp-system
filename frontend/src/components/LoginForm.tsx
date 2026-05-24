@@ -15,6 +15,9 @@ const LoginForm: React.FC = () => {
   
   const { login: authLogin } = useAuth();
 
+  // クエリパラメータからセッション切れ（expired）フラグを解析
+  const isExpired = new URLSearchParams(window.location.search).get('expired') === 'true';
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -40,6 +43,13 @@ const LoginForm: React.FC = () => {
         </div>
 
         <div className="p-8">
+          {isExpired && !error && (
+            <div className="mb-6 bg-amber-50 border-l-4 border-amber-500 p-4 rounded animate-pulse">
+              <p className="text-sm text-amber-700 font-bold">セッション切れ</p>
+              <p className="text-sm text-amber-600">セッションがタイムアウトしました。再度ログインしてください。</p>
+            </div>
+          )}
+
           {error && (
             <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded">
               <p className="text-sm text-red-700 font-bold">エラー</p>

@@ -88,7 +88,7 @@ def test_plan_workflow_and_guardrail(app):
         logger.info("🔹 ステップ1: 原案作成")
         draft_plan = service.create_plan_draft(
             user_id=user.id,
-            sabikan_id=sabikan.id,
+            created_by_id=sabikan.id,
             based_on_policy_id=policy.id
         )
         # 【修正】ここでコミットし、IDを確定させる
