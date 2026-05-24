@@ -1,6 +1,6 @@
 import apiClient from './apiClient';
 
-const API_URL = '/api/management';
+const API_URL = '/management';
 
 export interface JobAssignment {
   id?: number;

@@ -74,9 +74,9 @@ def list_staff():
             "break_minutes": p.break_minutes
         } for p in s.shift_patterns],
         "email": s.pii.email if s.pii else "N/A",
-        "personal_phone": s.pii.personal_phone if (s.pii and s.pii.encrypted_personal_phone) else "",
-        "address": s.pii.address if (s.pii and s.pii.encrypted_address) else "",
-        "bank_account_info": s.pii.bank_account_info if (s.pii and s.pii.encrypted_bank_account_info) else ""
+        "personal_phone": s.pii.personal_phone if s.pii else "",
+        "address": s.pii.address if s.pii else "",
+        "bank_account_info": s.pii.bank_account_info if s.pii else ""
     } for s in staff_members]), 200
 
 @management_bp.route('/staff/<int:staff_id>', methods=['PUT'])
