@@ -1,8 +1,7 @@
 // frontend/src/services/apiClient.ts
 
 import axios from 'axios';
-import type { AxiosInstance, InternalAxiosRequestConfig } from 'axios';
-import Cookies from 'js-cookie';
+import type { AxiosInstance } from 'axios';
 
 const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
 
