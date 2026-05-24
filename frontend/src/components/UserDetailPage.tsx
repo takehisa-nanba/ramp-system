@@ -9,6 +9,7 @@ import {
 import { fetchUserPii, type UserPiiResponse } from '../services/userService';
 import { UserBasicEditForm } from './UserBasicEditForm';
 import { UserCertificateTab } from './common/UserCertificateTab';
+import apiClient from '../services/apiClient';
 
 const THEME_STYLES = {
   indigo: {
@@ -83,20 +84,11 @@ const UserDetailPage: React.FC = () => {
     if (!confirmDelete) return;
 
     try {
-      const response = await fetch(`/api/users/${userData.id}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || '削除に失敗しました');
-      }
+      await apiClient.delete(`/users/${userData.id}`);
       alert('利用者を完全に削除しました。');
       navigate('/users');
     } catch (err: any) {
-      alert(`削除エラー: ${err.message}`);
+      alert(`削除エラー: ${err.response?.data?.msg || err.message}`);
     }
   };
 

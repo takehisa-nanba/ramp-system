@@ -5,6 +5,7 @@ import { fetchUserList, fetchStatusMaster, decryptUserPii, type UserListItem, ty
 import { RegisterUserModal } from './common/RegisterUserModal';
 import { StatusTransitionModal } from './common/StatusTransitionModal';
 import { PremiumTable } from './common/PremiumTable';
+import apiClient from '../services/apiClient';
 
 const TABS = [
   { id: 'active', label: '利用中', title: '利用者情報', subtitle: '対象者を選択してください' },
@@ -98,19 +99,10 @@ export const UserManager: React.FC = () => {
   const handleDelete = async (userId: number, name: string) => {
     if (!window.confirm(`本当に「${name}」の情報を完全に削除しますか？\n※この操作は元に戻せません。`)) return;
     try {
-      const response = await fetch(`/api/users/${userId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-        }
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.msg || '削除に失敗しました');
-      }
+      await apiClient.delete(`/users/${userId}`);
       setRefreshTrigger(prev => prev + 1);
     } catch (err: any) {
-      alert(`削除エラー: ${err.message}`);
+      alert(`削除エラー: ${err.response?.data?.msg || err.message}`);
     }
   };
 

@@ -3,7 +3,7 @@
 # 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db, bcrypt
 
-from flask import current_app
+from backend.config import Config
 from backend.app.services.security_service import encrypt_data_pii, decrypt_data_pii
 
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func, CheckConstraint
@@ -146,43 +146,35 @@ class SupporterPII(db.Model):
     
     @property
     def personal_phone(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_personal_phone, key)
+        return decrypt_data_pii(self.encrypted_personal_phone, Config.PII_ENCRYPTION_KEY)
 
     @personal_phone.setter
     def personal_phone(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_personal_phone = encrypt_data_pii(plaintext, key)
+        self.encrypted_personal_phone = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def address(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_address, key)
+        return decrypt_data_pii(self.encrypted_address, Config.PII_ENCRYPTION_KEY)
 
     @address.setter
     def address(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_address = encrypt_data_pii(plaintext, key)
+        self.encrypted_address = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def employment_contract_url(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_employment_contract_url, key)
+        return decrypt_data_pii(self.encrypted_employment_contract_url, Config.PII_ENCRYPTION_KEY)
 
     @employment_contract_url.setter
     def employment_contract_url(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_employment_contract_url = encrypt_data_pii(plaintext, key)
+        self.encrypted_employment_contract_url = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def bank_account_info(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_bank_account_info, key)
+        return decrypt_data_pii(self.encrypted_bank_account_info, Config.PII_ENCRYPTION_KEY)
 
     @bank_account_info.setter
     def bank_account_info(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_bank_account_info = encrypt_data_pii(plaintext, key)
+        self.encrypted_bank_account_info = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     # --- 認証メソッド ---
     def set_password(self, password):

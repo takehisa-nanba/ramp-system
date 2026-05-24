@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { StaffMember, Role, JobTitle } from '../types';
+import { useAuth } from '../../../context/AuthContext';
 
 const DAYS_OF_WEEK = [
   { key: 'Monday', label: '月曜日' },
@@ -60,12 +61,12 @@ export const useStaffForm = (
   const [form, setForm] = useState(getInitialFormState());
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  const { user } = useAuth();
+
   // ログインユーザーの最高セキュリティ・ロールを判定
   const getLoginUserMaxRole = (): 'SYSTEM' | 'CORPORATE' | 'JOB' | 'NONE' => {
     try {
-      const scopesJson = localStorage.getItem('user_role_scopes');
-      if (!scopesJson) return 'NONE';
-      const scopes: string[] = JSON.parse(scopesJson);
+      const scopes = user?.roleScopes || [];
       
       if (scopes.includes('SYSTEM')) return 'SYSTEM';
       if (scopes.includes('CORPORATE')) return 'CORPORATE';

@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateT
 # 修正点: 循環参照を避けるため、security_serviceやcore_serviceは
 # 各メソッド内で実行時にインポートします。
 import datetime
-from flask import current_app
+from backend.config import Config
 from backend.app.services.security_service import encrypt_data_pii, decrypt_data_pii, encrypt_data_envelope, decrypt_data_envelope
 
 
@@ -177,12 +177,8 @@ class UserPII(db.Model):
         if not self.encrypted_certificate_number or not self.encrypted_data_key:
             return None
         
-        # 実行時インポート（循環参照回避）
-        from backend.app.services.core_service import get_corporation_id_for_user, get_corporation_kek
-        from backend.app.services.security_service import decrypt_data_envelope
-        
-        corp_id = get_corporation_id_for_user(self.user)
-        kek_bytes = get_corporation_kek(corp_id)
+        # KEKはConfigから直接取得
+        kek_bytes = Config.FERNET_ENCRYPTION_KEY.encode() if isinstance(Config.FERNET_ENCRYPTION_KEY, str) else Config.FERNET_ENCRYPTION_KEY
         
         return decrypt_data_envelope(
             self.encrypted_certificate_number, 
@@ -193,12 +189,8 @@ class UserPII(db.Model):
     @certificate_number.setter
     def certificate_number(self, plaintext):
         """受給者証番号（平文）を暗号化して保存する (階層1)"""
-        from backend.app.services.core_service import get_corporation_id_for_user, get_corporation_kek
-        from backend.app.services.security_service import encrypt_data_envelope
-        
         if plaintext:
-            corp_id = get_corporation_id_for_user(self.user)
-            kek_bytes = get_corporation_kek(corp_id)
+            kek_bytes = Config.FERNET_ENCRYPTION_KEY.encode() if isinstance(Config.FERNET_ENCRYPTION_KEY, str) else Config.FERNET_ENCRYPTION_KEY
             
             encrypted_data, encrypted_key = encrypt_data_envelope(plaintext, kek_bytes)
             self.encrypted_certificate_number = encrypted_data
@@ -211,53 +203,43 @@ class UserPII(db.Model):
     
     @property
     def last_name(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_last_name, key)
+        return decrypt_data_pii(self.encrypted_last_name, Config.PII_ENCRYPTION_KEY)
 
     @last_name.setter
     def last_name(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_last_name = encrypt_data_pii(plaintext, key)
+        self.encrypted_last_name = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def first_name(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_first_name, key)
+        return decrypt_data_pii(self.encrypted_first_name, Config.PII_ENCRYPTION_KEY)
 
     @first_name.setter
     def first_name(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_first_name = encrypt_data_pii(plaintext, key)
+        self.encrypted_first_name = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def last_name_kana(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_last_name_kana, key)
+        return decrypt_data_pii(self.encrypted_last_name_kana, Config.PII_ENCRYPTION_KEY)
 
     @last_name_kana.setter
     def last_name_kana(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_last_name_kana = encrypt_data_pii(plaintext, key)
+        self.encrypted_last_name_kana = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     @property
     def first_name_kana(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_first_name_kana, key)
+        return decrypt_data_pii(self.encrypted_first_name_kana, Config.PII_ENCRYPTION_KEY)
 
     @first_name_kana.setter
     def first_name_kana(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_first_name_kana = encrypt_data_pii(plaintext, key)
+        self.encrypted_first_name_kana = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
         
     @property
     def address(self):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        return decrypt_data_pii(self.encrypted_address, key)
+        return decrypt_data_pii(self.encrypted_address, Config.PII_ENCRYPTION_KEY)
 
     @address.setter
     def address(self, plaintext):
-        key = current_app.config.get('PII_ENCRYPTION_KEY', 'FALLBACK_PII_KEY_FOR_TESTS_ONLY')
-        self.encrypted_address = encrypt_data_pii(plaintext, key)
+        self.encrypted_address = encrypt_data_pii(plaintext, Config.PII_ENCRYPTION_KEY)
 
     # --- 階層3：認証 ---
     def set_password(self, password):

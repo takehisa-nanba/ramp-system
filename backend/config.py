@@ -32,15 +32,15 @@ class Config:
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # ★★★ PIIおよびFERNETキーをアプリケーション設定に追加 ★★★
-    # 本番環境では必須。開発環境ではフォールバックを使用。
-    is_production = os.environ.get('FLASK_ENV') == 'production'
+    # 必須キーが存在しない場合は常にエラー。ALLOW_INSECURE_FALLBACKS=True が明示された場合のみフォールバックを許可
+    allow_insecure = os.environ.get('ALLOW_INSECURE_FALLBACKS') == 'True'
     
     _secret_key = os.environ.get('SECRET_KEY')
     _pii_key = os.environ.get('PII_ENCRYPTION_KEY')
     _fernet_key = os.environ.get('FERNET_ENCRYPTION_KEY')
     
-    if is_production and (not _secret_key or not _pii_key or not _fernet_key):
-        raise ValueError("CRITICAL: Missing encryption keys in production environment. System halting.")
+    if not allow_insecure and (not _secret_key or not _pii_key or not _fernet_key):
+        raise ValueError("CRITICAL: Missing encryption keys. System halting for security. Set ALLOW_INSECURE_FALLBACKS=True to override in dev.")
 
     SECRET_KEY = _secret_key or 'a-very-secret-key-that-you-should-change'
     PII_ENCRYPTION_KEY = _pii_key or 'FALLBACK_PII_KEY_FOR_TESTS_ONLY'
@@ -55,9 +55,9 @@ class Config:
     # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）
     JWT_TOKEN_LOCATION = ["cookies", "headers"]
 
-    JWT_COOKIE_SECURE = is_production # 本番環境ではTrue (HTTPS必須)
-    JWT_COOKIE_SAMESITE = 'Lax'
-    JWT_COOKIE_CSRF_PROTECT = is_production # 本番環境ではCSRF保護を有効化
+    JWT_COOKIE_SECURE = os.environ.get('JWT_COOKIE_SECURE', 'False').lower() == 'true'
+    JWT_COOKIE_SAMESITE = os.environ.get('JWT_COOKIE_SAMESITE', 'Lax')
+    JWT_COOKIE_CSRF_PROTECT = True # 開発環境でも常にCSRF保護を有効化
 
     JWT_CSRF_CHECK_FOR_FORM_FIELDS = False
     

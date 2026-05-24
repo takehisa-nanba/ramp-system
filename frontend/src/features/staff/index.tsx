@@ -4,6 +4,7 @@ import { useStaff } from './hooks/useStaff';
 import { StaffList } from './components/StaffList';
 import { StaffModal } from './components/StaffModal';
 import type { StaffMember } from './types';
+import { useAuth } from '../../context/AuthContext';
 
 export const StaffManagement: React.FC = () => {
   const {
@@ -22,8 +23,8 @@ export const StaffManagement: React.FC = () => {
   const [editingStaff, setEditingStaff] = useState<StaffMember | null>(null);
 
   // 🛡️ フロントエンド認可ガードレール: 管理者ロールチェック
-  const roleScopesJson = localStorage.getItem('user_role_scopes');
-  const roleScopes: string[] = roleScopesJson ? JSON.parse(roleScopesJson) : [];
+  const { user } = useAuth();
+  const roleScopes = user?.roleScopes || [];
   const hasAdminRole = roleScopes.some(scope => ['SYSTEM', 'CORPORATE', 'JOB'].includes(scope));
 
   if (!hasAdminRole) {

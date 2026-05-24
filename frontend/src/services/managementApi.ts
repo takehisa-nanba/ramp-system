@@ -1,11 +1,6 @@
-import axios from 'axios';
+import apiClient from './apiClient';
 
 const API_URL = '/api/management';
-
-const getAuthHeader = () => {
-  const token = localStorage.getItem('token');
-  return { Authorization: `Bearer ${token}` };
-};
 
 export interface JobAssignment {
   id?: number;
@@ -83,34 +78,34 @@ export interface OfficeSettings {
 export const managementApi = {
   // Staff
   getStaffMembers: async (): Promise<StaffMember[]> => {
-    const res = await axios.get(`${API_URL}/staff`, { headers: getAuthHeader() });
+    const res = await apiClient.get(`${API_URL}/staff`);
     return res.data;
   },
   getAvailableRoles: async (): Promise<Role[]> => {
-    const res = await axios.get(`${API_URL}/roles`, { headers: getAuthHeader() });
+    const res = await apiClient.get(`${API_URL}/roles`);
     return res.data;
   },
   getJobTitles: async (): Promise<JobTitle[]> => {
-    const res = await axios.get(`${API_URL}/job-titles`, { headers: getAuthHeader() });
+    const res = await apiClient.get(`${API_URL}/job-titles`);
     return res.data;
   },
   updateStaffRoles: async (staffId: number, roleIds: number[]): Promise<void> => {
-    await axios.put(`${API_URL}/staff/${staffId}/roles`, { role_ids: roleIds }, { headers: getAuthHeader() });
+    await apiClient.put(`${API_URL}/staff/${staffId}/roles`, { role_ids: roleIds });
   },
   registerStaff: async (data: any) => {
-    const res = await axios.post(`${API_URL}/staff`, data, { headers: getAuthHeader() });
+    const res = await apiClient.post(`${API_URL}/staff`, data);
     return res.data;
   },
   updateStaff: async (staffId: number, data: any): Promise<void> => {
-    await axios.put(`${API_URL}/staff/${staffId}`, data, { headers: getAuthHeader() });
+    await apiClient.put(`${API_URL}/staff/${staffId}`, data);
   },
 
   // Office
   getOfficeSettings: async (): Promise<OfficeSettings> => {
-    const res = await axios.get(`${API_URL}/office`, { headers: getAuthHeader() });
+    const res = await apiClient.get(`${API_URL}/office`);
     return res.data;
   },
   updateOfficeSettings: async (settings: Partial<OfficeSettings>): Promise<void> => {
-    await axios.put(`${API_URL}/office`, settings, { headers: getAuthHeader() });
+    await apiClient.put(`${API_URL}/office`, settings);
   }
 };

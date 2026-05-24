@@ -83,7 +83,7 @@ def me():
     try:
         user_id = int(user_id_str)
     except ValueError:
-        user_id = 0
+        return jsonify({"msg": "Invalid token identity format"}), 401
     
     return jsonify({
         "msg": "Session active",

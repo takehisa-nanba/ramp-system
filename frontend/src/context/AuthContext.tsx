@@ -61,13 +61,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         id: response.user_id,
         fullName: response.full_name,
         roleId: 0, // 互換性のため一旦0
-        roleName: response.role_name
+        roleName: response.role_name,
+        roleScopes: response.role_scopes || []
       };
-
-      // localStorageの同期（既存コンポーネントとの互換性のため）
-      localStorage.setItem('user_role', response.role_name);
-      localStorage.setItem('user_role_scopes', JSON.stringify(response.role_scopes || []));
-      localStorage.setItem('user_full_name', response.full_name);
 
 
       setUser(newUser);
@@ -90,10 +86,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await apiLogout();
       setUser(null); // 状態をリセット
       // JWTトークンがHTTP-Onlyの場合、ブラウザは自動で削除しますが、CSRFトークンは手動で削除
-      Cookies.remove('csrf_access_token'); 
-      localStorage.removeItem('user_role');
-      localStorage.removeItem('user_role_scopes');
-      localStorage.removeItem('user_full_name');
+      Cookies.remove('csrf_access_token');
     } catch (err: any) {
       console.error("Logout failed:", err);
       // ログアウトAPIが失敗しても、クライアント状態は強制的にリセットする
@@ -112,13 +105,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           id: response.user_id,
           fullName: response.full_name,
           roleId: 0,
-          roleName: response.role_name
+          roleName: response.role_name,
+          roleScopes: response.role_scopes || []
         };
-        
-        // localStorageの同期
-        localStorage.setItem('user_role', response.role_name);
-        localStorage.setItem('user_role_scopes', JSON.stringify(response.role_scopes || []));
-        localStorage.setItem('user_full_name', response.full_name);
         
         setUser(restoredUser);
       } catch (err) {

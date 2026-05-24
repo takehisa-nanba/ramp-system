@@ -27,4 +27,5 @@ export interface AuthUser {
   fullName: string;
   roleId: number;
   roleName: string; // JWTのclaimsから取得されるロール名（例: '管理者', '利用者'）
+  roleScopes?: string[];
 }

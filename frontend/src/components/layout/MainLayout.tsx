@@ -8,6 +8,7 @@ import {
 
 
 
+import { useAuth } from '../../context/AuthContext';
 import ActivityTracker from '../ActivityTracker';
 
 interface MainLayoutProps {
@@ -25,9 +26,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const isStaff = role === 'STAFF';
 
-  // localStorageからログインユーザーの管理者スコープを取得
-  const roleScopesJson = localStorage.getItem('user_role_scopes');
-  const roleScopes: string[] = roleScopesJson ? JSON.parse(roleScopesJson) : [];
+  const { user } = useAuth();
+  const roleScopes = user?.roleScopes || [];
   const hasAdminRole = roleScopes.some(scope => ['SYSTEM', 'CORPORATE', 'JOB'].includes(scope));
 
   interface NavItem {
