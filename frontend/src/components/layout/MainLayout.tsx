@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Menu, X, LayoutDashboard, Users, 
   LogOut, Bell, Search, Settings,
-  MessageSquare
+  MessageSquare, ClipboardList
 } from 'lucide-react';
 
 
@@ -33,6 +33,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const navItems: NavItem[] = [
     { name: 'ホーム', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
+    { name: '本日の利用状況', path: '/today-users', icon: <ClipboardList size={18} /> },
     { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
     { name: '管理確認事項', path: '/action-items', icon: <Bell size={18} /> },
     { name: '設定', path: '/settings', icon: <Settings size={18} /> },
