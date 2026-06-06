@@ -10,6 +10,7 @@
 
 ## 📚 開発ガイドライン
 開発に参加する際は、必ず以下の命名規則とルールブックを参照してください。
+- [📏 アーキテクチャおよび実装規約 (最重要)](backend/docs/ARCHITECTURE_RULES.md)
 - [📏 命名規則と予約語](backend/docs/NAMING_CONVENTIONS.md)
 - [📏 バージョン管理とコミットルール](backend/docs/CONTRIBUTING.md)
 
