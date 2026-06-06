@@ -167,11 +167,11 @@ def create_user():
 
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
         audit_log = AuditActionLog(
-            supporter_id=supporter_id_int,
-            action_type='CREATE_USER',
-            target_table='users',
-            target_id=new_user.id,
-            change_details=f"New user registered: {display_name} ({user_code})"
+            actor_supporter_id=supporter_id_int,
+            action='CREATE_USER',
+            entity_type='users',
+            entity_id=new_user.id,
+            after_value=f"New user registered: {display_name} ({user_code})"
         )
         db.session.add(audit_log)
         db.session.commit()
@@ -275,11 +275,11 @@ def update_user(user_id):
 
     _, supporter_id_int = parse_jwt_identity(current_supporter_id)
     audit_log = AuditActionLog(
-        supporter_id=supporter_id_int,
-        action_type='EDIT_USER',
-        target_table='users',
-        target_id=user_id,
-        change_details=f"User details and PII updated"
+        actor_supporter_id=supporter_id_int,
+        action='EDIT_USER',
+        entity_type='users',
+        entity_id=user_id,
+        after_value=f"User details and PII updated"
     )
     db.session.add(audit_log)
     
@@ -387,11 +387,11 @@ def update_user_status(user_id):
     try:
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
         audit_log = AuditActionLog(
-            supporter_id=supporter_id_int,
-            action_type='EDIT_USER',
-            target_table='users',
-            target_id=user_id,
-            change_details=f"Status changed from '{old_status_name}' to '{new_status.name}'"
+            actor_supporter_id=supporter_id_int,
+            action='EDIT_USER',
+            entity_type='users',
+            entity_id=user_id,
+            after_value=f"Status changed from '{old_status_name}' to '{new_status.name}'"
         )
         db.session.add(audit_log)
         

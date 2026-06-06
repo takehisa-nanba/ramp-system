@@ -32,11 +32,11 @@ def get_user_pii(user_id):
     if can_view_pii:
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
         audit_log = AuditActionLog(
-            supporter_id=supporter_id_int,
-            action_type='VIEW_PII',
-            target_table='user_pii',
-            target_id=user_id,
-            change_details="User profile and PII decrypted & loaded onto Supporter interface"
+            actor_supporter_id=supporter_id_int,
+            action='VIEW_PII',
+            entity_type='user_pii',
+            entity_id=user_id,
+            after_value="User profile and PII decrypted & loaded onto Supporter interface"
         )
         db.session.add(audit_log)
         db.session.commit()
@@ -175,11 +175,11 @@ def decrypt_user_pii(user_id):
     _, supporter_id_int = parse_jwt_identity(current_supporter_id)
 
     audit_log = AuditActionLog(
-        supporter_id=supporter_id_int,
-        action_type='VIEW_PII',
-        target_table='user_pii',
-        target_id=user_id,
-        change_details=f"PII Type: {pii_type} decrypted & accessed automatically"
+        actor_supporter_id=supporter_id_int,
+        action='VIEW_PII',
+        entity_type='user_pii',
+        entity_id=user_id,
+        after_value=f"PII Type: {pii_type} decrypted & accessed automatically"
     )
     db.session.add(audit_log)
     db.session.commit()
