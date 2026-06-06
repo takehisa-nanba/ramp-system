@@ -85,7 +85,7 @@ class Supporter(db.Model):
     roles = db.relationship('RoleMaster', secondary=supporter_role_link, back_populates='supporters')
     
     # 逆参照 (User)
-    primary_users = db.relationship('User', back_populates='primary_supporter', lazy='dynamic')
+    primary_users = db.relationship('User', back_populates='primary_supporter', foreign_keys='User.primary_supporter_id', lazy='dynamic')
     
     # 逆参照 (Office - 管理者など)
     # ※ owned_offices は削除しました（OfficeSetting側のカラム削除に伴い）

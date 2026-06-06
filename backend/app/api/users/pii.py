@@ -15,8 +15,7 @@ def get_user_pii(user_id):
     """
     current_supporter_id = get_jwt_identity()
 
-    if not check_permission(current_supporter_id, 'VIEW_PII'):
-        return jsonify({"msg": "Permission denied: Missing 'VIEW_PII' permission"}), 403
+    can_view_pii = check_permission(current_supporter_id, 'VIEW_PII')
 
     user = db.session.get(User, user_id)
     if not user:
@@ -30,16 +29,17 @@ def get_user_pii(user_id):
             "msg": "No PII record found"
         }), 200
 
-    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
-    audit_log = AuditActionLog(
-        supporter_id=supporter_id_int,
-        action_type='VIEW_PII',
-        target_table='user_pii',
-        target_id=user_id,
-        change_details="User profile and PII decrypted & loaded onto Supporter interface"
-    )
-    db.session.add(audit_log)
-    db.session.commit()
+    if can_view_pii:
+        _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+        audit_log = AuditActionLog(
+            supporter_id=supporter_id_int,
+            action_type='VIEW_PII',
+            target_table='user_pii',
+            target_id=user_id,
+            change_details="User profile and PII decrypted & loaded onto Supporter interface"
+        )
+        db.session.add(audit_log)
+        db.session.commit()
 
     active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
     latest_plan = user.support_plans.order_by(SupportPlan.created_at.desc()).first() if user.support_plans.count() > 0 else None
@@ -63,8 +63,8 @@ def get_user_pii(user_id):
     contacts = [
         {
             "id": c.id,
-            "name": c.name,
-            "phone_number": c.phone_number,
+            "name": c.name if can_view_pii else "********",
+            "phone_number": c.phone_number if can_view_pii else "********",
             "relation": c.relation
         } for c in user.emergency_contacts
     ]
@@ -97,6 +97,32 @@ def get_user_pii(user_id):
             "granted_services": granted
         })
 
+    pii_response = {}
+    if can_view_pii:
+        pii_response = {
+            "last_name": pii.last_name,
+            "first_name": pii.first_name,
+            "last_name_kana": pii.last_name_kana,
+            "first_name_kana": pii.first_name_kana,
+            "address": pii.address,
+            "certificate_number": pii.certificate_number,
+            "phone_number": pii.phone_number,
+            "email": pii.email,
+            "birth_date": pii.birth_date.isoformat() if pii.birth_date else None
+        }
+    else:
+        pii_response = {
+            "last_name": "********",
+            "first_name": "********",
+            "last_name_kana": "********",
+            "first_name_kana": "********",
+            "address": "********",
+            "certificate_number": "********",
+            "phone_number": "********",
+            "email": "********",
+            "birth_date": None
+        }
+
     return jsonify({
         "id": user.id,
         "display_name": user.display_name,
@@ -108,17 +134,7 @@ def get_user_pii(user_id):
         "emergency_contacts": contacts,
         "profile": profile_info,
         "certificates": certificates_data,
-        "pii": {
-            "last_name": pii.last_name,
-            "first_name": pii.first_name,
-            "last_name_kana": pii.last_name_kana,
-            "first_name_kana": pii.first_name_kana,
-            "address": pii.address,
-            "certificate_number": pii.certificate_number,
-            "phone_number": pii.phone_number,
-            "email": pii.email,
-            "birth_date": pii.birth_date.isoformat() if pii.birth_date else None
-        }
+        "pii": pii_response
     }), 200
 
 @users_bp.route('/<int:user_id>/decrypt-pii', methods=['POST'])

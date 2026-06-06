@@ -202,61 +202,81 @@ def test_fte_calculation(app):
 # TEST 2: 三段監査ロジックの検証 (STEP 3-3)
 # =======================================================================
 
-def test_three_stage_audit_logic(app):
+def test_support_consistency_missing_plan_creates_urac(app):
     """
-    請求データが三段監査ロジック (Plan Guardrail, Daily Validation, Audit Flag) に準拠しているか検証する。
-    FinanceService.audit_billing_data(billing_id) をモックせず、実際のロジックの呼び出しを想定。
+    支援実績整合性チェックで計画が存在しない場合、URAC(未対応リスクカウンター)が生成されることを検証。
     """
-    logger.info("🚀 TEST START: 三段監査ロジック検証")
+    logger.info("🚀 TEST START: test_support_consistency_missing_plan_creates_urac")
+    from backend.app.models import UnresolvedRiskCounter
     
     with app.app_context():
         session = db.session
         user, service_config, office, job_title = setup_base_data(session)
         finance_service = FinanceService()
         
-        # FinanceServiceの内部で参照される PlanGuardrail をモック
-        with patch.object(FinanceService, '_check_plan_guardrail', return_value=True) as mock_guardrail, \
-             patch.object(FinanceService, '_check_daily_validation', return_value=True) as mock_daily_check:
-
-            # 1. 監査が成功する請求データ
-            valid_billing = BillingData(
-                user_id=user.id, 
-                service_type='TRAINING', 
-                unit_count=100, 
-                cost=1000.0, 
-                billing_date=date(2025, 1, 5),
-                plan_id=1, daily_log_id=1 
-            )
-            session.add(valid_billing)
-            session.flush() # ID確定
-            
-            # 2. 監査の実行 (成功ケース)
-            audit_result_valid = finance_service.audit_billing_data(valid_billing.id)
-            
-            # 3. 検証 (成功ケース)
-            assert audit_result_valid is True, "有効な請求データは監査を通過すべき。"
-            mock_guardrail.assert_called_with(valid_billing)
-            mock_daily_check.assert_called_with(valid_billing)
-
-        # 4. 監査が失敗する請求データ (不正請求: Plan Guardrail/Daily Validation 失敗を想定)
-        # モックを戻して、監査失敗ロジックのパスをテスト
-        with patch.object(FinanceService, '_check_plan_guardrail', return_value=False) as mock_guardrail_fail:
-            invalid_billing = BillingData(
-                user_id=user.id, 
-                service_type='TRAINING', 
-                unit_count=500, 
-                cost=5000.0, 
-                billing_date=date(2024, 12, 31), # 計画開始前の不正請求をシミュレーション
-                plan_id=1, daily_log_id=2
-            )
-            session.add(invalid_billing)
-            session.commit()
-            
-            # 5. 監査の実行 (失敗ケース)
-            audit_result_invalid = finance_service.audit_billing_data(invalid_billing.id)
-            
-            # 6. 検証 (失敗ケース)
-            assert audit_result_invalid is False, "Plan Guardrailに失敗する請求データは監査に失敗すべき。"
-            mock_guardrail_fail.assert_called_with(invalid_billing)
+        # Ensure user has a primary supporter so URAC can be assigned
+        supporter = Supporter(
+            staff_code="S_URAC_1", last_name="Mgr", first_name="Staff", 
+            last_name_kana="マネ", first_name_kana="スタ", 
+            hire_date=date(2025, 1, 1), employment_type="FULL_TIME", 
+            weekly_scheduled_minutes=2400
+        )
+        session.add(supporter)
+        session.flush()
+        user.primary_supporter_id = supporter.id
+        session.commit()
         
-        logger.info("✅ 三段監査ロジック検証完了: 成功ケースと失敗ケースの分離を検証")
+        # Setup DailyLog so the second check passes, and only the plan check fails
+        log = DailyLog(user_id=user.id, log_date=date(2025, 1, 15), location_type='ON_SITE', support_content_notes="Test")
+        session.add(log)
+        session.commit()
+        
+        result = finance_service.check_support_consistency(user.id, date(2025, 1, 1))
+        
+        assert result['passed'] is False
+        assert "有効な個別支援計画が存在しません" in result['errors'][0]
+        
+        # Verify URAC
+        urac = UnresolvedRiskCounter.query.filter_by(supporter_id=supporter.id, risk_type='PLAN_UNCREATED').first()
+        assert urac is not None
+        assert urac.cumulative_count == 1
+        assert urac.linked_entity_id == user.id
+
+def test_support_consistency_duplicate_risk_increments_counter(app):
+    """
+    同一リスクを再度チェックした場合、URACレコードが重複せず、cumulative_countがインクリメントされることを検証。
+    """
+    logger.info("🚀 TEST START: test_support_consistency_duplicate_risk_increments_counter")
+    from backend.app.models import UnresolvedRiskCounter
+    
+    with app.app_context():
+        session = db.session
+        user, service_config, office, job_title = setup_base_data(session)
+        finance_service = FinanceService()
+        
+        supporter = Supporter(
+            staff_code="S_URAC_2", last_name="Mgr2", first_name="Staff", 
+            last_name_kana="マネ2", first_name_kana="スタ2", 
+            hire_date=date(2025, 1, 1), employment_type="FULL_TIME", 
+            weekly_scheduled_minutes=2400
+        )
+        session.add(supporter)
+        session.flush()
+        user.primary_supporter_id = supporter.id
+        session.commit()
+        
+        # Setup DailyLog
+        log = DailyLog(user_id=user.id, log_date=date(2025, 1, 15), location_type='ON_SITE', support_content_notes="Test")
+        session.add(log)
+        session.commit()
+        
+        # First check
+        finance_service.check_support_consistency(user.id, date(2025, 1, 1))
+        urac = UnresolvedRiskCounter.query.filter_by(supporter_id=supporter.id, risk_type='PLAN_UNCREATED').first()
+        assert urac.cumulative_count == 1
+        
+        # Second check
+        finance_service.check_support_consistency(user.id, date(2025, 1, 1))
+        urac_after = UnresolvedRiskCounter.query.filter_by(supporter_id=supporter.id, risk_type='PLAN_UNCREATED').all()
+        assert len(urac_after) == 1  # Record is not duplicated
+        assert urac_after[0].cumulative_count == 2
