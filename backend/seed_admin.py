@@ -325,4 +325,39 @@ with app.app_context():
         db.session.add(plan3)
         db.session.commit()
 
+    # 4. 来所実績 (AttendanceRecord) のシード追加
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    
+    # 佐藤 健太 (user.id=1) の本日および昨日の来所実績
+    att1 = AttendanceRecord.query.filter_by(user_id=1, record_type='CHECK_IN').first()
+    if not att1:
+        # 本日
+        db.session.add(AttendanceRecord(
+            user_id=1,
+            record_type='CHECK_IN',
+            timestamp=datetime.datetime.now(),
+            location_data='GPS: 35.6812, 139.7671',
+            is_confirmed=True
+        ))
+        # 昨日 (テスト用)
+        db.session.add(AttendanceRecord(
+            user_id=1,
+            record_type='CHECK_IN',
+            timestamp=datetime.datetime.now() - datetime.timedelta(days=1),
+            location_data='GPS: 35.6812, 139.7671',
+            is_confirmed=True
+        ))
+        
+    # 高橋 一郎 (user3.id=3) の本日の来所実績
+    att3 = AttendanceRecord.query.filter_by(user_id=user3.id, record_type='CHECK_IN').first()
+    if not att3:
+        db.session.add(AttendanceRecord(
+            user_id=user3.id,
+            record_type='CHECK_IN',
+            timestamp=datetime.datetime.now(),
+            location_data='GPS: 35.6812, 139.7671',
+            is_confirmed=True
+        ))
+    db.session.commit()
+
     print("Demo data seeded successfully.")

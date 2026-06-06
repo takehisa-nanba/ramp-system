@@ -18,19 +18,55 @@ def get_action_items():
     
     items = []
     
-    # 1. 未完了日報 (DRAFT)
-    draft_logs = DailyLog.query.filter_by(log_status='DRAFT').all()
-    for log in draft_logs:
-        user_name = log.user.display_name if log.user else "不明"
-        items.append({
-            "type": "daily_log",
-            "category_label": "日報",
-            "severity": "medium",
-            "user_id": log.user_id,
-            "user_name": user_name,
-            "title": f"{user_name}さんの日報が未完了（下書き）です",
-            "description": f"{log.log_date}の日報が下書き状態のままになっています。完了させてください。"
-        })
+    # 1. 未完了日報の検出 (利用実績起点)
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    
+    # CHECK_IN の実績を取得
+    attendances = AttendanceRecord.query.filter_by(record_type='CHECK_IN').all()
+    
+    # user_id + date (att_date) でユニーク化する
+    # 重複するCHECK_INを排除するための辞書
+    unique_attendances = {}
+    for att in attendances:
+        if not att.user_id or not att.timestamp:
+            continue
+        att_date = att.timestamp.date()
+        key = (att.user_id, att_date)
+        if key not in unique_attendances:
+            unique_attendances[key] = att
+            
+    # MVP: CHECK_IN を利用実績ありとして扱う
+    # MVPでは CHECK_IN のみ支援記録未作成チェックの対象
+    # 欠席時対応記録は次フェーズで ABSENT / NO_SHOW を起点に実装
+    # TODO: cancellation / no-show / check-out consistency を考慮する
+    for (user_id, att_date), att in unique_attendances.items():
+        user_name = att.user.display_name if att.user else "不明"
+        
+        # 同日の日報を探す
+        log = DailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
+        
+        if not log:
+            # 日報自体が未作成
+            items.append({
+                "type": "daily_log",
+                "category_label": "日報",
+                "severity": "medium",
+                "user_id": user_id,
+                "user_name": user_name,
+                "title": f"{user_name}さんの利用実績に対する支援記録が未作成です",
+                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（日報）が作成されていません。"
+            })
+        elif log.log_status == 'DRAFT':
+            # 日報はあるが下書き状態
+            items.append({
+                "type": "daily_log",
+                "category_label": "日報",
+                "severity": "medium",
+                "user_id": user_id,
+                "user_name": user_name,
+                "title": f"{user_name}さんの利用実績に対する支援記録が未完了（下書き）です",
+                "description": f"{att_date.strftime('%Y-%m-%d')}の支援記録（日報）が下書き状態のままになっています。完了させてください。"
+            })
         
     # 2. 同意待ち計画 (PENDING_CONSENT)
     pending_plans = SupportPlan.query.filter_by(plan_status='PENDING_CONSENT').all()
