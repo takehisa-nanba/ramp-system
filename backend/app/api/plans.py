@@ -96,7 +96,54 @@ def add_individual_goal(plan_id):
         return jsonify({"msg": f"Goal creation failed: {e}"}), 500
 
 # -------------------------------------------------------------------
-# 3. 計画の承認・有効化 API
+# 3. 同意の記録 API
+# -------------------------------------------------------------------
+
+@plans_bp.route('/<int:plan_id>/consent', methods=['POST'])
+@jwt_required()
+def record_consent(plan_id):
+    """
+    計画案に対する利用者の説明・同意を記録し、DocumentConsentLogを生成する。
+    """
+    _, supporter_id = parse_jwt_identity(get_jwt_identity())
+    data = request.get_json()
+    user_id = data.get('user_id')
+    consent_proof = data.get('consent_proof', 'DIGITAL_SIGNATURE')
+    generated_document_url = data.get('generated_document_url')
+
+    if not user_id:
+        return jsonify({"msg": "Missing user_id"}), 400
+
+    plan = SupportPlan.query.get(plan_id)
+    if not plan:
+        return jsonify({"msg": "SupportPlan not found"}), 404
+
+    if plan.plan_status != 'PENDING_CONSENT':
+        return jsonify({"msg": "Plan status is not PENDING_CONSENT"}), 400
+
+    try:
+        from backend.app.models import DocumentConsentLog
+        consent_log = DocumentConsentLog(
+            user_id=user_id,
+            document_type='SUPPORT_PLAN',
+            document_id=plan_id,
+            consent_proof=consent_proof,
+            generated_document_url=generated_document_url
+        )
+        db.session.add(consent_log)
+        db.session.commit()
+
+        return jsonify({
+            "msg": "Consent recorded successfully",
+            "consent_log_id": consent_log.id
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Failed to record consent: {e}"}), 500
+
+# -------------------------------------------------------------------
+# 4. 計画の承認・有効化 API
 # -------------------------------------------------------------------
 
 @plans_bp.route('/<int:plan_id>/activate', methods=['POST'])

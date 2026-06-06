@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Clock, CheckCircle, FileEdit, AlertTriangle, ArrowRight } from 'lucide-react';
 import { fetchTodayUsers, type TodayUserItem } from '../services/userService';
 
@@ -8,6 +8,22 @@ const TodayUsersPage: React.FC = () => {
   const [items, setItems] = useState<TodayUserItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const statusParam = searchParams.get('status');
+  const selectedFilter = (statusParam === 'missing' || statusParam === 'draft' || statusParam === 'completed')
+    ? statusParam
+    : 'all';
+
+  const setSelectedFilter = (newFilter: 'all' | 'missing' | 'draft' | 'completed') => {
+    const newParams = new URLSearchParams(searchParams);
+    if (newFilter === 'all') {
+      newParams.delete('status');
+    } else {
+      newParams.set('status', newFilter);
+    }
+    setSearchParams(newParams);
+  };
 
   useEffect(() => {
     const loadTodayUsers = async () => {
@@ -25,12 +41,17 @@ const TodayUsersPage: React.FC = () => {
     loadTodayUsers();
   }, []);
 
-  // ソート順の定義
+  // フィルタリングとソート順の定義
   // 1. 日報未作成 (missing)
   // 2. 下書き (draft)
   // 3. 来所中 (CHECKED_IN 且つ completed)
   // 4. 完了 (CHECKED_OUT 且つ completed)
-  const sortedItems = useMemo(() => {
+  const filteredAndSortedItems = useMemo(() => {
+    let result = [...items];
+    if (selectedFilter !== 'all') {
+      result = result.filter(item => item.daily_log_status === selectedFilter);
+    }
+
     const getSortWeight = (item: TodayUserItem) => {
       if (item.daily_log_status === 'missing') return 1;
       if (item.daily_log_status === 'draft') return 2;
@@ -38,7 +59,15 @@ const TodayUsersPage: React.FC = () => {
       return 4; // CHECKED_OUT & completed
     };
 
-    return [...items].sort((a, b) => getSortWeight(a) - getSortWeight(b));
+    return result.sort((a, b) => getSortWeight(a) - getSortWeight(b));
+  }, [items, selectedFilter]);
+
+  const stats = useMemo(() => {
+    const total = items.length;
+    const missing = items.filter(item => item.daily_log_status === 'missing').length;
+    const draft = items.filter(item => item.daily_log_status === 'draft').length;
+    const completed = items.filter(item => item.daily_log_status === 'completed').length;
+    return { total, missing, draft, completed };
   }, [items]);
 
   const formatTime = (isoString: string | null) => {
@@ -96,9 +125,9 @@ const TodayUsersPage: React.FC = () => {
       params.append('attendance_record_id', item.attendance_record_id.toString());
       if (item.check_in_at) params.append('check_in_at', item.check_in_at);
       if (item.check_out_at) params.append('check_out_at', item.check_out_at);
-      navigate(`/users/${item.user_id}/daily-logs?${params.toString()}`);
+      navigate(`/users/${item.user_id}/attendance?${params.toString()}`);
     } else {
-      navigate(`/users/${item.user_id}/daily-logs`);
+      navigate(`/users/${item.user_id}/attendance`);
     }
   };
 
@@ -114,19 +143,133 @@ const TodayUsersPage: React.FC = () => {
         </p>
       </div>
 
+      {/* 件数サマリー */}
+      {!loading && !error && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
+          {/* 本日来所 */}
+          <div
+            onClick={() => setSelectedFilter('all')}
+            className={`border rounded-2xl p-4 shadow-sm flex items-center gap-4 cursor-pointer transition-all duration-300 select-none ${
+              selectedFilter === 'all'
+                ? 'bg-indigo-50 border-indigo-200 ring-2 ring-indigo-500 ring-offset-1 shadow-md scale-[1.02]'
+                : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-md hover:scale-[1.01]'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
+              selectedFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-indigo-50 text-indigo-600'
+            }`}>
+              <Users className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">本日来所</p>
+              <p className="text-2xl font-black text-slate-800 mt-0.5">{stats.total} <span className="text-sm font-bold text-slate-500">名</span></p>
+            </div>
+          </div>
+
+          {/* 未作成 */}
+          <div
+            onClick={() => setSelectedFilter(selectedFilter === 'missing' ? 'all' : 'missing')}
+            className={`border rounded-2xl p-4 shadow-sm flex items-center gap-4 cursor-pointer transition-all duration-300 select-none ${
+              selectedFilter === 'missing'
+                ? 'bg-amber-50 border-amber-200 ring-2 ring-amber-500 ring-offset-1 shadow-md scale-[1.02]'
+                : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-md hover:scale-[1.01]'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
+              selectedFilter === 'missing' ? 'bg-amber-600 text-white' : 'bg-amber-50/80 text-amber-600'
+            }`}>
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 未作成</p>
+              <p className="text-2xl font-black text-amber-600 mt-0.5">{stats.missing} <span className="text-sm font-bold text-slate-400">件</span></p>
+            </div>
+          </div>
+
+          {/* 下書き */}
+          <div
+            onClick={() => setSelectedFilter(selectedFilter === 'draft' ? 'all' : 'draft')}
+            className={`border rounded-2xl p-4 shadow-sm flex items-center gap-4 cursor-pointer transition-all duration-300 select-none ${
+              selectedFilter === 'draft'
+                ? 'bg-blue-50 border-blue-200 ring-2 ring-blue-500 ring-offset-1 shadow-md scale-[1.02]'
+                : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-md hover:scale-[1.01]'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
+              selectedFilter === 'draft' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-600'
+            }`}>
+              <FileEdit className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 下書き</p>
+              <p className="text-2xl font-black text-blue-600 mt-0.5">{stats.draft} <span className="text-sm font-bold text-slate-400">件</span></p>
+            </div>
+          </div>
+
+          {/* 完了 */}
+          <div
+            onClick={() => setSelectedFilter(selectedFilter === 'completed' ? 'all' : 'completed')}
+            className={`border rounded-2xl p-4 shadow-sm flex items-center gap-4 cursor-pointer transition-all duration-300 select-none ${
+              selectedFilter === 'completed'
+                ? 'bg-emerald-50 border-emerald-200 ring-2 ring-emerald-500 ring-offset-1 shadow-md scale-[1.02]'
+                : 'bg-white border-slate-100 hover:border-slate-200 hover:shadow-md hover:scale-[1.01]'
+            }`}
+          >
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-300 ${
+              selectedFilter === 'completed' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-600'
+            }`}>
+              <CheckCircle className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 完了</p>
+              <p className="text-2xl font-black text-emerald-600 mt-0.5">{stats.completed} <span className="text-sm font-bold text-slate-400">件</span></p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* フィルター適用中ステータス表示 */}
+      {!loading && !error && selectedFilter !== 'all' && (
+        <div className="mb-4 flex items-center justify-between bg-slate-100/80 px-4 py-2.5 rounded-xl border border-slate-200 animate-in fade-in slide-in-from-top-2 duration-200">
+          <p className="text-xs font-bold text-slate-600">
+            フィルター適用中: <span className="text-slate-800 font-black">
+              {selectedFilter === 'missing' && '日報 未作成'}
+              {selectedFilter === 'draft' && '日報 下書き'}
+              {selectedFilter === 'completed' && '日報 完了'}
+            </span> のみ表示中 ({filteredAndSortedItems.length}名 / 全{items.length}名中)
+          </p>
+          <button
+            onClick={() => setSelectedFilter('all')}
+            className="text-xs font-black text-indigo-600 hover:text-indigo-700 hover:underline flex items-center gap-1"
+          >
+            フィルターをクリア
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="flex justify-center p-12">
           <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
         </div>
       ) : error ? (
         <div className="bg-rose-50 text-rose-600 p-4 rounded-xl font-bold">{error}</div>
-      ) : sortedItems.length === 0 ? (
-        <div className="p-12 text-center text-slate-500 font-bold bg-slate-50 rounded-2xl border border-slate-200">
-          本日チェックインした利用者はいません。
+      ) : filteredAndSortedItems.length === 0 ? (
+        <div className="p-12 text-center text-slate-500 font-bold bg-slate-50 rounded-2xl border border-slate-200 animate-in fade-in duration-200">
+          {selectedFilter === 'all' 
+            ? '本日チェックインした利用者はいません。' 
+            : '該当するステータスの利用者はいません。'}
+          {selectedFilter !== 'all' && (
+            <button
+              onClick={() => setSelectedFilter('all')}
+              className="block mx-auto mt-3 text-sm font-black text-indigo-600 hover:underline"
+            >
+              すべての利用者を表示する
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-4">
-          {sortedItems.map((item) => {
+          {filteredAndSortedItems.map((item) => {
             return (
               <div
                 key={item.user_id}

@@ -29,6 +29,11 @@
 - **[backend.zip](file:///c:/Users/nanba/Desktop/ramp-system/backend.zip)**: バックエンド開発中のバックアップファイル。
 - **[frontend.zip](file:///c:/Users/nanba/Desktop/ramp-system/frontend.zip)**: フロントエンド開発中のバックアップファイル。
 
+### 5. 業務サイクル別タブ再編による統合・整理 (frontend/src/pages/tabs/)
+- **[UserDailyLogsTab.tsx](file:///c:/Users/nanba/Desktop/ramp-system/frontend/src/pages/tabs/UserDailyLogsTab.tsx)**: 日報一覧および作成用コンポーネント。実績一覧の「実績・記録」タブへマージ。
+- **[UserMonitoringTab.tsx](file:///c:/Users/nanba/Desktop/ramp-system/frontend/src/pages/tabs/UserMonitoringTab.tsx)**: モニタリング履歴および実施用コンポーネント。「支援計画サイクル」タブへマージ。
+- **[UserCaseConferenceTab.tsx](file:///c:/Users/nanba/Desktop/ramp-system/frontend/src/pages/tabs/UserCaseConferenceTab.tsx)**: ケース会議記録コンポーネント。「支援計画サイクル」タブへマージ。
+
 ## 復活させる際の手順
 これらはすべて git コミット履歴に保存されています。過去のリビジョンからファイルを復元するには以下のコマンドを実行してください：
 ```bash

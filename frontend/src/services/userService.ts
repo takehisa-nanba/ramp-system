@@ -276,6 +276,33 @@ export const fetchUserSupportPlans = async (userId: number): Promise<UserSupport
   return response.data;
 };
 
+export interface RecordConsentResponse {
+  msg: string;
+  consent_log_id: number;
+}
+
+export const recordUserConsent = async (planId: number, userId: number, consentProof: string, generatedDocumentUrl?: string): Promise<RecordConsentResponse> => {
+  const response = await apiClient.post<RecordConsentResponse>(`/plans/${planId}/consent`, {
+    user_id: userId,
+    consent_proof: consentProof,
+    generated_document_url: generatedDocumentUrl
+  });
+  return response.data;
+};
+
+export interface ActivatePlanResponse {
+  msg: string;
+  plan_id: number;
+  status: string;
+}
+
+export const activateSupportPlan = async (planId: number, consentLogId: number): Promise<ActivatePlanResponse> => {
+  const response = await apiClient.post<ActivatePlanResponse>(`/plans/${planId}/activate`, {
+    consent_log_id: consentLogId
+  });
+  return response.data;
+};
+
 // --- 日報 ---
 export interface DailyLogActivity {
   id: number;
@@ -360,6 +387,9 @@ export interface ActionItem {
   title: string;
   description: string;
   target_date?: string;
+  attendance_record_id?: number;
+  check_in_at?: string;
+  check_out_at?: string;
 }
 
 export interface ActionItemsResponse {

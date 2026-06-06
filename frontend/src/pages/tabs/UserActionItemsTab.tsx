@@ -32,13 +32,19 @@ export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => 
   const getActionItemTargetPath = (item: ActionItem) => {
     switch (item.type) {
       case 'daily_log':
-        return `/users/${item.user_id}/daily-logs${item.target_date ? `?date=${item.target_date}` : ''}`;
+        const params = new URLSearchParams();
+        if (item.target_date) params.append('date', item.target_date);
+        if (item.attendance_record_id) params.append('attendance_record_id', item.attendance_record_id.toString());
+        if (item.check_in_at) params.append('check_in_at', item.check_in_at);
+        if (item.check_out_at) params.append('check_out_at', item.check_out_at);
+        const query = params.toString();
+        return `/users/${item.user_id}/attendance${query ? `?${query}` : ''}`;
       case 'monitoring':
-        return `/users/${item.user_id}/monitoring-reports`;
+        return `/users/${item.user_id}/support-plans?section=monitoring`;
       case 'approval':
-        return `/users/${item.user_id}/support-plans`;
+        return `/users/${item.user_id}/support-plans?section=consent`;
       case 'case_conference':
-        return `/users/${item.user_id}/case-conferences`;
+        return `/users/${item.user_id}/support-plans?section=case_conference`;
       default:
         return `/users/${item.user_id}/action-items`;
     }

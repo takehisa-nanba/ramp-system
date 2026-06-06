@@ -127,26 +127,50 @@ def get_action_items():
     for plan in active_plans:
         user_name = plan.user.display_name if plan.user else "不明"
         if plan.plan_end_date:
-            # TODO: replace plan_end_date fallback with formal monitoring schedule
-            if plan.plan_end_date < today:
+            days_left = (plan.plan_end_date - today).days
+            if days_left < 0:
                 items.append({
                     "type": "monitoring",
-                    "category_label": "モニタリング",
+                    "category_label": "支援計画期限",
                     "severity": "high",
                     "user_id": plan.user_id,
                     "user_name": user_name,
-                    "title": f"{user_name}さんのモニタリング期限が超過しています",
-                    "description": f"計画終了日（{plan.plan_end_date}）を過ぎていますが、モニタリングが実施されていません。"
+                    "title": f"【期限超過】{user_name}さんの個別支援計画期限が超過しています",
+                    "description": f"計画終了日（{plan.plan_end_date}）を過ぎていますが、モニタリングおよび次期計画が完了していません。",
+                    "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
-            elif (plan.plan_end_date - today).days <= 30:
+            elif days_left <= 7:
                 items.append({
                     "type": "monitoring",
-                    "category_label": "モニタリング",
+                    "category_label": "支援計画期限",
+                    "severity": "high",
+                    "user_id": plan.user_id,
+                    "user_name": user_name,
+                    "title": f"【残り7日以内】{user_name}さんの個別支援計画の期限が迫っています",
+                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。速やかに次期計画を作成し、同意を得てください。",
+                    "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
+                })
+            elif days_left <= 14:
+                items.append({
+                    "type": "monitoring",
+                    "category_label": "支援計画期限",
                     "severity": "medium",
                     "user_id": plan.user_id,
                     "user_name": user_name,
-                    "title": f"{user_name}さんのモニタリング期限が近づいています",
-                    "description": f"計画終了日（{plan.plan_end_date}）まで残り{(plan.plan_end_date - today).days}日です。モニタリングの準備をしてください。"
+                    "title": f"【残り14日以内】{user_name}さんの個別支援計画の更新時期です",
+                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。ケース会議および説明・同意の準備を始めてください。",
+                    "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
+                })
+            elif days_left <= 30:
+                items.append({
+                    "type": "monitoring",
+                    "category_label": "支援計画期限",
+                    "severity": "low",
+                    "user_id": plan.user_id,
+                    "user_name": user_name,
+                    "title": f"【残り30日以内】{user_name}さんの個別支援計画のモニタリング時期です",
+                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。モニタリングの評価を実施してください。",
+                    "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
                 
     # 5. 本日のケース会議

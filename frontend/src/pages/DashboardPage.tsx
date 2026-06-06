@@ -54,9 +54,9 @@ const DashboardPage: React.FC = () => {
     },
     {
       id: 'uncompleted-monitoring',
-      title: '未実施モニタリング',
+      title: '期限が近い支援計画',
       value: summary.monitoring_due_count,
-      detail: summary.monitoring_due_count > 0 ? '期限が近づいています' : '対応不要',
+      detail: summary.monitoring_due_count > 0 ? '見直し・期限超過の確認' : '対応不要',
       icon: <Search className="w-8 h-8 text-amber-600" />,
       colorClass: summary.monitoring_due_count > 0 ? 'bg-amber-50 border-amber-100' : 'bg-slate-50 border-slate-100',
       path: '/action-items?type=monitoring',

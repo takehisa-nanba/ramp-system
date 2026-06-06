@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { useParams, Routes, Route, NavLink } from 'react-router-dom';
+import { useParams, Routes, Route, NavLink, Navigate } from 'react-router-dom';
 import { User, Calendar, Activity, CheckCircle, AlertCircle } from 'lucide-react';
 import { fetchUserPii, type UserPiiResponse } from '../services/userService';
-import { UserDailyLogsTab } from './tabs/UserDailyLogsTab';
 import { UserSupportPlanTab } from './tabs/UserSupportPlanTab';
-import { UserMonitoringTab } from './tabs/UserMonitoringTab';
-import { UserCaseConferenceTab } from './tabs/UserCaseConferenceTab';
 import { UserActionItemsTab } from './tabs/UserActionItemsTab';
 import { UserHistoryTab } from './tabs/UserHistoryTab';
 import { UserAttendanceTab } from './tabs/UserAttendanceTab';
@@ -113,28 +110,27 @@ const UserDetailPage: React.FC = () => {
         <h1 className="text-2xl font-bold">利用者詳細 (ID: {id})</h1>
       </div>
 
-      {/* MVP Tabs */}
-      <div className="flex gap-4 border-b border-slate-200 mb-6 pb-2 overflow-x-auto whitespace-nowrap">
-        <NavLink to={`/users/${id}`} end className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>概要</NavLink>
-        <NavLink to={`/users/${id}/support-plans`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>計画</NavLink>
-        <NavLink to={`/users/${id}/attendance`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>実績</NavLink>
-        <NavLink to={`/users/${id}/daily-logs`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>日報</NavLink>
-        <NavLink to={`/users/${id}/monitoring-reports`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>モニタリング</NavLink>
-        <NavLink to={`/users/${id}/case-conferences`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>ケース会議</NavLink>
-        <NavLink to={`/users/${id}/action-items`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>管理確認事項</NavLink>
-        <NavLink to={`/users/${id}/history`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>履歴</NavLink>
+      {/* MVP Tabs (Sticky Top) */}
+      <div className="sticky top-0 bg-slate-50/95 backdrop-blur-md z-30 -mx-6 px-6 py-3 border-b border-slate-200 mb-6 overflow-x-auto whitespace-nowrap flex gap-4 transition-all duration-300">
+        <NavLink to={`/users/${id}`} end className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>概要</NavLink>
+        <NavLink to={`/users/${id}/attendance`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>実績・記録</NavLink>
+        <NavLink to={`/users/${id}/support-plans`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>支援計画サイクル</NavLink>
+        <NavLink to={`/users/${id}/action-items`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>管理確認事項</NavLink>
+        <NavLink to={`/users/${id}/history`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>履歴</NavLink>
       </div>
 
       <div>
         <Routes>
           <Route index element={<UserOverview userId={Number(id)} />} />
-          <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
           <Route path="attendance" element={<UserAttendanceTab userId={Number(id)} />} />
-          <Route path="daily-logs" element={<UserDailyLogsTab userId={Number(id)} />} />
-          <Route path="monitoring-reports" element={<UserMonitoringTab userId={Number(id)} />} />
-          <Route path="case-conferences" element={<UserCaseConferenceTab userId={Number(id)} />} />
+          <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
           <Route path="action-items" element={<UserActionItemsTab userId={Number(id)} />} />
           <Route path="history" element={<UserHistoryTab />} />
+
+          {/* 古いパスからのリダイレクト（後方互換性） */}
+          <Route path="daily-logs" element={<Navigate to="../attendance" replace />} />
+          <Route path="monitoring-reports" element={<Navigate to="../support-plans?section=monitoring" replace />} />
+          <Route path="case-conferences" element={<Navigate to="../support-plans?section=case_conference" replace />} />
         </Routes>
       </div>
     </div>
