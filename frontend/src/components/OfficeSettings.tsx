@@ -4,15 +4,7 @@ import {
   Search, Info, Calendar, ShieldCheck, Zap, Phone, Mail, Printer, 
   User, Shield, Activity, Landmark
 } from 'lucide-react';
-import { managementApi, type OfficeSettings as IOfficeSettings } from '../services/managementApi';
-
-interface AdditiveFiling {
-  id: number;
-  fee_name: string;
-  filing_date: string;
-  start_date: string;
-  end_date?: string;
-}
+import { managementApi, type OfficeSettings as IOfficeSettings, type AdditiveFiling } from '../services/managementApi';
 
 const OfficeSettings: React.FC = () => {
   const [settings, setSettings] = useState<IOfficeSettings | null>(null);
@@ -21,11 +13,7 @@ const OfficeSettings: React.FC = () => {
   const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
 
   // 加算届出履歴ステート
-  const [filings, setFilings] = useState<AdditiveFiling[]>([
-    { id: 1, fee_name: '福祉専門職員配置等加算(I)', filing_date: '2025-04-01', start_date: '2025-04-01', end_date: '' },
-    { id: 2, fee_name: '送迎加算(往路・復路)', filing_date: '2025-04-10', start_date: '2025-04-10', end_date: '2026-03-31' },
-    { id: 3, fee_name: '人員配置体制加算(I)', filing_date: '2025-05-01', start_date: '2025-05-01', end_date: '' },
-  ]);
+  const [filings, setFilings] = useState<AdditiveFiling[]>([]);
   const [isFilingModalOpen, setIsFilingModalOpen] = useState(false);
   const [newFiling, setNewFiling] = useState<Omit<AdditiveFiling, 'id'>>({
     fee_name: '',
@@ -34,29 +22,45 @@ const OfficeSettings: React.FC = () => {
     end_date: ''
   });
 
-  const handleAddFiling = () => {
+  const handleAddFiling = async () => {
     if (!newFiling.fee_name || !newFiling.filing_date || !newFiling.start_date) {
       alert('すべての必須項目を入力してください。');
       return;
     }
-    const id = filings.length > 0 ? Math.max(...filings.map(f => f.id)) + 1 : 1;
-    setFilings([...filings, { ...newFiling, id }]);
-    setIsFilingModalOpen(false);
-    setNewFiling({
-      fee_name: '',
-      filing_date: new Date().toISOString().split('T')[0],
-      start_date: new Date().toISOString().split('T')[0],
-      end_date: ''
-    });
-  };
-
-  const handleDeleteFiling = (id: number) => {
-    if (window.confirm('この加算届出履歴を削除しますか？')) {
-      setFilings(filings.filter(f => f.id !== id));
+    try {
+      const created = await managementApi.addAdditiveFiling({
+        fee_name: newFiling.fee_name,
+        filing_date: newFiling.filing_date,
+        start_date: newFiling.start_date,
+        end_date: newFiling.end_date || null
+      });
+      setFilings([...filings, created]);
+      setIsFilingModalOpen(false);
+      setNewFiling({
+        fee_name: '',
+        filing_date: new Date().toISOString().split('T')[0],
+        start_date: new Date().toISOString().split('T')[0],
+        end_date: ''
+      });
+    } catch (err) {
+      console.error('Failed to add filing:', err);
+      alert('加算届出の登録に失敗しました');
     }
   };
 
-  const isFilingActive = (start: string, end?: string) => {
+  const handleDeleteFiling = async (id: number) => {
+    if (window.confirm('この加算届出履歴を削除しますか？')) {
+      try {
+        await managementApi.deleteAdditiveFiling(id);
+        setFilings(filings.filter(f => f.id !== id));
+      } catch (err) {
+        console.error('Failed to delete filing:', err);
+        alert('加算届出の削除に失敗しました');
+      }
+    }
+  };
+
+  const isFilingActive = (start: string, end?: string | null) => {
     const today = new Date();
     const startDate = new Date(start);
     if (isNaN(startDate.getTime())) return false;
@@ -75,10 +79,14 @@ const OfficeSettings: React.FC = () => {
 
   const fetchSettings = async () => {
     try {
-      const data = await managementApi.getOfficeSettings();
+      const [data, filingsData] = await Promise.all([
+        managementApi.getOfficeSettings(),
+        managementApi.getAdditiveFilings()
+      ]);
       setSettings(data);
+      setFilings(filingsData);
     } catch (err) {
-      console.error('Failed to fetch office settings:', err);
+      console.error('Failed to fetch office settings or filings:', err);
     } finally {
       setIsLoading(false);
     }
@@ -544,7 +552,7 @@ const OfficeSettings: React.FC = () => {
                 <label className="text-xs font-black text-slate-400 uppercase tracking-widest pl-1">適用終了日 (任意、無期限は空欄)</label>
                 <input 
                   type="date"
-                  value={newFiling.end_date}
+                  value={newFiling.end_date || ''}
                   onChange={e => setNewFiling({...newFiling, end_date: e.target.value})}
                   className="w-full px-4 py-3 bg-slate-50 border border-slate-100 rounded-xl outline-none font-bold text-slate-700"
                 />

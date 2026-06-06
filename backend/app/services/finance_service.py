@@ -18,14 +18,6 @@ from typing import Optional
 import logging
 logger = logging.getLogger(__name__)
 
-# core_service の認証関数をインポート (クイック認証統合)
-# ※ 実際には相対インポートを避けるため、app.services.core_service からインポートします
-# from .core_service import authenticate_supporter_by_code 
-def authenticate_supporter_by_code(staff_code, password):
-    # NOTE: 循環参照を避けるため、ここでは仮のラッパー関数を定義し、API層で実際のcore_serviceを参照します
-    # 実際には core_service からインポートされた認証関数がここに配置されます。
-    return None 
-
 class FinanceService:
     """
     すべての財務計算を処理し、特に常勤換算（FTE）と
@@ -37,7 +29,7 @@ class FinanceService:
         職員コードによるクイック認証を行い、成功した場合はSupporterオブジェクトを返します。
         （FTE計算や請求確定など、財務処理のゲートキーパー認証）
         """
-        # core_service.py のロジックを呼び出すラッパー
+        from backend.app.services.core_service import authenticate_supporter_by_code
         return authenticate_supporter_by_code(staff_code, password)
 
 
@@ -116,17 +108,46 @@ class FinanceService:
     def _check_plan_guardrail(self, billing_data: BillingData) -> bool:
         """
         監査の第一段: 請求が計画期間内であるか、及びPlan-Activity整合性を検証する。
-        テストがこのメソッドをモックするために、定義が必須となる。
         """
-        # ここにPlan期間チェックロジックの実装を想定
-        return True 
+        from backend.app.models import SupportPlan
+        # 請求月（月初）を取得
+        billing_date = billing_data.billing_month
+        # 月末を計算
+        if billing_date.month == 12:
+            next_month = billing_date.replace(year=billing_date.year + 1, month=1)
+        else:
+            next_month = billing_date.replace(month=billing_date.month + 1)
+        billing_end_date = next_month - timedelta(days=1)
+
+        # その月に有効なプランがあるか
+        active_plan = SupportPlan.query.filter(
+            SupportPlan.user_id == billing_data.user_id,
+            SupportPlan.plan_status == 'ACTIVE',
+            SupportPlan.plan_start_date <= billing_end_date,
+            (SupportPlan.plan_end_date == None) | (SupportPlan.plan_end_date >= billing_date)
+        ).first()
+
+        return active_plan is not None 
 
     def _check_daily_validation(self, billing_data: BillingData) -> bool:
         """
         監査の第二段: 請求根拠となるDailyLogの承認/検証ステータスをチェックする。
         """
-        # ここにDailyLog検証ロジックの実装を想定
-        return True
+        from backend.app.models import DailyLog
+        billing_date = billing_data.billing_month
+        if billing_date.month == 12:
+            next_month = billing_date.replace(year=billing_date.year + 1, month=1)
+        else:
+            next_month = billing_date.replace(month=billing_date.month + 1)
+        billing_end_date = next_month - timedelta(days=1)
+
+        logs_count = DailyLog.query.filter(
+            DailyLog.user_id == billing_data.user_id,
+            DailyLog.log_date >= billing_date,
+            DailyLog.log_date <= billing_end_date
+        ).count()
+
+        return logs_count > 0
     
     def audit_billing_data(self, billing_id: int) -> bool:
         """

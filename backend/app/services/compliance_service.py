@@ -115,9 +115,11 @@ class ComplianceService:
         if not office_setting:
             raise ValueError(f"OfficeSetting ID {office_id} not found.")
 
-        # NOTE: 基準（定員と比率）は OfficeSetting/OfficeServiceConfiguration から取得する必要があるが、ここでは仮定
-        OFFICE_CAPACITY = 20
-        REQUIRED_STAFF_RATIO = 6.0 
+        # 基準（定員と比率）を OfficeServiceConfiguration から取得
+        from backend.app.models import OfficeServiceConfiguration
+        service_config = OfficeServiceConfiguration.query.filter_by(office_id=office_id).first()
+        OFFICE_CAPACITY = service_config.capacity if service_config and service_config.capacity else 20
+        REQUIRED_STAFF_RATIO = 6.0 # 必要に応じて比率も設定から取得可能に拡張
         
         # 1. 施設外活動の特定 (DailyLog)
         off_site_logs = DailyLog.query.filter(

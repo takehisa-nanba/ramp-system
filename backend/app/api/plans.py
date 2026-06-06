@@ -109,7 +109,20 @@ def activate_plan(plan_id):
     data = request.get_json()
     consent_log_id = data.get('consent_log_id')
     
-    # 承認者はサビ管である必要があり、ここでは suppor_id がサビ管であることを前提とします
+    # 承認者はサビ管である必要があり、supporter_id がサビ管であることを検証する
+    from backend.app.models import Supporter
+    supporter = Supporter.query.get(supporter_id)
+    if not supporter:
+        return jsonify({"msg": "Supporter not found"}), 404
+        
+    is_sabi_kan = False
+    for assignment in supporter.job_assignments:
+        if assignment.job_title and (assignment.job_title.title_name == 'サービス管理責任者' or assignment.job_title.is_qualified_role):
+            is_sabi_kan = True
+            break
+            
+    if not is_sabi_kan:
+        return jsonify({"msg": "Permission denied: サービス管理責任者 (Service Manager) role is required to activate a plan."}), 403
     
     if not consent_log_id:
         return jsonify({"msg": "Missing consent_log_id"}), 400

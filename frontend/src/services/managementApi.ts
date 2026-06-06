@@ -74,6 +74,14 @@ export interface OfficeSettings {
   manager_name?: string;
 }
 
+export interface AdditiveFiling {
+  id: number;
+  fee_master_id?: number;
+  fee_name: string;
+  filing_date: string;
+  start_date: string;
+  end_date?: string | null;
+}
 
 export const managementApi = {
   // Staff
@@ -107,5 +115,18 @@ export const managementApi = {
   },
   updateOfficeSettings: async (settings: Partial<OfficeSettings>): Promise<void> => {
     await apiClient.put(`${API_URL}/office`, settings);
+  },
+
+  // Additive Filings
+  getAdditiveFilings: async (): Promise<AdditiveFiling[]> => {
+    const res = await apiClient.get(`${API_URL}/office/additive-filings`);
+    return res.data;
+  },
+  addAdditiveFiling: async (data: Omit<AdditiveFiling, 'id' | 'fee_master_id'>): Promise<AdditiveFiling> => {
+    const res = await apiClient.post(`${API_URL}/office/additive-filings`, data);
+    return res.data;
+  },
+  deleteAdditiveFiling: async (filingId: number): Promise<void> => {
+    await apiClient.delete(`${API_URL}/office/additive-filings/${filingId}`);
   }
 };

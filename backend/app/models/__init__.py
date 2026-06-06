@@ -7,7 +7,7 @@ from backend.app.models.masters.master_definitions import (
     JobTitleMaster, ServiceTypeMaster, QualificationMaster, SkillMaster,
     TrainingPrerequisiteMaster, DocumentTypeMaster, CommitteeTypeMaster,
     StaffActivityMaster, ProductMaster, VendorMaster, RoleMaster, PermissionMaster,
-    TrainingTypeMaster,
+    TrainingTypeMaster, GovernmentFeeMaster,
     # ★ 追加: 失敗の財産化・ナレッジ共有のための新マスタ
     FailureFactorMaster, IssueCategoryMaster,
     ServiceUnitMaster

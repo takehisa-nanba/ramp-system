@@ -582,3 +582,101 @@ def get_masters():
         "disabilities": [{"id": d.id, "name": d.name} for d in disabilities]
     }), 200
 
+@management_bp.route('/office/additive-filings', methods=['GET'])
+@jwt_required()
+def get_additive_filings():
+    from backend.app.models import OfficeSetting, OfficeAdditiveFiling, GovernmentFeeMaster
+    current = get_current_staff()
+    if not current or not current.office_id:
+        return jsonify({"msg": "Office not found"}), 404
+    
+    office = OfficeSetting.query.get(current.office_id)
+    service = office.service_configs.first()
+    if not service:
+        return jsonify([]), 200
+        
+    filings = OfficeAdditiveFiling.query.filter_by(office_service_configuration_id=service.id).all()
+    result = []
+    for f in filings:
+        result.append({
+            "id": f.id,
+            "fee_master_id": f.fee_master_id,
+            "fee_name": f.fee_master.name if f.fee_master else "",
+            "filing_date": f.filing_date.isoformat() if f.filing_date else None,
+            "start_date": f.effective_start_date.isoformat() if f.effective_start_date else None,
+            "end_date": f.effective_end_date.isoformat() if f.effective_end_date else None
+        })
+    return jsonify(result), 200
+
+@management_bp.route('/office/additive-filings', methods=['POST'])
+@jwt_required()
+def add_additive_filing():
+    from backend.app.models import OfficeSetting, OfficeAdditiveFiling, GovernmentFeeMaster
+    current = get_current_staff()
+    if not current or not current.office_id:
+        return jsonify({"msg": "Office not found"}), 404
+        
+    office = OfficeSetting.query.get(current.office_id)
+    service = office.service_configs.first()
+    if not service:
+        return jsonify({"msg": "Service configuration not found"}), 404
+        
+    data = request.get_json()
+    
+    fee_name = data.get('fee_name')
+    if not fee_name:
+        return jsonify({"msg": "fee_name is required"}), 400
+        
+    fee_master = GovernmentFeeMaster.query.filter_by(name=fee_name).first()
+    if not fee_master:
+        # 見つからない場合は作成（モックマスター）
+        fee_master = GovernmentFeeMaster(
+            name=fee_name,
+            code=f"FEE_{int(datetime.now().timestamp())}",
+            category="ADD",
+            calculation_type="ADD_TO_BASE"
+        )
+        db.session.add(fee_master)
+        db.session.flush()
+
+    new_filing = OfficeAdditiveFiling(
+        office_service_configuration_id=service.id,
+        fee_master_id=fee_master.id,
+        is_filed=True,
+    )
+    
+    if data.get('filing_date'):
+        try:
+            new_filing.filing_date = datetime.fromisoformat(data['filing_date']).date()
+        except: pass
+        
+    if data.get('start_date'):
+        try:
+            new_filing.effective_start_date = datetime.fromisoformat(data['start_date']).date()
+        except: pass
+        
+    if data.get('end_date'):
+        try:
+            new_filing.effective_end_date = datetime.fromisoformat(data['end_date']).date()
+        except: pass
+        
+    db.session.add(new_filing)
+    db.session.commit()
+    
+    return jsonify({
+        "id": new_filing.id,
+        "fee_master_id": new_filing.fee_master_id,
+        "fee_name": fee_master.name,
+        "filing_date": new_filing.filing_date.isoformat() if new_filing.filing_date else None,
+        "start_date": new_filing.effective_start_date.isoformat() if new_filing.effective_start_date else None,
+        "end_date": new_filing.effective_end_date.isoformat() if new_filing.effective_end_date else None
+    }), 201
+
+@management_bp.route('/office/additive-filings/<int:filing_id>', methods=['DELETE'])
+@jwt_required()
+def delete_additive_filing(filing_id):
+    from backend.app.models import OfficeAdditiveFiling
+    filing = OfficeAdditiveFiling.query.get_or_404(filing_id)
+    db.session.delete(filing)
+    db.session.commit()
+    return jsonify({"msg": "Filing deleted successfully"}), 200

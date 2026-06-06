@@ -30,7 +30,12 @@ def list_users():
     """
     利用者一覧を取得する。status_idsカンマ区切りでフィルタリング可能。
     """
-    query = User.query
+    from backend.app.models.core.user import UserPII
+    
+    query = db.session.query(
+        User,
+        UserPII.encrypted_certificate_number.isnot(None).label('has_cert')
+    ).outerjoin(UserPII, User.id == UserPII.user_id)
 
     status_ids_str = request.args.get('status_ids')
     if status_ids_str:
@@ -40,13 +45,9 @@ def list_users():
         except ValueError:
             pass
 
-    users = query.order_by(User.id.asc()).all()
+    results = query.order_by(User.id.asc()).all()
     user_list = []
-    for user in users:
-        has_cert = False
-        if user.pii and user.pii.certificate_number:
-            has_cert = True
-            
+    for user, has_cert in results:
         active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
         active_plan_end_date = active_plan.plan_end_date.isoformat() if active_plan and active_plan.plan_end_date else None
         
@@ -56,7 +57,7 @@ def list_users():
             "status_id": user.status_id,
             "status_name": user.status.name if user.status else None,
             "service_start_date": user.service_start_date.isoformat() if user.service_start_date else None,
-            "has_certificate_number": has_cert,
+            "has_certificate_number": bool(has_cert),
             "active_plan_end_date": active_plan_end_date
         })
 
@@ -70,8 +71,8 @@ def create_user():
     """
     current_supporter_id = get_jwt_identity()
     
-    if not check_permission(current_supporter_id, 'VIEW_PII'):
-        return jsonify({"msg": "Permission denied: Missing permission to register users."}), 403
+    if not check_permission(current_supporter_id, 'EDIT_PII'):
+        return jsonify({"msg": "Permission denied: Missing 'EDIT_PII' permission to register users."}), 403
 
     data = request.get_json() or {}
     display_name = data.get('display_name')
@@ -193,8 +194,8 @@ def update_user(user_id):
     """
     current_supporter_id = get_jwt_identity()
     
-    if not check_permission(current_supporter_id, 'VIEW_PII'):
-        return jsonify({"msg": "Permission denied: Missing permission to edit user details."}), 403
+    if not check_permission(current_supporter_id, 'EDIT_PII'):
+        return jsonify({"msg": "Permission denied: Missing 'EDIT_PII' permission to edit user details."}), 403
 
     user = db.session.get(User, user_id)
     if not user:
