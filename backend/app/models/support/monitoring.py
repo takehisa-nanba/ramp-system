@@ -42,4 +42,9 @@ class MonitoringReport(db.Model):
     
     # --- リレーションシップ ---
     plan = db.relationship('SupportPlan')
-    supporter = db.relationship('Supporter')
+    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
+
+    # 論理削除用フィールド
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    delete_reason = Column(String(255), nullable=True)

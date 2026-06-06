@@ -4,11 +4,11 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import SupportPlan, IndividualSupportGoal
-from backend.app.services.support_service import SupportService
+from backend.app.services.support_plan_service import SupportPlanService
 from backend.app.services.core_service import check_permission, parse_jwt_identity
 
 plans_bp = Blueprint('plans', __name__, url_prefix='/api/plans')
-support_service = SupportService()
+support_plan_service = SupportPlanService()
 
 # -------------------------------------------------------------------
 # 1. 計画作成 (DRAFT)
@@ -32,7 +32,7 @@ def create_plan():
         return jsonify({"msg": "Missing user_id or holistic_support_policy_id"}), 400
 
     try:
-        new_plan = support_service.create_plan_draft(
+        new_plan = support_plan_service.create_plan_draft(
             user_id=user_id,
             created_by_id=supporter_id,
             based_on_policy_id=policy_id
@@ -128,7 +128,7 @@ def activate_plan(plan_id):
         return jsonify({"msg": "Missing consent_log_id"}), 400
         
     try:
-        final_plan = support_service.finalize_and_activate_plan(
+        final_plan = support_plan_service.finalize_and_activate_plan(
             plan_id=plan_id,
             consent_log_id=consent_log_id
         )

@@ -138,13 +138,15 @@ def update_staff(staff_id):
         if 'hire_date' in data and data['hire_date']:
             try:
                 staff.hire_date = datetime.fromisoformat(data['hire_date']).date()
-            except (ValueError, TypeError): pass
+            except (ValueError, TypeError):
+                raise ValidationError("入職日の形式が不正です")
 
         if 'retirement_date' in data:
             if data['retirement_date']:
                 try:
                     staff.retirement_date = datetime.fromisoformat(data['retirement_date']).date()
-                except (ValueError, TypeError): pass
+                except (ValueError, TypeError):
+                    raise ValidationError("退職日の形式が不正です")
             else:
                 staff.retirement_date = None
 
@@ -184,7 +186,8 @@ def update_staff(staff_id):
                 if incoming.get('deemed_expiry_date'):
                     try:
                         expiry_val = datetime.fromisoformat(incoming['deemed_expiry_date']).date()
-                    except (ValueError, TypeError): pass
+                    except (ValueError, TypeError):
+                        raise ValidationError("みなし資格有効期限の形式が不正です")
                 item.deemed_expiry_date = expiry_val
                 
             reconcile_relations(
@@ -296,7 +299,8 @@ def register_staff():
         if data.get('retirement_date'):
             try:
                 ret_date = datetime.fromisoformat(data['retirement_date']).date()
-            except (ValueError, TypeError): pass
+            except (ValueError, TypeError):
+                raise ValidationError("退職日の形式が不正です")
 
         new_staff = Supporter(
             office_id=target_office_id,
@@ -345,7 +349,8 @@ def register_staff():
                 if a.get('deemed_expiry_date'):
                     try:
                         expiry_val = datetime.fromisoformat(a['deemed_expiry_date']).date()
-                    except (ValueError, TypeError): pass
+                    except (ValueError, TypeError):
+                        raise ValidationError("みなし資格有効期限の形式が不正です")
 
                 new_assign = SupporterJobAssignment(
                     supporter_id=new_staff.id,

@@ -18,7 +18,8 @@ from backend.app.models import (
     LongTermGoal, ShortTermGoal, IndividualSupportGoal, DailyLogActivity, HolisticSupportPolicy 
 )
 from backend.app.services.finance_service import FinanceService
-from backend.app.services.support_service import SupportService
+from backend.app.services.support_plan_service import SupportPlanService
+from backend.app.services.compliance_service import ComplianceService
 
 import logging
 logger = logging.getLogger('TEST_FINANCE')

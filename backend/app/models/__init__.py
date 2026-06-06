@@ -92,7 +92,7 @@ from backend.app.models.support.attendance_workflow import (
 )
 # ★ 追加: ケース会議
 from backend.app.models.support.case_management import (
-    CaseConferenceLog
+    CaseConferenceLog, CaseConferenceParticipant
 )
 
 # --- 4. finance パッケージ ---

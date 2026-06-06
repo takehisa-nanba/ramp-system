@@ -67,3 +67,27 @@ class CaseConferenceLog(db.Model):
     initiator = db.relationship('Supporter', foreign_keys=[initiator_supporter_id])
     user = db.relationship('User', back_populates='case_conferences')
     issue_category = db.relationship('IssueCategoryMaster')
+
+    # 論理削除用フィールド
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    delete_reason = Column(String(255), nullable=True)
+
+class CaseConferenceParticipant(db.Model):
+    """
+    ケース会議の参加者（複数）を管理するテーブル。
+    """
+    __tablename__ = 'case_conference_participants'
+    
+    id = Column(Integer, primary_key=True)
+    case_conference_log_id = Column(Integer, ForeignKey('case_conference_logs.id'), nullable=False, index=True)
+    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False, index=True)
+    
+    # 参加者としての役割など（必要に応じて拡張可能）
+    # role = Column(String(50))
+    
+    created_at = Column(DateTime, default=func.now())
+    
+    # リレーション
+    case_conference_log = db.relationship('CaseConferenceLog', backref=db.backref('participants', lazy='dynamic', cascade='all, delete-orphan'))
+    supporter = db.relationship('Supporter')

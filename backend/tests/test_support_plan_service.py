@@ -11,7 +11,7 @@ from backend.app.models import (
     SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
     AbsenceResponseLog
 )
-from backend.app.services.support_service import SupportService
+from backend.app.services.support_plan_service import SupportPlanService
 
 # ロガーの取得
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ def test_plan_workflow_and_guardrail(app):
         user, sabikan, policy = setup_masters_and_user(db.session, display_name="Tanaka", staff_code="S001")
         
         # DIなしでサービスをインスタンス化
-        service = SupportService() 
+        service = SupportPlanService() 
 
         # --- 2. 原案作成 (DRAFT) ---
         logger.info("🔹 ステップ1: 原案作成")
@@ -187,8 +187,8 @@ def test_plan_approval_absence_guardrail_with_urac_hook(app):
         # --- 1. 準備 ---
         user, sabikan, policy = setup_masters_and_user(db.session, display_name="AbsentUser", staff_code="S003")
         
-        # 【DIの実行】SupportServiceにモックを注入
-        service = SupportService(compliance_service=mock_compliance_service)
+        # 【DIの実行】SupportPlanServiceにモックを注入
+        service = SupportPlanService(compliance_service=mock_compliance_service)
         
         draft_plan = service.create_plan_draft(user.id, sabikan.id, policy.id)
         db.session.commit() # IDを確定させる

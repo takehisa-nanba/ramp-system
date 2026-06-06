@@ -160,7 +160,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "end_time": datetime.combine(today, time(11, 30)).isoformat(),
             "duration_minutes": 60
         }
-        res = client.post('/api/activities/log', json=payload, headers=headers)
+        res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code == 400
         assert "既に同時間帯" in res.get_json()["msg"]
         assert "利用者A" in res.get_json()["msg"]
@@ -176,7 +176,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "end_time": datetime.combine(today, time(12, 0)).isoformat(),
             "duration_minutes": 60
         }
-        res = client.post('/api/activities/log', json=payload, headers=headers)
+        res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code in [200, 201]
         logger.info("✅ テストケース2クリア: 非重複登録の成功を確認")
 
@@ -190,7 +190,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "end_time": datetime.combine(today, time(11, 0)).isoformat(),
             "duration_minutes": 60
         }
-        res = client.post('/api/activities/log', json=payload, headers=headers)
+        res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code in [200, 201]
         logger.info("✅ テストケース3クリア: 同一利用者の重複チェック除外を確認")
 

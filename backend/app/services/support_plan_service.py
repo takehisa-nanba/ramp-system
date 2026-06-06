@@ -31,7 +31,7 @@ class FinalizationPendingError(Exception):
     """L3 Hard Block: ギャップ記録は存在するが、承認(Responsible_ID)が未完了の場合に発生"""
     pass
 
-class SupportService:
+class SupportPlanService:
     """
     個別支援計画のライフサイクル（作成、承認、有効化）と、
     日報に対する計画の整合性検証（ガードレール）を担う。
@@ -118,7 +118,7 @@ class SupportService:
                 # 【STEP 3-2: URACフックの活性化ロジックを追記】
                 if self.compliance_service:
                     risk_context = {
-                        "source_service": "SupportService",
+                        "source_service": "SupportPlanService",
                         "action_attempted": "log_support_conference_and_approve",
                         "reason_for_failure": "Digital Declaration Missing",
                         "plan_id": plan_id
@@ -321,3 +321,22 @@ class SupportService:
              pass
         
         return True
+
+    def check_next_plan_creation_trigger(self, plan_id: int) -> bool:
+        """
+        次期計画作成フラグの判定（モニタリング結果等に基づく）。
+        MonitoringService から呼び出されるのではなく、上位フロー等から
+        計画更新時期を判断する用途を想定。
+        """
+        plan = db.session.get(SupportPlan, plan_id)
+        if not plan:
+            return False
+            
+        # 法定見直し期間が1ヶ月以内に迫っているか等の判定を実装可能
+        # 今回は簡略化のため、plan_end_dateが30日以内であればTrueを返す
+        if plan.plan_end_date:
+            days_left = (plan.plan_end_date - datetime.now(timezone.utc).date()).days
+            if days_left <= 30:
+                return True
+                
+        return False

@@ -59,6 +59,7 @@ def get_office_settings():
 @management_office_bp.route('', methods=['PUT'])
 @jwt_required()
 def update_office_settings():
+    from backend.app.utils.errors import ValidationError
     try:
         current = get_current_staff()
         data = request.get_json()
@@ -69,7 +70,8 @@ def update_office_settings():
         if 'full_time_weekly_minutes' in data: 
             try:
                 office.full_time_weekly_minutes = int(float(data['full_time_weekly_minutes']))
-            except (ValueError, TypeError): pass
+            except (ValueError, TypeError):
+                raise ValidationError("週所定労働時間は数値で入力してください")
         
         office.postal_code = data.get('postal_code', office.postal_code)
         office.address = data.get('address', office.address)
@@ -85,7 +87,8 @@ def update_office_settings():
             if 'capacity' in data:
                 try:
                     service.capacity = int(data['capacity'])
-                except (ValueError, TypeError): pass
+                except (ValueError, TypeError):
+                    raise ValidationError("定員は数値で入力してください")
                 
             service.regional_category = data.get('regional_category', service.regional_category)
             service.cooperating_medical_institution = data.get('cooperating_medical_institution', service.cooperating_medical_institution)
@@ -93,11 +96,13 @@ def update_office_settings():
             if data.get('initial_designation_date'):
                 try:
                     service.initial_designation_date = datetime.fromisoformat(data['initial_designation_date']).date()
-                except (ValueError, TypeError): pass
+                except (ValueError, TypeError):
+                    raise ValidationError("指定年月日の形式が不正です")
             if data.get('designation_expiry_date'):
                 try:
                     service.designation_expiry_date = datetime.fromisoformat(data['designation_expiry_date']).date()
-                except (ValueError, TypeError): pass
+                except (ValueError, TypeError):
+                    raise ValidationError("指定有効期限の形式が不正です")
             
         db.session.commit()
         return jsonify({"msg": "Office settings updated"}), 200
@@ -137,6 +142,7 @@ def get_additive_filings():
 @management_office_bp.route('/additive-filings', methods=['POST'])
 @jwt_required()
 def add_additive_filing():
+    from backend.app.utils.errors import ValidationError
     current = get_current_staff()
     if not current or not current.office_id:
         return jsonify({"msg": "Office not found"}), 404
@@ -172,17 +178,20 @@ def add_additive_filing():
     if data.get('filing_date'):
         try:
             new_filing.filing_date = datetime.fromisoformat(data['filing_date']).date()
-        except (ValueError, TypeError): pass
+        except (ValueError, TypeError):
+            raise ValidationError("届出日の形式が不正です")
         
     if data.get('start_date'):
         try:
             new_filing.effective_start_date = datetime.fromisoformat(data['start_date']).date()
-        except (ValueError, TypeError): pass
+        except (ValueError, TypeError):
+            raise ValidationError("適用開始日の形式が不正です")
         
     if data.get('end_date'):
         try:
             new_filing.effective_end_date = datetime.fromisoformat(data['end_date']).date()
-        except (ValueError, TypeError): pass
+        except (ValueError, TypeError):
+            raise ValidationError("適用終了日の形式が不正です")
         
     db.session.add(new_filing)
     db.session.commit()
