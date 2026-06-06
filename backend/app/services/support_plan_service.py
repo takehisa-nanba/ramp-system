@@ -11,8 +11,10 @@ from backend.app.models import (
     AbsenceResponseLog, # 不在時の証拠取得用
     # Continuity Log モデル
     ISP_Continuity_Gap_Log, 
-    GapReasonType
+    GapReasonType,
+    AuditActionLog
 )
+from backend.app.utils.errors import ValidationError
 from sqlalchemy import func, exc
 from datetime import datetime, timezone, timedelta, date
 from typing import Optional 
@@ -108,7 +110,7 @@ class SupportPlanService:
         plan = db.session.get(SupportPlan, plan_id)
         if not plan or plan.plan_status != 'DRAFT':
             logger.warning(f"❌ Plan {plan_id} must be in DRAFT status for approval.")
-            raise Exception("Plan is not in DRAFT status.")
+            raise ValidationError("Plan is not in DRAFT status.")
 
         # --- 🚨 哲学の実装: 不在時の厳格なチェック（関与の欠如防止） ---
         if not user_participated:
@@ -133,12 +135,12 @@ class SupportPlanService:
                         logger.critical(f"🔥 CRITICAL: Failed to log URAC increment. Error: {e}")
                 
                 logger.error(f"❌ Plan {plan_id}: User absent, Digital Declaration missing.")
-                raise Exception("User is absent. Digital Declaration required for PENDING_CONSENT transition.")
+                raise ValidationError("User is absent. Digital Declaration required for PENDING_CONSENT transition.")
 
             # 2. 実態反映の証明 (不在時の状況モニタリング概要) の強制
             if not (absence_monitoring_summary and len(absence_monitoring_summary.strip()) > 10):
                 logger.error(f"❌ Plan {plan_id}: Absence Monitoring Summary missing (Duty 2 breach).")
-                raise Exception("Absence Monitoring Summary (10+ chars) is required when user is absent.")
+                raise ValidationError("Absence Monitoring Summary (10+ chars) is required when user is absent.")
             
             # 3. 不在時の管理努力の証拠 (AbsenceResponseLog) の存在確認 (義務)
             absence_logs_count = db.session.query(AbsenceResponseLog).filter(
@@ -148,7 +150,7 @@ class SupportPlanService:
 
             if absence_logs_count == 0:
                 logger.error(f"❌ Plan {plan_id}: No AbsenceResponseLog linked to this plan found. Cannot approve.")
-                raise Exception("Missing mandatory AbsenceResponseLog evidence for absent user.")
+                raise ValidationError("Missing mandatory AbsenceResponseLog evidence for absent user.")
             
         # --- ログの作成（Step 3 会議の記録）---
         conference_log = SupportConferenceLog(
@@ -166,6 +168,17 @@ class SupportPlanService:
         
         db.session.add(conference_log)
         db.session.add(plan)
+        
+        audit_log = AuditActionLog(
+            action="APPROVE_SUPPORT_PLAN",
+            user_id=plan.user_id,
+            actor_supporter_id=sabikan_id,
+            entity_type="SupportPlan",
+            entity_id=plan.id,
+            reason=f"Plan {plan_id} approved. Status changed to PENDING_CONSENT."
+        )
+        db.session.add(audit_log)
+        
         logger.info(f"✅ Plan {plan_id} approved by Sabikan {sabikan_id}. Status: PENDING_CONSENT.")
         return conference_log
     
@@ -261,11 +274,11 @@ class SupportPlanService:
         
         if not plan or plan.plan_status != 'PENDING_CONSENT':
             logger.warning(f"❌ Plan {plan_id} must be in PENDING_CONSENT status for final activation.")
-            raise Exception("Plan is not in 'PENDING_CONSENT' status.")
+            raise ValidationError("Plan is not in 'PENDING_CONSENT' status.")
         
         if not consent_log or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN':
             logger.warning(f"❌ Consent log {consent_log_id} mismatch with Plan {plan_id}.")
-            raise Exception("Consent log mismatch.")
+            raise ValidationError("Consent log mismatch.")
 
         # 既存のACTIVE計画があればアーカイブ（連続性を実現）
         old_active_plan = SupportPlan.query.filter_by(
@@ -282,6 +295,17 @@ class SupportPlanService:
         
         db.session.add(plan)
         db.session.add(consent_log)
+        
+        audit_log = AuditActionLog(
+            action="ACTIVATE_SUPPORT_PLAN",
+            user_id=plan.user_id,
+            # No supporter_id context here since user themselves or someone else triggered it via signature
+            entity_type="SupportPlan",
+            entity_id=plan.id,
+            reason=f"Plan {plan_id} ACTIVATED and fully consented."
+        )
+        db.session.add(audit_log)
+        
         logger.info(f"🔥 Plan {plan_id} ACTIVATED and fully consented by User {plan.user_id}.")
         return plan
         

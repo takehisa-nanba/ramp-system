@@ -1,5 +1,6 @@
 from backend.app.extensions import db
-from backend.app.models import CaseConferenceLog, CaseConferenceParticipant, User
+from backend.app.models import CaseConferenceLog, CaseConferenceParticipant, User, AuditActionLog
+from backend.app.utils.errors import NotFoundError
 from datetime import datetime
 import logging
 
@@ -25,7 +26,7 @@ class CaseConferenceService:
         """
         user = db.session.get(User, user_id)
         if not user:
-            raise Exception("User not found")
+            raise NotFoundError("User not found")
             
         conference_time = conference_datetime or datetime.now()
         
@@ -58,6 +59,17 @@ class CaseConferenceService:
             participants.append(p)
             
         db.session.add_all(participants)
+        
+        audit_log = AuditActionLog(
+            action="CREATE_CASE_CONFERENCE",
+            user_id=user_id,
+            actor_supporter_id=initiator_id,
+            entity_type="CaseConferenceLog",
+            entity_id=conference.id,
+            reason=f"Case conference {conference.id} recorded with {len(participants)} participants."
+        )
+        db.session.add(audit_log)
+        
         logger.info(f"Case conference {conference.id} recorded for User {user_id} with {len(participants)} participants.")
         
         return conference

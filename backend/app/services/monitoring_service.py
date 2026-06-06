@@ -1,5 +1,6 @@
 from backend.app.extensions import db
-from backend.app.models import MonitoringReport, SupportPlan
+from backend.app.models import MonitoringReport, SupportPlan, AuditActionLog
+from backend.app.utils.errors import NotFoundError
 from datetime import datetime, timezone
 import logging
 
@@ -13,7 +14,7 @@ class MonitoringService:
         """
         plan = db.session.get(SupportPlan, plan_id)
         if not plan:
-            raise Exception("Support Plan not found")
+            raise NotFoundError("Support Plan not found")
             
         report = MonitoringReport(
             support_plan_id=plan_id,
@@ -23,7 +24,18 @@ class MonitoringService:
             target_goal_progress_notes=goal_notes,
             contextual_analysis=context
         )
-        db.session.add(report)
+        db.session.flush() # get ID
+        
+        audit_log = AuditActionLog(
+            action="CREATE_MONITORING_REPORT",
+            user_id=plan.user_id,
+            actor_supporter_id=supporter_id,
+            entity_type="MonitoringReport",
+            entity_id=report.id,
+            reason=f"Monitoring report created for Plan {plan_id}"
+        )
+        db.session.add(audit_log)
+        
         logger.info(f"Monitoring report created for Plan {plan_id} by Supporter {supporter_id}")
         return report
 
@@ -33,10 +45,24 @@ class MonitoringService:
         """
         report = db.session.get(MonitoringReport, report_id)
         if not report:
-            raise Exception("Monitoring Report not found")
+            raise NotFoundError("Monitoring Report not found")
             
         if document_url:
             report.document_url = document_url
+            
+        # user_id を特定するため、SupportPlanを経由
+        plan = db.session.get(SupportPlan, report.support_plan_id)
+        user_id = plan.user_id if plan else None
+        
+        audit_log = AuditActionLog(
+            action="COMPLETE_MONITORING_REPORT",
+            user_id=user_id,
+            actor_supporter_id=report.supporter_id,
+            entity_type="MonitoringReport",
+            entity_id=report.id,
+            reason=f"Monitoring report {report_id} completed."
+        )
+        db.session.add(audit_log)
             
         logger.info(f"Monitoring report {report_id} completed.")
         return report

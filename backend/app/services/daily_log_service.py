@@ -1,5 +1,5 @@
 from backend.app.extensions import db
-from backend.app.models import StaffActivityMaster, DailyLog, DailyLogActivity, StaffActivityAllocationLog, User, IndividualSupportGoal, ShortTermGoal, LongTermGoal, SupportPlan
+from backend.app.models import StaffActivityMaster, DailyLog, DailyLogActivity, StaffActivityAllocationLog, User, IndividualSupportGoal, ShortTermGoal, LongTermGoal, SupportPlan, AuditActionLog
 from datetime import datetime, timezone
 import logging
 from backend.app.utils.errors import ValidationError
@@ -103,4 +103,14 @@ class DailyLogService:
                 )
                 db.session.add(allocation)
                 
+        audit_log = AuditActionLog(
+            action="CREATE_DAILY_LOG",
+            user_id=user_id,
+            actor_supporter_id=supporter_id,
+            entity_type="DailyLog",
+            entity_id=daily_log.id if tag.is_direct_support else allocation.id,
+            reason=f"Daily log recorded for tag {tag_id} by supporter {supporter_id}."
+        )
+        db.session.add(audit_log)
+        
         return True
