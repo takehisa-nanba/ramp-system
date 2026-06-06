@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Users, FileText, AlertCircle, Search, CheckSquare, MessageSquare } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
+  const navigate = useNavigate();
+
   // TODO: Replace with GET /api/dashboard/summary
   const dashboardSummaryMock = [
     {
@@ -11,6 +14,7 @@ const DashboardPage: React.FC = () => {
       detail: '予定: 26名',
       icon: <Users className="w-8 h-8 text-indigo-600" />,
       colorClass: 'bg-indigo-50 border-indigo-100',
+      path: '/users',
     },
     {
       id: 'incomplete-daily-logs',
@@ -19,6 +23,7 @@ const DashboardPage: React.FC = () => {
       detail: '至急対応推奨',
       icon: <FileText className="w-8 h-8 text-amber-600" />,
       colorClass: 'bg-amber-50 border-amber-100',
+      path: '/action-items?type=daily_log',
     },
     {
       id: 'action-items',
@@ -27,6 +32,7 @@ const DashboardPage: React.FC = () => {
       detail: '計画未作成・期限超過等',
       icon: <AlertCircle className="w-8 h-8 text-rose-600" />,
       colorClass: 'bg-rose-50 border-rose-100',
+      path: '/action-items',
     },
     {
       id: 'uncompleted-monitoring',
@@ -35,6 +41,7 @@ const DashboardPage: React.FC = () => {
       detail: '期限が近づいています',
       icon: <Search className="w-8 h-8 text-amber-600" />,
       colorClass: 'bg-amber-50 border-amber-100',
+      path: '/action-items?type=monitoring',
     },
     {
       id: 'pending-approvals',
@@ -43,6 +50,7 @@ const DashboardPage: React.FC = () => {
       detail: 'サビ管確認待ち',
       icon: <CheckSquare className="w-8 h-8 text-amber-600" />,
       colorClass: 'bg-amber-50 border-amber-100',
+      path: '/action-items?type=approval',
     },
     {
       id: 'today-case-conferences',
@@ -51,6 +59,7 @@ const DashboardPage: React.FC = () => {
       detail: '14:00〜 田中様',
       icon: <MessageSquare className="w-8 h-8 text-indigo-600" />,
       colorClass: 'bg-indigo-50 border-indigo-100',
+      path: '/action-items?type=case_conference',
     },
   ];
 
@@ -65,6 +74,7 @@ const DashboardPage: React.FC = () => {
         {dashboardSummaryMock.map((item) => (
           <div 
             key={item.id} 
+            onClick={() => navigate(item.path)}
             className={`p-6 rounded-[2rem] border shadow-sm hover:shadow-md transition-shadow cursor-pointer flex flex-col justify-between h-40 ${item.colorClass}`}
           >
             <div className="flex items-start justify-between">
