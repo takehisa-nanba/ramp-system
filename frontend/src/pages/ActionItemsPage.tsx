@@ -66,7 +66,7 @@ const ActionItemsPage: React.FC = () => {
   const getActionItemTargetPath = (item: ActionItem) => {
     switch (item.type) {
       case 'daily_log':
-        return `/users/${item.user_id}/daily-logs`;
+        return `/users/${item.user_id}/daily-logs${item.target_date ? `?date=${item.target_date}` : ''}`;
       case 'monitoring':
         return `/users/${item.user_id}/monitoring-reports`;
       case 'approval':

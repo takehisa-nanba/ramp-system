@@ -359,6 +359,7 @@ export interface ActionItem {
   user_name: string;
   title: string;
   description: string;
+  target_date?: string;
 }
 
 export interface ActionItemsResponse {

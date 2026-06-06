@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Clock, CheckCircle, FileEdit, Plus, Link as LinkIcon, AlertCircle, X } from 'lucide-react';
 import { 
   fetchUserDailyLogs, 
@@ -21,6 +22,9 @@ const statusBadge = (status: string) => {
 };
 
 export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const dateParam = searchParams.get('date');
+
   const [items, setItems] = useState<DailyLogItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,6 +54,18 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
     loadDailyLogs();
   }, [userId]);
 
+  // クエリパラメータに date がある場合、自動的にその日付でモーダルを開く
+  useEffect(() => {
+    if (dateParam) {
+      setLogDate(dateParam);
+      handleOpenModal();
+      
+      const newParams = new URLSearchParams(searchParams);
+      newParams.delete('date');
+      setSearchParams(newParams, { replace: true });
+    }
+  }, [dateParam, searchParams, setSearchParams]);
+
   // モーダルを開いたときにタグ一覧を取得
   const handleOpenModal = async () => {
     setIsModalOpen(true);
@@ -72,6 +88,7 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
     setIsModalOpen(false);
     setNotes('');
     setFormError(null);
+    setLogDate(new Date().toISOString().split('T')[0]);
   };
 
   const handleSubmit = async (status: 'DRAFT' | 'COMPLETED') => {

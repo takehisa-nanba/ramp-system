@@ -54,7 +54,8 @@ def get_action_items():
                 "user_id": user_id,
                 "user_name": user_name,
                 "title": f"{user_name}さんの利用実績に対する支援記録が未作成です",
-                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（日報）が作成されていません。"
+                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（日報）が作成されていません。",
+                "target_date": att_date.strftime('%Y-%m-%d')
             })
         elif log.log_status == 'DRAFT':
             # 日報はあるが下書き状態
@@ -65,7 +66,8 @@ def get_action_items():
                 "user_id": user_id,
                 "user_name": user_name,
                 "title": f"{user_name}さんの利用実績に対する支援記録が未完了（下書き）です",
-                "description": f"{att_date.strftime('%Y-%m-%d')}の支援記録（日報）が下書き状態のままになっています。完了させてください。"
+                "description": f"{att_date.strftime('%Y-%m-%d')}の支援記録（日報）が下書き状態のままになっています。完了させてください。",
+                "target_date": att_date.strftime('%Y-%m-%d')
             })
         
     # 2. 同意待ち計画 (PENDING_CONSENT)
