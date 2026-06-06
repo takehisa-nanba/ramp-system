@@ -113,14 +113,14 @@ const UserDetailPage: React.FC = () => {
       </div>
 
       {/* MVP Tabs */}
-      <div className="flex gap-4 border-b border-slate-200 mb-6 pb-2">
-        <NavLink to="." end className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>概要</NavLink>
-        <NavLink to="support-plans" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>計画</NavLink>
-        <NavLink to="daily-logs" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>日報</NavLink>
-        <NavLink to="monitoring-reports" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>モニタリング</NavLink>
-        <NavLink to="case-conferences" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>ケース会議</NavLink>
-        <NavLink to="action-items" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>管理確認事項</NavLink>
-        <NavLink to="history" className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>履歴</NavLink>
+      <div className="flex gap-4 border-b border-slate-200 mb-6 pb-2 overflow-x-auto whitespace-nowrap">
+        <NavLink to={`/users/${id}`} end className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>概要</NavLink>
+        <NavLink to={`/users/${id}/support-plans`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>計画</NavLink>
+        <NavLink to={`/users/${id}/daily-logs`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>日報</NavLink>
+        <NavLink to={`/users/${id}/monitoring-reports`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>モニタリング</NavLink>
+        <NavLink to={`/users/${id}/case-conferences`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>ケース会議</NavLink>
+        <NavLink to={`/users/${id}/action-items`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>管理確認事項</NavLink>
+        <NavLink to={`/users/${id}/history`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>履歴</NavLink>
       </div>
 
       <div>
