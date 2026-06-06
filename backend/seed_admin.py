@@ -19,8 +19,8 @@ from backend.app.models import (
 app = create_app()
 with app.app_context():
     # 開発中のため、一度全て削除して再作成（スキーマ変更反映のため）
-    db.drop_all()
-    db.create_all()
+    # db.drop_all()
+    # db.create_all()
 
     # 1. マスターデータの整備
     municipality = MunicipalityMaster.query.filter_by(municipality_code='131016').first()
@@ -170,6 +170,7 @@ with app.app_context():
       pii.set_password('password123')
       db.session.add(pii)
       db.session.commit()
+    admin = Supporter.query.filter_by(staff_code='admin-001').first()
 
     # 4-2. 一般支援員 (セキュリティロールを持たない一般ユーザー) の追加
     pii_staff = SupporterPII.query.filter_by(email='staff@example.com').first()
@@ -192,6 +193,7 @@ with app.app_context():
 
 
     # 3. 利用者データの作成 (佐藤 健太)
+    active_status = StatusMaster.query.filter_by(name='利用中').first()
     user = User.query.filter_by(display_name='佐藤 健太').first()
     if not user:
         user = User(
@@ -323,4 +325,4 @@ with app.app_context():
         db.session.add(plan3)
         db.session.commit()
 
-    print("✅ 全てのデモデータの整合性を確認・補填しました。")
+    print("Demo data seeded successfully.")
