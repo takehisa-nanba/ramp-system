@@ -248,6 +248,12 @@ export interface LongTermGoal {
   target_period_end: string | null;
   short_term_goals: ShortTermGoal[];
 }
+export interface HolisticPolicySummary {
+  id: number;
+  user_intention_content: string;
+  support_policy_content: string;
+}
+
 export interface ActiveSupportPlan {
   id: number;
   plan_version: number;
@@ -256,6 +262,8 @@ export interface ActiveSupportPlan {
   end_date: string | null;
   next_monitoring_due: string | null;
   created_at: string | null;
+  based_on_plan_id: number | null;
+  holistic_policy: HolisticPolicySummary | null;
   long_term_goals: LongTermGoal[];
 }
 export interface SupportPlanSummary {
@@ -265,6 +273,8 @@ export interface SupportPlanSummary {
   start_date: string | null;
   end_date: string | null;
   created_at: string | null;
+  based_on_plan_id: number | null;
+  holistic_policy: HolisticPolicySummary | null;
 }
 export interface UserSupportPlansResponse {
   active_plan: ActiveSupportPlan | null;
@@ -300,6 +310,67 @@ export const activateSupportPlan = async (planId: number, consentLogId: number):
   const response = await apiClient.post<ActivatePlanResponse>(`/plans/${planId}/activate`, {
     consent_log_id: consentLogId
   });
+  return response.data;
+};
+
+export interface CreateSupportPlanResponse {
+  msg: string;
+  plan_id: number;
+  user_id: number;
+  status: string;
+}
+
+export interface CreateSupportPlanParams {
+  userId: number;
+  holisticSupportPolicyId?: number;
+  planStartDate?: string;
+  planEndDate?: string;
+  userIntentionContent?: string;
+  supportPolicyContent?: string;
+}
+
+export const createSupportPlanDraft = async (params: CreateSupportPlanParams): Promise<CreateSupportPlanResponse> => {
+  const response = await apiClient.post<CreateSupportPlanResponse>('/plans', {
+    user_id: params.userId,
+    holistic_support_policy_id: params.holisticSupportPolicyId,
+    plan_start_date: params.planStartDate,
+    plan_end_date: params.planEndDate,
+    user_intention_content: params.userIntentionContent,
+    support_policy_content: params.supportPolicyContent,
+  });
+  return response.data;
+};
+
+export interface CloneNextDraftResponse {
+  msg: string;
+  plan_id: number;
+  status: string;
+}
+
+export const createNextSupportPlanDraft = async (planId: number): Promise<CloneNextDraftResponse> => {
+  const response = await apiClient.post<CloneNextDraftResponse>(`/plans/${planId}/create-next-draft`);
+  return response.data;
+};
+
+export interface SaveGoalsData {
+  long_term_goals: {
+    description: string;
+    short_term_goals: {
+      description: string;
+      individual_goals: {
+        concrete_goal: string;
+        user_commitment: string;
+        support_actions: string;
+        service_type: string;
+        is_facility_in_deemed: boolean;
+        is_work_preparation_positioning: boolean;
+      }[];
+    }[];
+  }[];
+}
+
+export const saveSupportPlanGoals = async (planId: number, data: SaveGoalsData): Promise<{ msg: string }> => {
+  const response = await apiClient.put<{ msg: string }>(`/plans/${planId}/goals`, data);
   return response.data;
 };
 

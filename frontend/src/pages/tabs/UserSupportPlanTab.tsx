@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { 
   FileText, Target, CheckCircle, Plus, 
   AlertCircle, MessageSquare, Clock, Compass, HelpCircle, 
-  ArrowRight, AlertTriangle 
+  ArrowRight, AlertTriangle, Copy, Trash2
 } from 'lucide-react';
 import {
   fetchUserSupportPlans,
@@ -11,6 +11,9 @@ import {
   fetchUserCaseConferences,
   recordUserConsent,
   activateSupportPlan,
+  createSupportPlanDraft,
+  createNextSupportPlanDraft,
+  saveSupportPlanGoals,
   type UserSupportPlansResponse,
   type UserMonitoringResponse,
   type CaseConferenceItem,
@@ -120,6 +123,138 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
     }
   };
 
+  // 新規計画作成・クローン用
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createSubmitting, setCreateSubmitting] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  
+  const [formPlanStartDate, setFormPlanStartDate] = useState('');
+  const [formPlanEndDate, setFormPlanEndDate] = useState('');
+  const [formUserIntentionContent, setFormUserIntentionContent] = useState('');
+  const [formSupportPolicyContent, setFormSupportPolicyContent] = useState('');
+
+  const [showCloneConfirmModal, setShowCloneConfirmModal] = useState(false);
+  const [cloningSubmitting, setCloningSubmitting] = useState(false);
+
+  // 定期的な日付の自動入力用（本日＋3ヶ月後など）
+  const initDefaultDates = () => {
+    const today = new Date();
+    const formattedToday = today.toISOString().split('T')[0];
+    const threeMonthsLater = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
+    const formattedEndDate = threeMonthsLater.toISOString().split('T')[0];
+    
+    setFormPlanStartDate(formattedToday);
+    setFormPlanEndDate(formattedEndDate);
+  };
+
+  // 動的目標フォームの初期値定義
+  const DEFAULT_INDIVIDUAL_GOAL = () => ({
+    concrete_goal: '',
+    user_commitment: '',
+    support_actions: '',
+    service_type: 'TRAINING',
+    is_facility_in_deemed: false,
+    is_work_preparation_positioning: false
+  });
+
+  const DEFAULT_SHORT_TERM_GOAL = () => ({
+    description: '',
+    individual_goals: [DEFAULT_INDIVIDUAL_GOAL()]
+  });
+
+  const DEFAULT_LONG_TERM_GOAL = () => ({
+    description: '',
+    short_term_goals: [DEFAULT_SHORT_TERM_GOAL()]
+  });
+
+  const [formLongTermGoals, setFormLongTermGoals] = useState<any[]>([DEFAULT_LONG_TERM_GOAL()]);
+
+  // 新規計画作成ハンドラー
+  const handleCreatePlanSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setCreateSubmitting(true);
+      setCreateError(null);
+
+      const newPlanRes = await createSupportPlanDraft({
+        userId,
+        planStartDate: formPlanStartDate || undefined,
+        planEndDate: formPlanEndDate || undefined,
+        userIntentionContent: formUserIntentionContent || undefined,
+        supportPolicyContent: formSupportPolicyContent || undefined
+      });
+      const planId = newPlanRes.plan_id;
+
+      await saveSupportPlanGoals(planId, {
+        long_term_goals: formLongTermGoals
+      });
+
+      setShowCreateModal(false);
+      setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
+      setFormPlanStartDate('');
+      setFormPlanEndDate('');
+      setFormUserIntentionContent('');
+      setFormSupportPolicyContent('');
+      await loadAllData();
+    } catch (err: any) {
+      console.error(err);
+      setCreateError(err.response?.data?.msg || '計画の作成または目標の登録に失敗しました。');
+    } finally {
+      setCreateSubmitting(false);
+    }
+  };
+
+  // 次期計画クローンハンドラー
+  const handleCreateNextPlan = async () => {
+    if (!activePlan) return;
+    try {
+      setCloningSubmitting(true);
+      await createNextSupportPlanDraft(activePlan.id);
+      setShowCloneConfirmModal(false);
+      await loadAllData();
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.msg || '次期原案の作成に失敗しました。');
+    } finally {
+      setCloningSubmitting(false);
+    }
+  };
+
+  // 目標ツリー操作用ヘルパー
+  const addLongTermGoal = () => {
+    setFormLongTermGoals([...formLongTermGoals, DEFAULT_LONG_TERM_GOAL()]);
+  };
+
+  const removeLongTermGoal = (ltgIndex: number) => {
+    const next = [...formLongTermGoals];
+    next.splice(ltgIndex, 1);
+    setFormLongTermGoals(next);
+  };
+
+  const addShortTermGoal = (ltgIndex: number) => {
+    const next = [...formLongTermGoals];
+    next[ltgIndex].short_term_goals.push(DEFAULT_SHORT_TERM_GOAL());
+    setFormLongTermGoals(next);
+  };
+
+  const removeShortTermGoal = (ltgIndex: number, stgIndex: number) => {
+    const next = [...formLongTermGoals];
+    next[ltgIndex].short_term_goals.splice(stgIndex, 1);
+    setFormLongTermGoals(next);
+  };
+
+  const addIndividualGoal = (ltgIndex: number, stgIndex: number) => {
+    const next = [...formLongTermGoals];
+    next[ltgIndex].short_term_goals[stgIndex].individual_goals.push(DEFAULT_INDIVIDUAL_GOAL());
+    setFormLongTermGoals(next);
+  };
+
+  const removeIndividualGoal = (ltgIndex: number, stgIndex: number, igIndex: number) => {
+    const next = [...formLongTermGoals];
+    next[ltgIndex].short_term_goals[stgIndex].individual_goals.splice(igIndex, 1);
+    setFormLongTermGoals(next);
+  };
+
   // section クエリパラメータに応じたスクロール＆ハイライト処理
   useEffect(() => {
     if (!loading && sectionParam) {
@@ -195,11 +330,41 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
           }`}>
             {activePlan ? '計画 ACTIVE' : '計画 未作成'}
           </span>
-          <button className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm">
+          {activePlan && (
+            <button 
+              onClick={() => setShowCloneConfirmModal(true)}
+              className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+              <Copy className="w-4 h-4" /> 次期原案を作成
+            </button>
+          )}
+          <button 
+            onClick={() => {
+              setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
+              initDefaultDates();
+              setCreateError(null);
+              setShowCreateModal(true);
+            }}
+            className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl font-bold text-xs transition-colors shadow-sm ${
+              activePlan
+                ? 'bg-slate-100 text-slate-700 hover:bg-slate-250 border border-slate-200'
+                : 'bg-indigo-600 text-white hover:bg-indigo-700'
+            }`}
+          >
             <Plus className="w-4 h-4" /> 新規計画作成
           </button>
         </div>
       </div>
+
+      {activePlan?.holistic_policy?.support_policy_content?.includes('【暫定支援方針】') && (
+        <div className="bg-amber-50 border border-amber-200 p-4 rounded-3xl flex items-start gap-3 text-amber-800 animate-in fade-in duration-300">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+          <div>
+            <p className="text-xs font-black">この計画は暫定支援方針に基づいて作成されています</p>
+            <p className="text-[10px] text-amber-700 mt-0.5">アセスメント未実施のため、初期原案作成用の暫定方針が適用されています。後でアセスメント情報を登録してください。</p>
+          </div>
+        </div>
+      )}
 
       {/* 2. 業務サイクルロードマップ */}
       <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm">
@@ -268,14 +433,36 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg">工程 2/7</span>
           </div>
           {latestPlanStatus === 'DRAFT' ? (
-            <div className="bg-indigo-50/50 border border-indigo-100 p-5 rounded-2xl flex items-center justify-between">
-              <div>
-                <p className="text-sm font-black text-indigo-900">作成中の計画原案があります</p>
-                <p className="text-xs text-indigo-700 mt-0.5">原案を作成後、関係者でケース会議を行い、内容をブラッシュアップします。</p>
+            <div className="space-y-3">
+              <div className="bg-indigo-50/50 border border-indigo-100 p-5 rounded-2xl flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-black text-indigo-900">作成中の計画原案があります</p>
+                  <p className="text-xs text-indigo-700 mt-0.5">原案を作成後、関係者でケース会議を行い、内容をブラッシュアップします。</p>
+                </div>
+                <button className="flex items-center gap-1 bg-indigo-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm">
+                  原案を編集 <ArrowRight className="w-3.5 h-3.5" />
+                </button>
               </div>
-              <button className="flex items-center gap-1 bg-indigo-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm">
-                原案を編集 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+
+              {plansData?.plan_history.find(p => p.plan_status === 'DRAFT')?.based_on_plan_id && (
+                <div className="bg-blue-50 border border-blue-200 p-4 rounded-2xl flex items-start gap-3 text-blue-800 animate-in fade-in duration-300">
+                  <AlertCircle className="w-5 h-5 shrink-0 text-blue-600 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-black">現行計画をもとに作成された原案です</p>
+                    <p className="text-[10px] text-blue-700 mt-0.5">モニタリング結果を反映して編集してください。</p>
+                  </div>
+                </div>
+              )}
+
+              {plansData?.plan_history.find(p => p.plan_status === 'DRAFT')?.holistic_policy?.support_policy_content?.includes('【暫定支援方針】') && (
+                <div className="bg-amber-50 border border-amber-200 p-4 rounded-2xl flex items-start gap-3 text-amber-800 animate-in fade-in duration-300">
+                  <AlertTriangle className="w-5 h-5 shrink-0 text-amber-600 mt-0.5" />
+                  <div>
+                    <p className="text-xs font-black">この計画は暫定支援方針に基づいて作成されています</p>
+                    <p className="text-[10px] text-amber-700 mt-0.5">アセスメント未実施のため、初期原案作成用の暫定方針が適用されています。後でアセスメント情報を登録してください。</p>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="border border-dashed border-slate-200 p-6 rounded-2xl text-center">
@@ -682,6 +869,397 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                   </>
                 ) : (
                   '同意を登録して有効化'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 新規計画作成モーダル */}
+      {showCreateModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl border border-slate-200 max-w-4xl w-full h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* ヘッダー */}
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+              <div>
+                <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-indigo-600" /> 個別支援計画（原案）の新規作成
+                </h3>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">※ 未入力の方針項目は暫定アセスメント / 暫定支援方針として自動生成されます。</p>
+              </div>
+              <button 
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* フォーム本体（スクロール可） */}
+            <form onSubmit={handleCreatePlanSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+              {createError && (
+                <div className="bg-rose-50 border border-rose-200 text-rose-700 p-4 rounded-2xl text-xs font-bold flex items-center gap-2">
+                  <AlertCircle className="w-5 h-5 text-rose-500 shrink-0" />
+                  <span>{createError}</span>
+                </div>
+              )}
+
+              {/* 1. 計画期間 */}
+              <div className="bg-slate-50/70 border border-slate-200 p-5 rounded-2xl space-y-4">
+                <h4 className="text-xs font-black text-indigo-700 flex items-center gap-1.5 uppercase tracking-wider">
+                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[10px]">1</span>
+                  1. 計画期間設定
+                </h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1">開始日 (必須)</label>
+                    <input 
+                      type="date"
+                      required
+                      value={formPlanStartDate}
+                      onChange={(e) => setFormPlanStartDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1">終了日 (必須)</label>
+                    <input 
+                      type="date"
+                      required
+                      value={formPlanEndDate}
+                      onChange={(e) => setFormPlanEndDate(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. 本人の希望・支援方針 */}
+              <div className="bg-slate-50/70 border border-slate-200 p-5 rounded-2xl space-y-4">
+                <h4 className="text-xs font-black text-indigo-700 flex items-center gap-1.5 uppercase tracking-wider">
+                  <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[10px]">2</span>
+                  2. 本人の希望 ＆ 支援方針
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1">本人の意向・希望</label>
+                    <textarea 
+                      placeholder="例：自立した生活に向けて、就労のトレーニングを積みたい。"
+                      value={formUserIntentionContent}
+                      onChange={(e) => setFormUserIntentionContent(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium min-h-[60px]"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 mb-1">総合的な支援方針</label>
+                    <textarea 
+                      placeholder="例：本人の希望に配慮し、作業スキルの向上と情緒の安定を目指した支援を行う。"
+                      value={formSupportPolicyContent}
+                      onChange={(e) => setFormSupportPolicyContent(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium min-h-[60px]"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. 長期目標 */}
+              <div className="bg-slate-50/70 border border-slate-200 p-5 rounded-2xl space-y-4">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-black text-indigo-700 flex items-center gap-1.5 uppercase tracking-wider">
+                    <span className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-[10px]">3</span>
+                    3. 目標設定 (長期 ➔ 短期 ➔ 個別支援内容)
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={addLongTermGoal}
+                    className="flex items-center gap-1 text-[10px] bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-lg font-black hover:bg-indigo-100 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" /> 長期目標を追加
+                  </button>
+                </div>
+
+                {formLongTermGoals.map((ltg, ltgIdx) => (
+                  <div key={ltgIdx} className="bg-white border border-slate-200 p-4 rounded-xl space-y-4 shadow-2xs relative">
+                    {formLongTermGoals.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => removeLongTermGoal(ltgIdx)}
+                        className="absolute top-3 right-3 text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-rose-50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                    
+                    <div>
+                      <label className="block text-[10px] font-black text-slate-500 mb-1">【長期目標 {ltgIdx + 1}】目標記述</label>
+                      <input 
+                        type="text"
+                        required
+                        placeholder="例：毎日休まずに通所し、作業に集中できるようになる"
+                        value={ltg.description}
+                        onChange={(e) => {
+                          const next = [...formLongTermGoals];
+                          next[ltgIdx].description = e.target.value;
+                          setFormLongTermGoals(next);
+                        }}
+                        className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
+                      />
+                    </div>
+
+                    {/* 短期目標ループ */}
+                    <div className="pl-4 border-l-2 border-slate-100 space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-black text-slate-400">【短期目標】</span>
+                        <button
+                          type="button"
+                          onClick={() => addShortTermGoal(ltgIdx)}
+                          className="flex items-center gap-1 text-[9px] text-indigo-600 hover:text-indigo-800 font-bold"
+                        >
+                          + 短期目標を追加
+                        </button>
+                      </div>
+
+                      {ltg.short_term_goals.map((stg: any, stgIdx: number) => (
+                        <div key={stgIdx} className="bg-slate-50/50 p-3.5 rounded-lg space-y-3 relative border border-slate-100">
+                          {ltg.short_term_goals.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeShortTermGoal(ltgIdx, stgIdx)}
+                              className="absolute top-2 right-2 text-slate-400 hover:text-rose-600 p-1"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+
+                          <div>
+                            <label className="block text-[9px] font-black text-slate-500 mb-1">短期目標 {stgIdx + 1} の内容</label>
+                            <input 
+                              type="text"
+                              required
+                              placeholder="例：作業開始時に課題を確認し、自己判断で進められる"
+                              value={stg.description}
+                              onChange={(e) => {
+                                const next = [...formLongTermGoals];
+                                next[ltgIdx].short_term_goals[stgIdx].description = e.target.value;
+                                setFormLongTermGoals(next);
+                              }}
+                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium"
+                            />
+                          </div>
+
+                          {/* 個別支援内容ループ */}
+                          <div className="pl-3 border-l-2 border-indigo-150 space-y-3">
+                            <div className="flex justify-between items-center">
+                              <span className="text-[9px] font-bold text-slate-400">個別支援内容</span>
+                              <button
+                                type="button"
+                                onClick={() => addIndividualGoal(ltgIdx, stgIdx)}
+                                className="text-[8px] text-indigo-500 hover:text-indigo-700 font-bold"
+                              >
+                                + 支援内容を追加
+                              </button>
+                            </div>
+
+                            {stg.individual_goals.map((ig: any, igIdx: number) => (
+                              <div key={igIdx} className="bg-white p-3 rounded-lg border border-slate-200/80 space-y-2.5 relative">
+                                {stg.individual_goals.length > 1 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => removeIndividualGoal(ltgIdx, stgIdx, igIdx)}
+                                    className="absolute top-1.5 right-1.5 text-slate-400 hover:text-rose-600 p-1"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                )}
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                                  <div>
+                                    <label className="block text-[8px] font-bold text-slate-400 mb-0.5">具体的な目標</label>
+                                    <input 
+                                      type="text"
+                                      required
+                                      placeholder="例：手順書を見ながら進める"
+                                      value={ig.concrete_goal}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].concrete_goal = e.target.value;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[8px] font-bold text-slate-400 mb-0.5">本人の取り組み</label>
+                                    <input 
+                                      type="text"
+                                      placeholder="例：分からない時は支援員に確認する"
+                                      value={ig.user_commitment}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].user_commitment = e.target.value;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
+                                    />
+                                  </div>
+                                  <div>
+                                    <label className="block text-[8px] font-bold text-slate-400 mb-0.5">主な支援内容</label>
+                                    <input 
+                                      type="text"
+                                      placeholder="例：視覚的支援ツール(手順書)の整備"
+                                      value={ig.support_actions}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].support_actions = e.target.value;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
+                                    />
+                                  </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 pt-1 border-t border-slate-100">
+                                  <div>
+                                    <label className="block text-[8px] font-bold text-slate-400 mb-0.5">サービス種別</label>
+                                    <select
+                                      value={ig.service_type}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].service_type = e.target.value;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] bg-white focus:outline-hidden font-bold text-slate-700"
+                                    >
+                                      <option value="TRAINING">自立訓練(生活)</option>
+                                      <option value="WORK_TRANSITION">就労移行支援</option>
+                                      <option value="B_EMPLOYMENT">就労継続B型</option>
+                                      <option value="A_EMPLOYMENT">就労継続A型</option>
+                                    </select>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pt-2">
+                                    <input 
+                                      type="checkbox"
+                                      id={`deemed-${ltgIdx}-${stgIdx}-${igIdx}`}
+                                      checked={ig.is_facility_in_deemed}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].is_facility_in_deemed = e.target.checked;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                                    />
+                                    <label htmlFor={`deemed-${ltgIdx}-${stgIdx}-${igIdx}`} className="text-[9px] font-bold text-slate-500">
+                                      施設外支援・みなし設定
+                                    </label>
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pt-2">
+                                    <input 
+                                      type="checkbox"
+                                      id={`prep-${ltgIdx}-${stgIdx}-${igIdx}`}
+                                      checked={ig.is_work_preparation_positioning}
+                                      onChange={(e) => {
+                                        const next = [...formLongTermGoals];
+                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].is_work_preparation_positioning = e.target.checked;
+                                        setFormLongTermGoals(next);
+                                      }}
+                                      className="rounded text-indigo-600 focus:ring-indigo-500 w-3.5 h-3.5"
+                                    />
+                                    <label htmlFor={`prep-${ltgIdx}-${stgIdx}-${igIdx}`} className="text-[9px] font-bold text-slate-500">
+                                      就労準備移行等連携
+                                    </label>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </form>
+
+            {/* フッター */}
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                disabled={createSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="submit"
+                onClick={handleCreatePlanSubmit}
+                disabled={createSubmitting}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {createSubmitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    作成中...
+                  </>
+                ) : (
+                  '原案を作成して目標保存'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 次期原案作成確認モーダル */}
+      {showCloneConfirmModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-xl border border-slate-200 max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+              <h3 className="font-black text-slate-800 text-base flex items-center gap-1.5">
+                <Copy className="w-4 h-4 text-indigo-600" /> 次期計画原案の作成
+              </h3>
+              <button 
+                onClick={() => setShowCloneConfirmModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-50 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6 space-y-4">
+              <div className="bg-indigo-50 text-indigo-900 p-4 rounded-2xl border border-indigo-100 text-xs font-bold">
+                現行の成案をもとに、次期原案を作成します。目標や支援内容はコピーされます。モニタリング結果を反映して編集してください。
+              </div>
+
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-[10px] leading-relaxed text-slate-500 font-medium">
+                <p className="font-bold text-slate-600 mb-0.5">💡 コピー後の挙動について</p>
+                作成された計画は必ず <span className="font-black">DRAFT (原案)</span> 状態となり、計画期間は自動的に現行計画の終了日の翌日から開始するように設定されます。
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setShowCloneConfirmModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-100 transition-colors"
+                disabled={cloningSubmitting}
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handleCreateNextPlan}
+                disabled={cloningSubmitting}
+                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-black transition-colors shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+              >
+                {cloningSubmitting ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    複製中...
+                  </>
+                ) : (
+                  '次期原案を作成する'
                 )}
               </button>
             </div>

@@ -18,6 +18,12 @@ def _serialize_plan_summary(plan: SupportPlan) -> dict:
         "start_date": plan.plan_start_date.isoformat() if plan.plan_start_date else None,
         "end_date": plan.plan_end_date.isoformat() if plan.plan_end_date else None,
         "created_at": plan.created_at.isoformat() if plan.created_at else None,
+        "based_on_plan_id": plan.based_on_plan_id,
+        "holistic_policy": {
+            "id": plan.holistic_policy.id,
+            "user_intention_content": plan.holistic_policy.user_intention_content,
+            "support_policy_content": plan.holistic_policy.support_policy_content
+        } if plan.holistic_policy else None
     }
 
 
@@ -66,6 +72,12 @@ def _serialize_active_plan(plan: SupportPlan) -> dict:
         "end_date": plan.plan_end_date.isoformat() if plan.plan_end_date else None,
         "next_monitoring_due": next_monitoring_due,
         "created_at": plan.created_at.isoformat() if plan.created_at else None,
+        "based_on_plan_id": plan.based_on_plan_id,
+        "holistic_policy": {
+            "id": plan.holistic_policy.id,
+            "user_intention_content": plan.holistic_policy.user_intention_content,
+            "support_policy_content": plan.holistic_policy.support_policy_content
+        } if plan.holistic_policy else None,
         "long_term_goals": long_term_goals,
     }
 
