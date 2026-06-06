@@ -1,23 +1,19 @@
 // frontend/src/App.tsx
 
 import React from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css'; 
 
-// 責務分離されたコンポーネントをインポート
 import LoginForm from './components/LoginForm';
-import Dashboard from './components/Dashboard';
-import Timecard from './components/Timecard';
-import PlanCreator from './components/PlanCreator';
-import UserManager from './components/UserManager';
-import UserDetailPage from './components/UserDetailPage';
 import MainLayout from './components/layout/MainLayout';
-import DailyLogCreator from './components/DailyLogCreator';
-import UserDashboard from './components/UserDashboard';
-import LogSettings from './components/staff/LogSettings';
-import StaffManagement from './components/StaffManagement';
-import OfficeSettings from './components/OfficeSettings';
 import { useAuth } from './context/AuthContext';
+
+// Pages
+import DashboardPage from './pages/DashboardPage';
+import UserListPage from './pages/UserListPage';
+import UserDetailPage from './pages/UserDetailPage';
+import ActionItemsPage from './pages/ActionItemsPage';
+import SettingsPage from './pages/SettingsPage';
 
 
 // =================================================================
@@ -50,24 +46,17 @@ const App: React.FC = () => {
           }
         >
           {/* MainLayoutの <Outlet /> にレンダリングされる子ルート */}
-          <Route 
-            index 
-            element={
-              user.roleName === 'STAFF' 
-                ? <Dashboard supporterName={user.fullName} /> 
-                : <UserDashboard userName={user.fullName} />
-            } 
-          />
-          <Route path="timecard" element={<Timecard supporterName={user.fullName} />} />
-          <Route path="users" element={<UserManager />} />
-          <Route path="users/:id" element={<UserDetailPage />} />
-          <Route path="plans" element={<PlanCreator />} />
-          <Route path="daily-log" element={<DailyLogCreator />} />
-          <Route path="settings/log" element={<LogSettings />} />
-          <Route path="management/staff" element={<StaffManagement />} />
-          <Route path="management/office" element={<OfficeSettings />} />
+          <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="dashboard" element={<DashboardPage />} />
+          
+          <Route path="users" element={<UserListPage />} />
+          <Route path="users/:id/*" element={<UserDetailPage />} />
+          
+          <Route path="action-items" element={<ActionItemsPage />} />
+          <Route path="settings" element={<SettingsPage />} />
 
-
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Route>
       </Routes>
     </BrowserRouter>

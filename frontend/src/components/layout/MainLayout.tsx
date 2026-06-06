@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { 
-  Menu, X, LayoutDashboard, Clock, Users, FileText, 
-  LogOut, Bell, Search, Calendar, Settings,
-  MessageSquare, ShieldCheck, Building2
+  Menu, X, LayoutDashboard, Users, 
+  LogOut, Bell, Search, Settings,
+  MessageSquare
 } from 'lucide-react';
 
 
 
-import { useAuth } from '../../context/AuthContext';
 import ActivityTracker from '../ActivityTracker';
 
 interface MainLayoutProps {
@@ -23,12 +22,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
   const toggleSidebar = () => setIsSidebarOpen(!isSidebarOpen);
 
   const closeSidebar = () => setIsSidebarOpen(false);
-
   const isStaff = role === 'STAFF';
-
-  const { user } = useAuth();
-  const roleScopes = user?.roleScopes || [];
-  const hasAdminRole = roleScopes.some(scope => ['SYSTEM', 'CORPORATE', 'JOB'].includes(scope));
 
   interface NavItem {
     name: string;
@@ -37,34 +31,11 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
     badge?: number;
   }
 
-  const baseItems: NavItem[] = [
-    { name: 'ダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
-    { name: '利用者管理', path: '/users', icon: <Users size={18} /> },
-    { name: '個別支援計画', path: '/plans', icon: <FileText size={18} /> },
-    { name: '日報', path: '/daily-logs', icon: <Clock size={18} /> },
-    { name: 'モニタリング', path: '/monitoring', icon: <Search size={18} /> },
-    { name: 'ケース会議', path: '/case-conferences', icon: <MessageSquare size={18} /> },
-    // --- MVP外のため非表示 ---
-    // { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} />, badge: 3 },
-    // { name: 'タイムカード', path: '/timecard', icon: <Clock size={18} /> },
-  ];
-
-  const adminItems: NavItem[] = hasAdminRole ? [
-    { name: '管理確認事項', path: '/management/alerts', icon: <ShieldCheck size={18} /> },
-    // --- MVP外のため非表示 ---
-    // { name: 'スタッフ管理', path: '/management/staff', icon: <ShieldCheck size={18} /> },
-    // { name: '事業所設定', path: '/management/office', icon: <Building2 size={18} /> },
-    // { name: '日報設定', path: '/settings/log', icon: <Settings size={18} /> },
-  ] : [
-    { name: '確認が必要な項目', path: '/staff/alerts', icon: <Bell size={18} /> }
-  ];
-
-  const navItems: NavItem[] = isStaff ? [...baseItems, ...adminItems] : [
-    { name: 'マイダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
-    // MVP外のため非表示
-    // { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} /> },
-    // { name: 'カレンダー', path: '/calendar', icon: <Calendar size={18} /> },
-    { name: '支援記録', path: '/records', icon: <FileText size={18} /> },
+  const navItems: NavItem[] = [
+    { name: 'ホーム', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
+    { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
+    { name: '管理確認事項', path: '/action-items', icon: <Bell size={18} /> },
+    { name: '設定', path: '/settings', icon: <Settings size={18} /> },
   ];
 
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
