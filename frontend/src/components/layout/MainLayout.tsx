@@ -8,7 +8,7 @@ import {
 
 
 
-import ActivityTracker from '../ActivityTracker';
+// import ActivityTracker from '../ActivityTracker';
 
 interface MainLayoutProps {
   supporterName: string | null;
@@ -192,7 +192,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
         </button>
       )}
 
-      {isStaff && <ActivityTracker />}
+      {/* {isStaff && <ActivityTracker />} */}
 
     </div>
   );
