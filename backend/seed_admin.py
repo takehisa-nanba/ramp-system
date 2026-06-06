@@ -109,12 +109,15 @@ with app.app_context():
 
     # 3. 権限・ロールの整備
     permissions = [
+        {'name': 'VIEW', 'desc': 'データの閲覧'},
+        {'name': 'CREATE', 'desc': 'データの作成'},
+        {'name': 'EDIT', 'desc': 'データの編集'},
+        {'name': 'APPROVE', 'desc': 'データの承認'},
+        {'name': 'DELETE', 'desc': 'データの削除'},
         {'name': 'VIEW_PII', 'desc': '個人情報の閲覧'},
         {'name': 'EDIT_PII', 'desc': '個人情報の編集'},
-        {'name': 'MANAGE_STAFF', 'desc': '職員の管理'},
-        {'name': 'MANAGE_OFFICE', 'desc': '事業所の設定'},
-        {'name': 'APPROVE_LOG', 'desc': '日報の承認'},
-        {'name': 'EDIT_PLAN', 'desc': '支援計画の作成・編集'},
+        {'name': 'EXPORT_PII', 'desc': '個人情報の出力'},
+        {'name': 'VIEW_AUDIT_LOG', 'desc': '監査ログの閲覧'},
     ]
     perm_objs = {}
     for p in permissions:
@@ -126,10 +129,13 @@ with app.app_context():
     db.session.commit()
 
     roles = [
-        {'name': '一般支援員', 'scope': 'STAFF', 'perms': ['VIEW_PII', 'EDIT_PLAN', 'APPROVE_LOG']},
+        {'name': '一般支援員', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'VIEW_PII']},
+        {'name': 'サービス管理責任者', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'VIEW_PII', 'EDIT_PII']},
         {'name': '事業所管理者', 'scope': 'JOB', 'perms': 'ALL'},
         {'name': '法人管理者', 'scope': 'CORPORATE', 'perms': 'ALL'},
         {'name': 'システム管理者', 'scope': 'SYSTEM', 'perms': 'ALL'},
+        {'name': '事務員', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']},
+        {'name': '監査担当', 'scope': 'SYSTEM', 'perms': ['VIEW', 'VIEW_AUDIT_LOG']},
     ]
     role_objs = []
     staff_role_obj = None

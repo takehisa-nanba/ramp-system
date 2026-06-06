@@ -5,7 +5,7 @@ from backend.app.models import User
 from backend.app.models.masters.master_definitions import StatusMaster
 from backend.app.services.core_service import check_permission, parse_jwt_identity
 from backend.app.models.core.audit_log import AuditActionLog
-from datetime import datetime
+from datetime import datetime, timezone
 import re
 from . import users_bp
 
@@ -35,7 +35,7 @@ def list_users():
     query = db.session.query(
         User,
         UserPII.encrypted_certificate_number.isnot(None).label('has_cert')
-    ).outerjoin(UserPII, User.id == UserPII.user_id)
+    ).outerjoin(UserPII, User.id == UserPII.user_id).filter(User.deleted_at.is_(None))
 
     status_ids_str = request.args.get('status_ids')
     if status_ids_str:
@@ -309,15 +309,24 @@ def delete_user(user_id):
         return jsonify({"msg": "Cannot delete user: This user already has Support Plans associated."}), 400
 
     try:
-        db.session.delete(user)
-        
+        data = request.get_json() or {}
+        delete_reason = data.get('reason', '利用者削除')
+
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+        
+        user.deleted_at = datetime.now(timezone.utc)
+        user.deleted_by_id = supporter_id_int
+        user.delete_reason = delete_reason
+        user.status_id = 5 # 例：利用終了（退所）など、適切なステータスにしてもよい
+        
         audit_log = AuditActionLog(
-            supporter_id=supporter_id_int,
-            action_type='DELETE_USER',
-            target_table='users',
-            target_id=user_id,
-            change_details=f"Deleted user {user.display_name} (Code: {user.user_code})"
+            actor_supporter_id=supporter_id_int,
+            action='DELETE_USER',
+            entity_type='users',
+            entity_id=user_id,
+            reason=delete_reason,
+            before_value=f"User {user.display_name} (Code: {user.user_code}) Active",
+            after_value="Soft Deleted"
         )
         db.session.add(audit_log)
         db.session.commit()

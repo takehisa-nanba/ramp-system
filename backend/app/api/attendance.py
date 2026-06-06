@@ -18,7 +18,7 @@ def get_current_supporter_id():
         return int(identity.split(':')[1])
     try:
         return int(identity)
-    except:
+    except (ValueError, TypeError):
         return None
 
 @attendance_bp.route('/status', methods=['GET'])

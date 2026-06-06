@@ -10,7 +10,9 @@ from .activities import activities_bp
 from .attendance import attendance_bp
 from .user_support import user_support_bp # ★追加
 from .staff_settings import staff_settings_bp
-from .management import management_bp
+from .management_staff import management_staff_bp
+from .management_office import management_office_bp
+from .management_masters import management_masters_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
@@ -21,7 +23,9 @@ ALL_BLUEPRINTS = [
     attendance_bp,
     user_support_bp,
     staff_settings_bp,
-    management_bp
+    management_staff_bp,
+    management_office_bp,
+    management_masters_bp
 ]
 
 

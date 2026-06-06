@@ -39,21 +39,31 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const baseItems: NavItem[] = [
     { name: 'ダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
-    { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} />, badge: 3 },
-    { name: 'タイムカード', path: '/timecard', icon: <Clock size={18} /> },
     { name: '利用者管理', path: '/users', icon: <Users size={18} /> },
+    { name: '個別支援計画', path: '/plans', icon: <FileText size={18} /> },
+    { name: '日報', path: '/daily-logs', icon: <Clock size={18} /> },
+    { name: 'モニタリング', path: '/monitoring', icon: <Search size={18} /> },
+    { name: 'ケース会議', path: '/case-conferences', icon: <MessageSquare size={18} /> },
+    // --- MVP外のため非表示 ---
+    // { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} />, badge: 3 },
+    // { name: 'タイムカード', path: '/timecard', icon: <Clock size={18} /> },
   ];
 
   const adminItems: NavItem[] = hasAdminRole ? [
-    { name: 'スタッフ管理', path: '/management/staff', icon: <ShieldCheck size={18} /> },
-    { name: '事業所設定', path: '/management/office', icon: <Building2 size={18} /> },
-    { name: '日報設定', path: '/settings/log', icon: <Settings size={18} /> },
-  ] : [];
+    { name: '管理確認事項', path: '/management/alerts', icon: <ShieldCheck size={18} /> },
+    // --- MVP外のため非表示 ---
+    // { name: 'スタッフ管理', path: '/management/staff', icon: <ShieldCheck size={18} /> },
+    // { name: '事業所設定', path: '/management/office', icon: <Building2 size={18} /> },
+    // { name: '日報設定', path: '/settings/log', icon: <Settings size={18} /> },
+  ] : [
+    { name: '確認が必要な項目', path: '/staff/alerts', icon: <Bell size={18} /> }
+  ];
 
   const navItems: NavItem[] = isStaff ? [...baseItems, ...adminItems] : [
     { name: 'マイダッシュボード', path: '/', icon: <LayoutDashboard size={18} /> },
-    { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} /> },
-    { name: 'カレンダー', path: '/calendar', icon: <Calendar size={18} /> },
+    // MVP外のため非表示
+    // { name: 'メッセージ', path: '/messages', icon: <MessageSquare size={18} /> },
+    // { name: 'カレンダー', path: '/calendar', icon: <Calendar size={18} /> },
     { name: '支援記録', path: '/records', icon: <FileText size={18} /> },
   ];
 

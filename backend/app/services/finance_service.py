@@ -105,74 +105,80 @@ class FinanceService:
         logger.info(f"✅ FTE Calculation Complete: {final_fte}")
         return final_fte
     
-    def _check_plan_guardrail(self, billing_data: BillingData) -> bool:
+    def _check_plan_guardrail(self, user_id: int, target_month: date) -> bool:
         """
-        監査の第一段: 請求が計画期間内であるか、及びPlan-Activity整合性を検証する。
+        支援実績整合性チェック第一段: 指定月に有効な個別支援計画が存在するかを検証する。
         """
         from backend.app.models import SupportPlan
-        # 請求月（月初）を取得
-        billing_date = billing_data.billing_month
         # 月末を計算
-        if billing_date.month == 12:
-            next_month = billing_date.replace(year=billing_date.year + 1, month=1)
+        if target_month.month == 12:
+            next_month = target_month.replace(year=target_month.year + 1, month=1)
         else:
-            next_month = billing_date.replace(month=billing_date.month + 1)
-        billing_end_date = next_month - timedelta(days=1)
+            next_month = target_month.replace(month=target_month.month + 1)
+        month_end_date = next_month - timedelta(days=1)
 
-        # その月に有効なプランがあるか
         active_plan = SupportPlan.query.filter(
-            SupportPlan.user_id == billing_data.user_id,
+            SupportPlan.user_id == user_id,
             SupportPlan.plan_status == 'ACTIVE',
-            SupportPlan.plan_start_date <= billing_end_date,
-            (SupportPlan.plan_end_date == None) | (SupportPlan.plan_end_date >= billing_date)
+            SupportPlan.plan_start_date <= month_end_date,
+            (SupportPlan.plan_end_date == None) | (SupportPlan.plan_end_date >= target_month)
         ).first()
 
         return active_plan is not None 
 
-    def _check_daily_validation(self, billing_data: BillingData) -> bool:
+    def _check_daily_validation(self, user_id: int, target_month: date) -> bool:
         """
-        監査の第二段: 請求根拠となるDailyLogの承認/検証ステータスをチェックする。
+        支援実績整合性チェック第二段: その月の支援記録(DailyLog)が存在するか。
         """
         from backend.app.models import DailyLog
-        billing_date = billing_data.billing_month
-        if billing_date.month == 12:
-            next_month = billing_date.replace(year=billing_date.year + 1, month=1)
+        if target_month.month == 12:
+            next_month = target_month.replace(year=target_month.year + 1, month=1)
         else:
-            next_month = billing_date.replace(month=billing_date.month + 1)
-        billing_end_date = next_month - timedelta(days=1)
+            next_month = target_month.replace(month=target_month.month + 1)
+        month_end_date = next_month - timedelta(days=1)
 
         logs_count = DailyLog.query.filter(
-            DailyLog.user_id == billing_data.user_id,
-            DailyLog.log_date >= billing_date,
-            DailyLog.log_date <= billing_end_date
+            DailyLog.user_id == user_id,
+            DailyLog.log_date >= target_month,
+            DailyLog.log_date <= month_end_date
         ).count()
 
         return logs_count > 0
     
-    def audit_billing_data(self, billing_id: int) -> bool:
+    def check_support_consistency(self, user_id: int, target_month: date) -> dict:
         """
-        三段監査の実行（テスト対象）。
+        支援実績整合性チェック（請求前監査ロジック）。
+        請求や監査で問題になり得る不整合を事前に検知する。
         """
-        billing = db.session.get(BillingData, billing_id)
-        if not billing:
-            return False
+        from backend.app.services.compliance_service import ComplianceService
+        from backend.app.models import User
+        
+        user = db.session.get(User, user_id)
+        if not user:
+            return {"passed": False, "errors": ["User not found"]}
+            
+        errors = []
 
-        # Plan Guardrail (第一段)
-        if not self._check_plan_guardrail(billing):
-            billing.is_audit_passed = False
-            billing.audit_notes = "Plan Guardrail failed."
-            return False
+        # 第一段: 計画未作成チェック
+        if not self._check_plan_guardrail(user_id, target_month):
+            errors.append("有効な個別支援計画が存在しません。")
+            # サビ管または担当者への未対応リスク（URAC）をトラック
+            if user.primary_supporter_id:
+                comp_service = ComplianceService()
+                comp_service.track_unresolved_risk(
+                    supporter_id=user.primary_supporter_id,
+                    risk_type='PLAN_UNCREATED',
+                    linked_entity_id=user.id
+                )
 
-        # Daily Validation (第二段)
-        if not self._check_daily_validation(billing):
-            billing.is_audit_passed = False
-            billing.audit_notes = "Daily Validation failed."
-            return False
+        # 第二段: 支援記録なしチェック
+        if not self._check_daily_validation(user_id, target_month):
+            errors.append("指定月の支援記録が1件もありません。")
 
-        # 第三段: Audit FlagをTrueに設定
-        billing.is_audit_passed = True
-        billing.audit_notes = "Audit passed successfully."
-        return True
+        return {
+            "passed": len(errors) == 0,
+            "errors": errors
+        }
 
     def _is_supporter_full_time_dedicated(self, supporter: Supporter) -> bool:
         """

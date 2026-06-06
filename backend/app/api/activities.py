@@ -19,7 +19,7 @@ def get_current_supporter_id():
         return int(identity.split(':')[1])
     try:
         return int(identity)
-    except:
+    except (ValueError, TypeError):
         return None
 
 @activities_bp.route('/tags', methods=['GET'])

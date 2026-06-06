@@ -136,7 +136,7 @@ from backend.app.models.compliance.safety_and_training import (
     SupporterFeedbackLog, StaffReflectionLog, StaffWellnessLog
 )
 from backend.app.models.compliance.audit_tracking import (
-    UnresponsiveRiskCounter # ★ NEW: 断罪の証拠化 (URAC)
+    UnresolvedRiskCounter # ★ NEW: リスクの可視化 (URAC)
 )
 
 # --- 7. employment パッケージ ---

@@ -5,7 +5,7 @@ from backend.app.models import (
     Supporter, CommitteeTypeMaster,
     OfficeSetting, DailyLog, SupporterJobAssignment, # ★ 日次チェック用モデル
     ComplianceEventLog, # ★ 減算監査ログ記録用
-    UnresponsiveRiskCounter # ★ 断罪の証拠化 (URAC) モデル
+    UnresolvedRiskCounter # ★ リスクの可視化 (URAC) モデル
 )
 from sqlalchemy import func, and_, extract
 from datetime import datetime, timezone, date, timedelta
@@ -185,31 +185,31 @@ class ComplianceService:
     
     
     # ====================================================================
-    # 5. 管理職の「無視」という状態を追跡 (URAC)
+    # 5. 管理職の未対応リスク状態を追跡 (URAC)
     # ====================================================================
     
-    def track_risk_ignoring_manager(self, supporter_id: int, risk_type: str, linked_entity_id: int):
+    def track_unresolved_risk(self, supporter_id: int, risk_type: str, linked_entity_id: int):
         """
-        【断罪の証拠化コア / 管理職責任ロック】
-        管理者が計画未作成などの重大なリスクを無視した回数を追跡し、累積回数を記録する。
-        URAC（未対応リスク累積カウンター）モデルを操作し、リスク累積状態を不可逆的に確定させる。
+        【未対応リスクの保護・可視化】
+        管理者が対応を保留しているリスク（計画未作成など）を追跡し、継続回数を記録する。
+        URAC（未対応リスクカウンター）モデルを操作し、現場の課題を可視化する。
         """
         try:
-            urac_record = UnresponsiveRiskCounter.query.filter_by(
+            urac_record = UnresolvedRiskCounter.query.filter_by(
                 supporter_id=supporter_id,
                 risk_type=risk_type
             ).first()
 
             if urac_record:
                 urac_record.cumulative_count += 1
-                urac_record.last_ignored_at = datetime.now(timezone.utc)
+                urac_record.last_unresolved_at = datetime.now(timezone.utc)
                 urac_record.linked_entity_id = linked_entity_id 
                 urac_record.linked_entity_type = "SupportPlan" # 固定値と仮定
                 
                 db.session.add(urac_record)
-                logger.critical(f"🔥 URAC INC: Supporter {supporter_id} ignored risk {risk_type}. Cumulative count: {urac_record.cumulative_count}")
+                logger.info(f"📊 URAC INC: Supporter {supporter_id} unresolved risk {risk_type}. Cumulative count: {urac_record.cumulative_count}")
             else:
-                new_urac = UnresponsiveRiskCounter(
+                new_urac = UnresolvedRiskCounter(
                     supporter_id=supporter_id,
                     risk_type=risk_type,
                     cumulative_count=1,
@@ -217,7 +217,7 @@ class ComplianceService:
                     linked_entity_type="SupportPlan"
                 )
                 db.session.add(new_urac)
-                logger.critical(f"🔥 URAC NEW: Supporter {supporter_id} started tracking for risk {risk_type}.")
+                logger.info(f"📊 URAC NEW: Supporter {supporter_id} started tracking for unresolved risk {risk_type}.")
 
             db.session.commit()
 
@@ -225,5 +225,5 @@ class ComplianceService:
             db.session.rollback()
             logger.error("❌ URAC Integrity Error occurred during tracking.")
         except Exception as e:
-            logger.exception(f"🔥 CRITICAL: Failed to track URAC for supporter {supporter_id}: {e}")
+            logger.exception(f"⚠️ ERROR: Failed to track URAC for supporter {supporter_id}: {e}")
             db.session.rollback()

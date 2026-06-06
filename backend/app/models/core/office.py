@@ -169,6 +169,10 @@ class OfficeAdditiveFiling(db.Model):
     effective_start_date = Column(Date)
     effective_end_date = Column(Date)
     
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    delete_reason = Column(String(255), nullable=True)
+    
     service_config = db.relationship('OfficeServiceConfiguration', back_populates='additive_filings')
     fee_master = db.relationship('GovernmentFeeMaster', back_populates='office_filings')
 

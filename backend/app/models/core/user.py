@@ -40,9 +40,13 @@ class User(db.Model):
     
     remarks = Column(Text) # 職員が使用する内部的な備考欄
 
-    # --- タイムスタンプ ---
+    # --- タイムスタンプ・論理削除 ---
     created_at = Column(DateTime, nullable=False, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    deleted_at = Column(DateTime, nullable=True)
+    deleted_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    delete_reason = Column(String(255), nullable=True)
     
     # --- リレーションシップ ---
     
