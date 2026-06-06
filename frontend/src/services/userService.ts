@@ -244,6 +244,7 @@ export interface ShortTermGoal {
 export interface LongTermGoal {
   id: number;
   description: string;
+  challenges?: string | null;
   target_period_start: string | null;
   target_period_end: string | null;
   short_term_goals: ShortTermGoal[];
@@ -265,6 +266,11 @@ export interface ActiveSupportPlan {
   based_on_plan_id: number | null;
   holistic_policy: HolisticPolicySummary | null;
   long_term_goals: LongTermGoal[];
+  draft_created_at?: string | null;
+  explained_at?: string | null;
+  consented_at?: string | null;
+  activated_at?: string | null;
+  timeline_deviation_reason?: string | null;
 }
 export interface SupportPlanSummary {
   id: number;
@@ -275,6 +281,18 @@ export interface SupportPlanSummary {
   created_at: string | null;
   based_on_plan_id: number | null;
   holistic_policy: HolisticPolicySummary | null;
+  draft_created_at?: string | null;
+  explained_at?: string | null;
+  consented_at?: string | null;
+  activated_at?: string | null;
+  timeline_deviation_reason?: string | null;
+  long_term_goals?: {
+    description: string;
+    challenges?: string | null;
+    short_term_goals: {
+      description: string;
+    }[];
+  }[];
 }
 export interface UserSupportPlansResponse {
   active_plan: ActiveSupportPlan | null;
@@ -355,6 +373,7 @@ export const createNextSupportPlanDraft = async (planId: number): Promise<CloneN
 export interface SaveGoalsData {
   long_term_goals: {
     description: string;
+    challenges: string;
     short_term_goals: {
       description: string;
       individual_goals: {
@@ -389,6 +408,7 @@ export interface DetailedSupportPlanResponse {
   long_term_goals: {
     id: number;
     description: string;
+    challenges?: string | null;
     short_term_goals: {
       id: number;
       description: string;
@@ -492,6 +512,15 @@ export interface CaseConferenceItem {
   external_collaboration_required: boolean;
   initiator_name: string;
   participants: string[];
+  support_plan_id?: number | null;
+  user_participated?: boolean;
+  reason_for_user_absence?: string | null;
+  is_sabikan_digital_declaration?: boolean;
+  absence_monitoring_summary?: string | null;
+  plan_goals?: {
+    description: string;
+    short_term_goals: string[];
+  }[];
 }
 export interface UserCaseConferencesResponse {
   items: CaseConferenceItem[];
@@ -502,9 +531,61 @@ export const fetchUserCaseConferences = async (userId: number): Promise<UserCase
   return response.data;
 };
 
+export interface CreateCaseConferenceData {
+  user_id: number;
+  conference_type: string;
+  concern_summary: string;
+  agreed_action: string;
+  participant_ids?: number[];
+  conference_datetime?: string;
+  support_plan_id?: number | null;
+  user_participated?: boolean;
+  reason_for_user_absence?: string;
+  is_sabikan_digital_declaration?: boolean;
+  absence_monitoring_summary?: string;
+}
+
+export const createCaseConference = async (data: CreateCaseConferenceData): Promise<{ msg: string, id: number }> => {
+  const response = await apiClient.post<{ msg: string, id: number }>('/case-conferences', data);
+  return response.data;
+};
+
+export interface SupporterOption {
+  id: number;
+  name: string;
+}
+
+export const fetchActiveSupporters = async (): Promise<SupporterOption[]> => {
+  const response = await apiClient.get<SupporterOption[]>('/case-conferences/supporters');
+  return response.data;
+};
+
+export interface CreateMonitoringData {
+  support_plan_id: number;
+  report_date: string;
+  monitoring_summary: string;
+  target_goal_progress_notes?: string;
+  contextual_analysis?: string;
+}
+
+export const createMonitoringReport = async (data: CreateMonitoringData): Promise<{ msg: string, id: number }> => {
+  const response = await apiClient.post<{ msg: string, id: number }>('/monitoring-reports', data);
+  return response.data;
+};
+
+export const approveSupportPlan = async (planId: number): Promise<{ msg: string, plan_id: number }> => {
+  const response = await apiClient.post<{ msg: string, plan_id: number }>(`/plans/${planId}/approve`);
+  return response.data;
+};
+
+export const updateTimelineDeviationReason = async (planId: number, reason: string): Promise<{ msg: string }> => {
+  const response = await apiClient.put<{ msg: string }>(`/plans/${planId}/deviation-reason`, { timeline_deviation_reason: reason });
+  return response.data;
+};
+
 // --- 管理確認事項 (Action Items) ---
 export interface ActionItem {
-  type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference';
+  type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference' | 'support_plan_timeline';
   category_label: string;
   severity: 'high' | 'medium' | 'low';
   user_id: number;

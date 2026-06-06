@@ -29,6 +29,13 @@ class SupportPlan(db.Model):
     plan_start_date = Column(Date, nullable=True) # 原案段階ではNULL許容, 成案化時に確定
     plan_end_date = Column(Date, nullable=True) # 法定期間に基づき設定
     
+    # --- 日付整合性監査用（原理1） ---
+    draft_created_at = Column(Date, nullable=True) # 明示的な原案作成日
+    explained_at = Column(Date, nullable=True) # 説明実施日
+    consented_at = Column(Date, nullable=True) # 同意受領日
+    activated_at = Column(Date, nullable=True) # 有効化（ACTIVE）日
+    timeline_deviation_reason = Column(Text, nullable=True) # 遡及作成の遅延理由記録
+    
     # --- 監査証跡（原理1） ---
     # サビ管の最終承認（必須）
     sabikan_approved_by_id = Column(Integer, ForeignKey('supporters.id'))
@@ -84,6 +91,7 @@ class LongTermGoal(db.Model):
     plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=False, index=True)
     
     description = Column(Text, nullable=False)
+    challenges = Column(Text, nullable=True) # 解決すべき課題・相談内容
     target_period_start = Column(Date)
     target_period_end = Column(Date)
     

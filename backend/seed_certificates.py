@@ -1,3 +1,9 @@
+import sys
+import os
+
+# プロジェクトのルートディレクトリをパスに追加
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from backend.app import create_app, db
 from backend.app.models import User, OfficeServiceConfiguration
 from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService

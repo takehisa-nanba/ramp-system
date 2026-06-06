@@ -76,21 +76,50 @@ const UserOverview: React.FC<{ userId: number }> = ({ userId }) => {
       {/* サービス利用状況カード */}
       <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
         <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
-          <Activity className="text-emerald-600 w-5 h-5" /> サービス利用状況
+          <Activity className="text-emerald-600 w-5 h-5" /> サービス利用・支給決定状況
         </h2>
         <div className="space-y-4">
-          <div>
-            <div className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> 利用開始日</div>
-            <div className="text-sm font-bold text-slate-700">{user.service_start_date ? new Date(user.service_start_date).toLocaleDateString() : '未設定'}</div>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs font-bold text-slate-400 mb-1 flex items-center gap-1"><Calendar className="w-3 h-3" /> 利用開始日</div>
+              <div className="text-sm font-bold text-slate-700">{user.service_start_date ? new Date(user.service_start_date).toLocaleDateString() : '未設定'}</div>
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-400 mb-1">利用サービス</div>
+              <div className="text-sm font-bold text-slate-700">
+                {user.certificates && user.certificates.length > 0
+                  ? user.certificates[0].certificate_type || '受給者証あり (サービス種別未設定)'
+                  : '未登録'}
+              </div>
+            </div>
           </div>
-          <div>
+          {user.certificates && user.certificates.length > 0 && user.certificates[0].granted_services && user.certificates[0].granted_services.length > 0 && (
+            <div className="grid grid-cols-2 gap-4 pt-2 border-t border-slate-100">
+              <div>
+                <div className="text-xs font-bold text-slate-400 mb-1">支給決定期間</div>
+                <div className="text-sm font-bold text-slate-700">
+                  {user.certificates[0].granted_services[0].granted_start_date ? new Date(user.certificates[0].granted_services[0].granted_start_date).toLocaleDateString() : '—'} 〜 {user.certificates[0].granted_services[0].granted_end_date ? new Date(user.certificates[0].granted_services[0].granted_end_date).toLocaleDateString() : '—'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs font-bold text-slate-400 mb-1">モニタリング周期</div>
+                <div className="text-sm font-bold text-slate-700">
+                  {/* TODO: replace hardcoded interval with ServiceType.monitoring_interval_months */}
+                  {user.certificates[0].certificate_type && (user.certificates[0].certificate_type.includes('移行') || user.certificates[0].certificate_type.includes('自立'))
+                    ? '3ヶ月'
+                    : '6ヶ月'}
+                </div>
+              </div>
+            </div>
+          )}
+          <div className="pt-2 border-t border-slate-100">
             <div className="text-xs font-bold text-slate-400 mb-1">現在の個別支援計画</div>
             {user.support_plan ? (
-              <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 p-3 rounded-xl text-sm font-bold">
-                <CheckCircle className="w-4 h-4" /> 有効 ({user.support_plan.start_date ? new Date(user.support_plan.start_date).toLocaleDateString() : ''} 〜)
+              <div className="flex items-center gap-2 bg-emerald-50 text-emerald-700 p-3 rounded-xl text-sm font-bold mt-1">
+                <CheckCircle className="w-4 h-4 animate-pulse" /> 有効 ({user.support_plan.start_date ? new Date(user.support_plan.start_date).toLocaleDateString() : ''} 〜)
               </div>
             ) : (
-              <div className="flex items-center gap-2 bg-amber-50 text-amber-700 p-3 rounded-xl text-sm font-bold">
+              <div className="flex items-center gap-2 bg-amber-50 text-amber-700 p-3 rounded-xl text-sm font-bold mt-1">
                 <AlertCircle className="w-4 h-4" /> 計画未作成・または無効
               </div>
             )}

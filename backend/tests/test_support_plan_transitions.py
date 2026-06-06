@@ -439,7 +439,7 @@ def test_update_plan_details_and_retrieval(client, app):
         draft_plan = service.create_plan_draft(user_id, sabikan_id, policy_id)
         db.session.commit()
         plan_id = draft_plan.id
-
+ 
     # 1. 計画の基本情報（日付・方針）更新
     update_data = {
         "plan_start_date": "2026-08-01",
@@ -458,3 +458,189 @@ def test_update_plan_details_and_retrieval(client, app):
     assert details["end_date"] == "2026-10-31"
     assert details["holistic_policy"]["user_intention_content"] == "新意向"
     assert details["holistic_policy"]["support_policy_content"] == "新方針"
+
+
+def test_challenges_validation_and_cloning(client, app):
+    """
+    テスト内容: 長期目標に紐づく「課題・相談内容（challenges）」の保存、
+    承認（成案化）時における空文字バリデーションガードレールの検証、
+    および次期計画クローン（複製）時の引き継ぎ検証。
+    """
+    from flask_jwt_extended import create_access_token
+    from backend.tests.test_support_plan_service import setup_masters_and_user
+    from backend.app.models import SupportPlan, CaseConferenceLog
+    from datetime import datetime
+    
+    with app.app_context():
+        user, sabikan, policy = setup_masters_and_user(db.session, display_name="TestChallengesUser", staff_code="S3857")
+        user_id = user.id
+        sabikan_id = sabikan.id
+        policy_id = policy.id
+        
+        # サビ管職種のアサインメントを登録 (依存マスタ・設定の解決)
+        from backend.app.models import SupporterJobAssignment, JobTitleMaster, ServiceTypeMaster
+        from backend.app.models import Corporation, OfficeSetting, OfficeServiceConfiguration, MunicipalityMaster
+        from datetime import date
+        
+        sabi_title = db.session.query(JobTitleMaster).filter_by(title_name='サービス管理責任者').first()
+        if not sabi_title:
+            sabi_title = JobTitleMaster(title_name='サービス管理責任者', is_qualified_role=True)
+            db.session.add(sabi_title)
+            db.session.flush()
+        sabi_title_id = sabi_title.id
+        
+        st_master = db.session.query(ServiceTypeMaster).filter_by(service_code='TRAINING').first()
+        if not st_master:
+            st_master = ServiceTypeMaster(service_code='TRAINING', name='自立訓練')
+            db.session.add(st_master)
+            db.session.flush()
+        st_master_id = st_master.id
+        
+        corp = db.session.query(Corporation).first()
+        if not corp:
+            corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
+            db.session.add(corp)
+            db.session.flush()
+        
+        muni = db.session.query(MunicipalityMaster).first()
+        if not muni:
+            muni = MunicipalityMaster(municipality_code="999999", name="Test City")
+            db.session.add(muni)
+            db.session.flush()
+            
+        office = db.session.query(OfficeSetting).first()
+        if not office:
+            office = OfficeSetting(
+                corporation_id=corp.id,
+                office_name="Test Office",
+                municipality_id=muni.id,
+                full_time_weekly_minutes=2400
+            )
+            db.session.add(office)
+            db.session.flush()
+
+        service_config = db.session.query(OfficeServiceConfiguration).first()
+        if not service_config:
+            service_config = OfficeServiceConfiguration(
+                office_id=office.id,
+                service_type_master_id=st_master_id,
+                jigyosho_bango='1234567890',
+                capacity=20
+            )
+            db.session.add(service_config)
+            db.session.flush()
+        service_config_id = service_config.id
+
+        assignment = SupporterJobAssignment(
+            supporter_id=sabikan_id,
+            job_title_id=sabi_title_id,
+            office_service_configuration_id=service_config_id,
+            start_date=date(2025, 1, 1),
+            assigned_minutes=480
+        )
+        db.session.add(assignment)
+        db.session.commit()
+        
+        token = create_access_token(identity=f"staff:{sabikan_id}", additional_claims={"role_type": "staff"})
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        
+        # DRAFT計画を作成
+        service = SupportPlanService()
+        draft_plan = service.create_plan_draft(user_id, sabikan_id, policy_id)
+        db.session.commit()
+        plan_id = draft_plan.id
+
+    # 1. 課題（challenges）が空文字の目標ツリーを登録
+    goals_with_empty_challenges = {
+        "long_term_goals": [{
+            "description": "長期目標の検証",
+            "challenges": "", # 空欄
+            "short_term_goals": [{
+                "description": "短期目標の検証",
+                "individual_goals": [{
+                    "concrete_goal": "具体的目標の検証",
+                    "user_commitment": "本人の取組の検証",
+                    "support_actions": "支援内容の検証",
+                    "service_type": "TRAINING"
+                }]
+            }]
+        }]
+    }
+    response = client.put(f"/api/plans/{plan_id}/goals", json=goals_with_empty_challenges, headers=headers)
+    assert response.status_code == 200
+
+    # 本人同席会議を登録
+    conf_data = {
+        "user_id": user_id,
+        "conference_type": "PERSON_CENTERED_MEETING",
+        "concern_summary": "検証用議題",
+        "agreed_action": "検証用決定事項",
+        "participant_ids": [sabikan_id],
+        "conference_datetime": datetime.now().isoformat(),
+        "support_plan_id": plan_id,
+        "user_participated": True
+    }
+    response = client.post("/api/case-conferences", json=conf_data, headers=headers)
+    assert response.status_code == 201
+
+    # 2. 承認を試みる（課題が空なのでバリデーションでブロックされるはず）
+    response = client.post(f"/api/plans/{plan_id}/approve", headers=headers)
+    assert response.status_code == 400
+    assert "課題が未入力の目標があります" in response.get_json()["msg"]
+
+    # 3. 課題（challenges）を正しく入力して目標ツリーを更新
+    goals_with_challenges = {
+        "long_term_goals": [{
+            "description": "長期目標の検証",
+            "challenges": "検証用の課題・相談内容", # 入力あり
+            "short_term_goals": [{
+                "description": "短期目標の検証",
+                "individual_goals": [{
+                    "concrete_goal": "具体的目標の検証",
+                    "user_commitment": "本人の取組の検証",
+                    "support_actions": "支援内容の検証",
+                    "service_type": "TRAINING"
+                }]
+            }]
+        }]
+    }
+    response = client.put(f"/api/plans/{plan_id}/goals", json=goals_with_challenges, headers=headers)
+    assert response.status_code == 200
+
+    # 4. 再度承認（今度は成功するはず）
+    response = client.post(f"/api/plans/{plan_id}/approve", headers=headers)
+    assert response.status_code == 200
+
+    with app.app_context():
+        plan = db.session.get(SupportPlan, plan_id)
+        assert plan.plan_status == "PENDING_CONSENT"
+        assert plan.long_term_goals[0].challenges == "検証用の課題・相談内容"
+
+    # 同意および有効化して ACTIVE にする
+    consent_data = {
+        "consent_proof": "署名画像ダミー",
+        "user_id": user_id
+    }
+    response = client.post(f"/api/plans/{plan_id}/consent", json=consent_data, headers=headers)
+    assert response.status_code == 201
+    consent_log_id = response.get_json()["consent_log_id"]
+
+    activate_data = {
+        "consent_log_id": consent_log_id
+    }
+    response = client.post(f"/api/plans/{plan_id}/activate", json=activate_data, headers=headers)
+    assert response.status_code == 200
+
+    # 5. 次期計画のクローンを作成し、課題が複製されているか確認
+    response = client.post(f"/api/plans/{plan_id}/create-next-draft", headers=headers)
+    assert response.status_code == 201
+    next_plan_id = response.get_json()["plan_id"]
+
+    with app.app_context():
+        next_plan = db.session.get(SupportPlan, next_plan_id)
+        assert next_plan.plan_status == "DRAFT"
+        assert len(next_plan.long_term_goals) == 1
+        assert next_plan.long_term_goals[0].challenges == "検証用の課題・相談内容"
+        assert next_plan.long_term_goals[0].description == "長期目標の検証"

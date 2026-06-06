@@ -11,6 +11,17 @@ from . import users_bp
 
 def _serialize_plan_summary(plan: SupportPlan) -> dict:
     """計画の概要を返す（履歴表示用）"""
+    long_term_goals = []
+    for ltg in plan.long_term_goals:
+        long_term_goals.append({
+            "id": ltg.id,
+            "description": ltg.description,
+            "challenges": ltg.challenges,
+            "short_term_goals": [{
+                "description": stg.description
+            } for stg in ltg.short_term_goals]
+        })
+
     return {
         "id": plan.id,
         "plan_version": plan.plan_version,
@@ -23,7 +34,8 @@ def _serialize_plan_summary(plan: SupportPlan) -> dict:
             "id": plan.holistic_policy.id,
             "user_intention_content": plan.holistic_policy.user_intention_content,
             "support_policy_content": plan.holistic_policy.support_policy_content
-        } if plan.holistic_policy else None
+        } if plan.holistic_policy else None,
+        "long_term_goals": long_term_goals
     }
 
 
@@ -53,6 +65,7 @@ def _serialize_active_plan(plan: SupportPlan) -> dict:
         long_term_goals.append({
             "id": ltg.id,
             "description": ltg.description,
+            "challenges": ltg.challenges,
             "target_period_start": ltg.target_period_start.isoformat() if ltg.target_period_start else None,
             "target_period_end": ltg.target_period_end.isoformat() if ltg.target_period_end else None,
             "short_term_goals": short_term_goals,

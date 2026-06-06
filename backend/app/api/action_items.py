@@ -191,4 +191,36 @@ def get_action_items():
             "description": f"{conf.conference_datetime.strftime('%H:%M')}よりケース会議が開催されます。内容を確認してください。"
         })
         
+    # 6. 個別支援計画の日付整合性警告（遡及警告）
+    invalid_timeline_plans = SupportPlan.query.filter(
+        SupportPlan.plan_status.in_(['DRAFT', 'PENDING_CONSENT', 'ACTIVE'])
+    ).all()
+    for plan in invalid_timeline_plans:
+        user_name = plan.user.display_name if plan.user else "不明"
+        
+        # 理由がまだ書かれていない場合のみ警告
+        if not plan.timeline_deviation_reason or not plan.timeline_deviation_reason.strip():
+            is_deviation = False
+            reasons = []
+            
+            if plan.draft_created_at and plan.plan_start_date and plan.draft_created_at > plan.plan_start_date:
+                is_deviation = True
+                reasons.append("計画開始日より後に原案が作成されています。")
+            
+            if plan.consented_at and plan.plan_start_date and plan.consented_at > plan.plan_start_date:
+                is_deviation = True
+                reasons.append("計画開始日より後に同意が受領されています。")
+                
+            if is_deviation:
+                items.append({
+                    "type": "support_plan_timeline",
+                    "category_label": "日付整合性",
+                    "severity": "high",
+                    "user_id": plan.user_id,
+                    "user_name": user_name,
+                    "title": f"【日付警告】{user_name}さんの個別支援計画の日付整合性に確認が必要です",
+                    "description": " ".join(reasons) + "遅延または遡及対応の理由を記録してください。",
+                    "target_date": plan.plan_start_date.strftime('%Y-%m-%d') if plan.plan_start_date else None
+                })
+                
     return jsonify({"items": items}), 200

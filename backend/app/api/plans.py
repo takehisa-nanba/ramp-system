@@ -76,6 +76,9 @@ def create_plan():
             based_on_policy_id=policy.id
         )
         
+        # 明示的な原案作成日を設定
+        new_plan.draft_created_at = date.today()
+        
         # 期間パラメータがあれば上書き
         if plan_start_date:
             new_plan.plan_start_date = datetime.strptime(plan_start_date, "%Y-%m-%d").date()
@@ -168,6 +171,12 @@ def record_consent(plan_id):
 
     try:
         from backend.app.models import DocumentConsentLog
+        from datetime import date
+        
+        # 説明同意日を設定
+        plan.consented_at = date.today()
+        plan.explained_at = date.today() # 同意日と同日に設定
+        
         consent_log = DocumentConsentLog(
             user_id=user_id,
             document_type='SUPPORT_PLAN',
@@ -220,10 +229,12 @@ def activate_plan(plan_id):
         return jsonify({"msg": "Missing consent_log_id"}), 400
         
     try:
+        from datetime import date
         final_plan = support_plan_service.finalize_and_activate_plan(
             plan_id=plan_id,
             consent_log_id=consent_log_id
         )
+        final_plan.activated_at = date.today()
         db.session.commit()
         
         return jsonify({
@@ -270,6 +281,7 @@ def record_goals(plan_id):
             new_ltg = LongTermGoal(
                 plan_id=plan_id,
                 description=ltg_item.get('description', ''),
+                challenges=ltg_item.get('challenges'),
                 target_period_start=plan.plan_start_date,
                 target_period_end=plan.plan_end_date
             )
@@ -349,6 +361,7 @@ def create_next_draft(plan_id):
             new_ltg = LongTermGoal(
                 plan_id=new_plan.id,
                 description=old_ltg.description,
+                challenges=old_ltg.challenges,
                 target_period_start=start_date,
                 target_period_end=end_date
             )
@@ -465,3 +478,106 @@ def update_plan(plan_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Failed to update plan: {e}"}), 500
+
+
+@plans_bp.route('/<int:plan_id>/approve', methods=['POST'])
+@jwt_required()
+def approve_plan(plan_id):
+    """
+    本人同席の会議（PERSON_CENTERED_MEETING）が実施されていることを確認した上で、
+    計画原案を承認し、説明・同意待ち（PENDING_CONSENT）ステータスへ移行する。
+    """
+    _, supporter_id = parse_jwt_identity(get_jwt_identity())
+    
+    # 承認者はサビ管である必要があり、supporter_id がサビ管であることを検証する
+    from backend.app.models import Supporter
+    supporter = db.session.get(Supporter, supporter_id)
+    if not supporter:
+        return jsonify({"msg": "Supporter not found"}), 404
+        
+    is_sabi_kan = False
+    for assignment in supporter.job_assignments:
+        if assignment.job_title and (assignment.job_title.title_name == 'サービス管理責任者' or assignment.job_title.is_qualified_role):
+            is_sabi_kan = True
+            break
+            
+    if not is_sabi_kan:
+        return jsonify({"msg": "Permission denied: サービス管理責任者 (Service Manager) role is required to approve a plan."}), 403
+
+    plan = db.session.get(SupportPlan, plan_id)
+    if not plan:
+        return jsonify({"msg": "SupportPlan not found"}), 404
+        
+    if plan.plan_status != 'DRAFT':
+        return jsonify({"msg": "Only DRAFT plans can be approved"}), 400
+
+    try:
+        from backend.app.models import CaseConferenceLog
+        
+        # すべての長期目標で「課題・相談内容」が入力されているか検証（承認時ガードレール）
+        if not plan.long_term_goals:
+            return jsonify({"msg": "長期目標が設定されていません。計画の承認には目標の設定が必須です。"}), 400
+
+        for ltg in plan.long_term_goals:
+            if not ltg.challenges or not ltg.challenges.strip():
+                return jsonify({"msg": "すべての長期目標において「課題・相談内容」の入力が必要です。課題が未入力の目標があります。"}), 400
+
+        # 計画に紐づく本人同席の会議（PERSON_CENTERED_MEETING）が実施されていることを確認
+        meeting = CaseConferenceLog.query.filter_by(
+            support_plan_id=plan_id,
+            conference_type='PERSON_CENTERED_MEETING',
+            user_participated=True
+        ).first()
+        
+        if not meeting:
+            return jsonify({"msg": "本人同席会議（PERSON_CENTERED_MEETING）が実施されていません。計画の承認には本人同席の会議が必須条件です。"}), 400
+
+        # 会議記録から決定事項や日時を引き継ぐ
+        conference_log = support_plan_service.log_support_conference_and_approve(
+            plan_id=plan_id,
+            sabikan_id=supporter_id,
+            conference_date=meeting.conference_datetime,
+            content=meeting.concern_summary + "\n\n決定事項:\n" + meeting.agreed_action,
+            user_participated=True
+        )
+        db.session.commit()
+        
+        return jsonify({
+            "msg": "Plan approved successfully",
+            "plan_id": plan_id,
+            "conference_log_id": conference_log.id
+        }), 200
+
+    except ValidationError as e:
+        db.session.rollback()
+        return jsonify({"msg": str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        import logging
+        logging.getLogger(__name__).exception(e)
+        return jsonify({"msg": f"Failed to approve plan: {e}"}), 500
+
+
+@plans_bp.route('/<int:plan_id>/deviation-reason', methods=['PUT'])
+@jwt_required()
+def update_deviation_reason(plan_id):
+    """
+    計画のタイムライン逸脱（遡及作成など）に対する理由を登録・更新する。
+    """
+    plan = db.session.get(SupportPlan, plan_id)
+    if not plan:
+        return jsonify({"msg": "SupportPlan not found"}), 404
+
+    data = request.get_json()
+    reason = data.get('timeline_deviation_reason')
+    
+    if not reason or len(reason.strip()) < 10:
+        return jsonify({"msg": "逸脱理由は10文字以上で入力してください。"}), 400
+
+    try:
+        plan.timeline_deviation_reason = reason.strip()
+        db.session.commit()
+        return jsonify({"msg": "Timeline deviation reason updated successfully"}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Failed to update deviation reason: {e}"}), 500

@@ -59,6 +59,15 @@ class CaseConferenceLog(db.Model):
     issue_category_id = Column(Integer, ForeignKey('issue_category_master.id'))
 
     # ----------------------------------------------------------------------
+    # 3.5. 支援計画サイクル連携 (本人同席・遅延監査)
+    # ----------------------------------------------------------------------
+    support_plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True, index=True)
+    user_participated = Column(Boolean, default=True, nullable=False) # 本人参加フラグ
+    reason_for_user_absence = Column(Text, nullable=True) # 本人不在のやむを得ない理由
+    is_sabikan_digital_declaration = Column(Boolean, default=False, nullable=False) # サビ管デジタル宣誓
+    absence_monitoring_summary = Column(Text, nullable=True) # 不在時の状況モニタリング概要
+
+    # ----------------------------------------------------------------------
     # 4. メタデータ
     # ----------------------------------------------------------------------
     created_at = Column(DateTime, default=func.now())
@@ -67,6 +76,7 @@ class CaseConferenceLog(db.Model):
     initiator = db.relationship('Supporter', foreign_keys=[initiator_supporter_id])
     user = db.relationship('User', back_populates='case_conferences')
     issue_category = db.relationship('IssueCategoryMaster')
+    support_plan = db.relationship('SupportPlan', backref=db.backref('case_conference_logs', lazy='dynamic'))
 
     # 論理削除用フィールド
     deleted_at = Column(DateTime, nullable=True)

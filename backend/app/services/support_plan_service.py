@@ -76,7 +76,7 @@ class SupportPlanService:
             logger.critical(f"🔥 CRITICAL: Service start date missing for User {user_id}. Using today.")
             plan_start_date = datetime.now(timezone.utc).date()
 
-        # 3. 法定見直し期間と終了日の設定
+        # TODO: replace hardcoded interval with ServiceType.monitoring_interval_months
         review_months = 3 # 仮定
         plan_end_date = plan_start_date + timedelta(days=30 * review_months)
 
