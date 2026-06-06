@@ -63,6 +63,21 @@ const ActionItemsPage: React.FC = () => {
     }
   };
 
+  const getActionItemTargetPath = (item: ActionItem) => {
+    switch (item.type) {
+      case 'daily_log':
+        return `/users/${item.user_id}/daily-logs`;
+      case 'monitoring':
+        return `/users/${item.user_id}/monitoring-reports`;
+      case 'approval':
+        return `/users/${item.user_id}/support-plans`;
+      case 'case_conference':
+        return `/users/${item.user_id}/case-conferences`;
+      default:
+        return `/users/${item.user_id}/action-items`;
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 animate-in fade-in duration-500 max-w-5xl mx-auto">
       <div className="mb-8">
@@ -107,7 +122,7 @@ const ActionItemsPage: React.FC = () => {
             return (
               <div 
                 key={`${item.user_id}-${item.type}-${index}`}
-                onClick={() => navigate(`/users/${item.user_id}`)}
+                onClick={() => navigate(getActionItemTargetPath(item))}
                 className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer flex items-start gap-4 group"
               >
                 <div className={`p-3 rounded-xl ${style.badgeColor}`}>

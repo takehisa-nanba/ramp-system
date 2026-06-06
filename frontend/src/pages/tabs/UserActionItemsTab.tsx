@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { AlertCircle, AlertTriangle, Clock } from 'lucide-react';
 import { fetchActionItems, type ActionItem } from '../../services/userService';
 
 export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => {
+  const navigate = useNavigate();
   const [items, setItems] = useState<ActionItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,6 +28,21 @@ export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => 
   const userFilteredItems = useMemo(() => {
     return items.filter(item => item.user_id === userId);
   }, [items, userId]);
+
+  const getActionItemTargetPath = (item: ActionItem) => {
+    switch (item.type) {
+      case 'daily_log':
+        return `/users/${item.user_id}/daily-logs`;
+      case 'monitoring':
+        return `/users/${item.user_id}/monitoring-reports`;
+      case 'approval':
+        return `/users/${item.user_id}/support-plans`;
+      case 'case_conference':
+        return `/users/${item.user_id}/case-conferences`;
+      default:
+        return `/users/${item.user_id}/action-items`;
+    }
+  };
 
   // severity に応じたスタイルのマッピング
   const getSeverityStyle = (severity: 'high' | 'medium' | 'low') => {
@@ -80,18 +97,25 @@ export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => 
           userFilteredItems.map((item, index) => {
             const style = getSeverityStyle(item.severity);
             return (
-              <div key={`${item.type}-${index}`} className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm flex items-start gap-4">
+              <div 
+                key={`${item.type}-${index}`} 
+                onClick={() => navigate(getActionItemTargetPath(item))}
+                className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm hover:shadow-md transition-all cursor-pointer flex items-start gap-4 group"
+              >
                 <div className={`p-3 rounded-xl ${style.badgeColor}`}>
                   {style.icon}
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
-                    <h3 className="text-lg font-bold text-slate-800">{item.title}</h3>
+                    <h3 className="text-lg font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{item.title}</h3>
                     <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                       {item.category_label}
                     </span>
                   </div>
                   <p className="text-slate-600 text-sm font-medium">{item.description}</p>
+                </div>
+                <div className="text-indigo-600 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-100 transition-colors shrink-0">
+                  対応する
                 </div>
               </div>
             );
