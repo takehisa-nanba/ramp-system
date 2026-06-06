@@ -128,8 +128,8 @@ const UserDetailPage: React.FC = () => {
           <Route index element={<UserOverview userId={Number(id)} />} />
           <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
           <Route path="daily-logs" element={<UserDailyLogsTab userId={Number(id)} />} />
-          <Route path="monitoring-reports" element={<UserMonitoringTab />} />
-          <Route path="case-conferences" element={<UserCaseConferenceTab />} />
+          <Route path="monitoring-reports" element={<UserMonitoringTab userId={Number(id)} />} />
+          <Route path="case-conferences" element={<UserCaseConferenceTab userId={Number(id)} />} />
           <Route path="action-items" element={<UserActionItemsTab />} />
           <Route path="history" element={<UserHistoryTab />} />
         </Routes>

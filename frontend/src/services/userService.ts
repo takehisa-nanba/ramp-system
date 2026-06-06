@@ -220,3 +220,132 @@ export const updateServiceCertificate = async (userId: number, certId: number, d
   const response = await apiClient.put<{ msg: string, id: number }>(`/users/${userId}/certificates/${certId}`, data);
   return response.data;
 };
+
+// ============================================================
+// UserDetailPage タブ用 API
+// ============================================================
+
+// --- 個別支援計画 ---
+export interface IndividualGoal {
+  id: number;
+  concrete_goal: string;
+  user_commitment: string;
+  support_actions: string;
+  service_type: string;
+}
+export interface ShortTermGoal {
+  id: number;
+  description: string;
+  target_period_start: string | null;
+  target_period_end: string | null;
+  next_review_date: string | null;
+  individual_goals: IndividualGoal[];
+}
+export interface LongTermGoal {
+  id: number;
+  description: string;
+  target_period_start: string | null;
+  target_period_end: string | null;
+  short_term_goals: ShortTermGoal[];
+}
+export interface ActiveSupportPlan {
+  id: number;
+  plan_version: number;
+  plan_status: string;
+  start_date: string | null;
+  end_date: string | null;
+  next_monitoring_due: string | null;
+  created_at: string | null;
+  long_term_goals: LongTermGoal[];
+}
+export interface SupportPlanSummary {
+  id: number;
+  plan_version: number;
+  plan_status: string;
+  start_date: string | null;
+  end_date: string | null;
+  created_at: string | null;
+}
+export interface UserSupportPlansResponse {
+  active_plan: ActiveSupportPlan | null;
+  plan_history: SupportPlanSummary[];
+}
+
+export const fetchUserSupportPlans = async (userId: number): Promise<UserSupportPlansResponse> => {
+  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`);
+  return response.data;
+};
+
+// --- 日報 ---
+export interface DailyLogActivity {
+  id: number;
+  support_content: string;
+  start_time: string | null;
+  end_time: string | null;
+  supporter_name: string;
+}
+export interface DailyLogItem {
+  id: number;
+  log_date: string;
+  log_status: string;
+  support_content_notes: string;
+  location_type: string;
+  activities: DailyLogActivity[];
+}
+export interface UserDailyLogsResponse {
+  items: DailyLogItem[];
+}
+
+export const fetchUserDailyLogs = async (userId: number, limit = 20, offset = 0): Promise<UserDailyLogsResponse> => {
+  const response = await apiClient.get<UserDailyLogsResponse>(`/users/${userId}/daily-logs`, {
+    params: { limit, offset },
+  });
+  return response.data;
+};
+
+// --- モニタリング ---
+export interface MonitoringHistoryItem {
+  id: number;
+  report_date: string;
+  monitoring_summary: string;
+  target_goal_progress_notes: string | null;
+  support_plan_id: number;
+  supporter_name: string;
+}
+export interface UserMonitoringResponse {
+  next_monitoring_due: string | null;
+  active_plan_summary: {
+    id: number;
+    plan_version: number;
+    start_date: string | null;
+    end_date: string | null;
+    primary_goal: string | null;
+  } | null;
+  history: MonitoringHistoryItem[];
+}
+
+export const fetchUserMonitoringReports = async (userId: number): Promise<UserMonitoringResponse> => {
+  const response = await apiClient.get<UserMonitoringResponse>(`/users/${userId}/monitoring-reports`);
+  return response.data;
+};
+
+// --- ケース会議 ---
+export interface CaseConferenceItem {
+  id: number;
+  conference_datetime: string | null;
+  conference_type: string;
+  concern_summary: string;
+  agreed_action: string;
+  plan_direction_update: string | null;
+  external_collaboration_required: boolean;
+  initiator_name: string;
+  participants: string[];
+}
+export interface UserCaseConferencesResponse {
+  items: CaseConferenceItem[];
+}
+
+export const fetchUserCaseConferences = async (userId: number): Promise<UserCaseConferencesResponse> => {
+  const response = await apiClient.get<UserCaseConferencesResponse>(`/users/${userId}/case-conferences`);
+  return response.data;
+};

@@ -1,7 +1,30 @@
-import React from 'react';
-import { MessageSquare, Plus, Users, Calendar } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { MessageSquare, Plus, Users, Calendar, AlertCircle } from 'lucide-react';
+import { fetchUserCaseConferences, type CaseConferenceItem } from '../../services/userService';
 
-export const UserCaseConferenceTab: React.FC = () => {
+const conferenceTypeLabel: Record<string, string> = {
+  AD_HOC: '随時',
+  REGULAR: '定例',
+  EMERGENCY: '緊急',
+};
+
+export const UserCaseConferenceTab: React.FC<{ userId: number }> = ({ userId }) => {
+  const [items, setItems] = useState<CaseConferenceItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    fetchUserCaseConferences(userId)
+      .then(res => setItems(res.items))
+      .catch(() => setError('ケース会議記録の取得に失敗しました。'))
+      .finally(() => setLoading(false));
+  }, [userId]);
+
+  if (loading) return <div className="flex justify-center p-12"><div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" /></div>;
+  if (error) return <div className="bg-rose-50 text-rose-600 p-4 rounded-xl font-bold flex items-center gap-2"><AlertCircle className="w-5 h-5" />{error}</div>;
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex justify-between items-center">
@@ -11,46 +34,59 @@ export const UserCaseConferenceTab: React.FC = () => {
         </button>
       </div>
 
-      {/* 次回予定 */}
-      <div className="bg-indigo-50 border border-indigo-100 p-5 rounded-2xl flex items-start gap-4">
-        <div className="p-3 bg-white rounded-xl text-indigo-600 shadow-sm"><Calendar className="w-6 h-6" /></div>
-        <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">予定</span>
-            <h3 className="text-lg font-black text-slate-800">次期計画策定に向けた関係者会議</h3>
-          </div>
-          <p className="text-sm font-bold text-slate-600 mb-2">2026/06/10 14:00 - 15:00</p>
-          <div className="flex items-center gap-1 text-xs font-medium text-slate-500">
-            <Users className="w-3 h-3" /> 参加予定: 鈴木(サビ管)、山田(支援員)、佐藤(相談支援専門員)
-          </div>
+      {items.length === 0 ? (
+        <div className="bg-slate-50 text-slate-500 p-8 rounded-2xl text-center font-bold border border-slate-200">
+          ケース会議の記録がありません。
         </div>
-      </div>
+      ) : (
+        <div>
+          <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+            <MessageSquare className="w-5 h-5 text-slate-400" /> 会議録
+          </h3>
+          <div className="space-y-4">
+            {items.map(conf => (
+              <div key={conf.id} className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded">
+                        {conferenceTypeLabel[conf.conference_type] ?? conf.conference_type}
+                      </span>
+                      <div className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {conf.conference_datetime ? new Date(conf.conference_datetime).toLocaleString() : '—'}
+                      </div>
+                    </div>
+                    <h4 className="text-md font-bold text-slate-800">{conf.concern_summary}</h4>
+                  </div>
+                  <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg shrink-0 ml-3">
+                    記録: {conf.initiator_name}
+                  </span>
+                </div>
 
-      {/* 過去の会議録 */}
-      <div>
-        <h3 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2"><MessageSquare className="w-5 h-5 text-slate-400" /> 過去の会議録</h3>
-        <div className="space-y-4">
-          <div className="bg-white border border-slate-200 p-5 rounded-2xl shadow-sm">
-            <div className="flex justify-between items-start mb-3">
-              <div>
-                <div className="text-xs font-bold text-slate-400 mb-1">開催日: 2026/03/20</div>
-                <h4 className="text-md font-bold text-slate-800">第3期計画に向けた評価会議</h4>
+                {conf.participants.length > 0 && (
+                  <div className="flex items-center gap-1 text-xs font-medium text-slate-500 mb-3">
+                    <Users className="w-3 h-3" />
+                    参加者: {conf.participants.join('、')}
+                  </div>
+                )}
+
+                <div>
+                  <div className="text-xs font-bold text-slate-400 mb-1">決定事項・対応方針</div>
+                  <p className="text-sm font-medium text-slate-700 bg-slate-50 p-3 rounded-xl">{conf.agreed_action}</p>
+                </div>
+
+                {conf.plan_direction_update && (
+                  <div className="mt-3">
+                    <div className="text-xs font-bold text-slate-400 mb-1">計画への反映方針</div>
+                    <p className="text-sm font-medium text-slate-700 bg-indigo-50 p-3 rounded-xl border border-indigo-100">{conf.plan_direction_update}</p>
+                  </div>
+                )}
               </div>
-              <span className="text-xs font-bold text-slate-500 bg-white border border-slate-200 px-2 py-1 rounded-lg">記録者: サビ管 鈴木</span>
-            </div>
-            <div className="text-xs font-bold text-slate-500 mb-3 flex items-center gap-1">
-              <Users className="w-3 h-3" /> 参加者: 鈴木(サビ管)、山田(支援員)
-            </div>
-            <div className="space-y-2 mb-4">
-              <div>
-                <span className="text-xs font-bold text-slate-400">協議内容のサマリ</span>
-                <p className="text-sm font-medium text-slate-700 bg-slate-50 p-2 rounded-lg mt-1">生活リズムの安定が最優先。作業訓練は無理のない範囲で進める方針で一致。</p>
-              </div>
-            </div>
-            <button className="text-sm font-bold text-indigo-600 hover:text-indigo-800 underline decoration-indigo-200 underline-offset-4">詳細を見る</button>
+            ))}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

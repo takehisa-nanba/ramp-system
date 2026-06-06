@@ -15,6 +15,7 @@ from .staff_settings import staff_settings_bp
 from .management_staff import management_staff_bp
 from .management_office import management_office_bp
 from .management_masters import management_masters_bp
+from .dashboard import dashboard_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
@@ -29,7 +30,8 @@ ALL_BLUEPRINTS = [
     staff_settings_bp,
     management_staff_bp,
     management_office_bp,
-    management_masters_bp
+    management_masters_bp,
+    dashboard_bp,
 ]
 
 
