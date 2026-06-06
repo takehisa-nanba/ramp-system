@@ -17,7 +17,8 @@ class DailyLogService:
         duration_minutes: int,
         user_id: int = None,
         notes: str = "",
-        log_status: str = 'DRAFT'
+        log_status: str = 'DRAFT',
+        attendance_record_id: int = None
     ):
         """
         日報（活動）を記録する。
@@ -59,6 +60,8 @@ class DailyLogService:
                     support_content_notes=notes if notes else '支援記録なし', 
                     log_status=log_status
                 )
+                # TODO: 永続化設計 - 将来的に DailyLog モデルに attendance_record_id カラムを追加し、ここで設定する:
+                # daily_log.attendance_record_id = attendance_record_id
                 db.session.add(daily_log)
                 db.session.flush() # ID確定
             else:

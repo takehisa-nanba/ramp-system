@@ -386,6 +386,7 @@ export interface CreateDailyLogData {
   duration_minutes: number;
   notes: string;
   log_status: 'DRAFT' | 'COMPLETED';
+  attendance_record_id?: number;
 }
 
 export const fetchActivityTags = async (): Promise<ActivityTag[]> => {
@@ -395,5 +396,42 @@ export const fetchActivityTags = async (): Promise<ActivityTag[]> => {
 
 export const createDailyLog = async (data: CreateDailyLogData): Promise<{ msg: string }> => {
   const response = await apiClient.post<{ msg: string }>('/daily-logs', data);
+  return response.data;
+};
+
+export interface UserAttendanceItem {
+  attendance_record_id: number;
+  date: string;
+  check_in_at: string | null;
+  check_out_at: string | null;
+  status: 'IDLE' | 'CHECKED_IN' | 'CHECKED_OUT';
+  daily_log_status: 'missing' | 'draft' | 'completed';
+}
+
+export interface UserAttendanceResponse {
+  items: UserAttendanceItem[];
+}
+
+export const fetchUserAttendanceRecords = async (userId: number): Promise<UserAttendanceResponse> => {
+  const response = await apiClient.get<UserAttendanceResponse>(`/users/${userId}/attendance-records`);
+  return response.data;
+};
+
+export interface TodayUserItem {
+  user_id: number;
+  user_name: string;
+  attendance_record_id: number;
+  check_in_at: string;
+  check_out_at: string | null;
+  status: 'CHECKED_IN' | 'CHECKED_OUT';
+  daily_log_status: 'missing' | 'draft' | 'completed';
+}
+
+export interface TodayUsersResponse {
+  items: TodayUserItem[];
+}
+
+export const fetchTodayUsers = async (): Promise<TodayUsersResponse> => {
+  const response = await apiClient.get<TodayUsersResponse>('/dashboard/today-users');
   return response.data;
 };

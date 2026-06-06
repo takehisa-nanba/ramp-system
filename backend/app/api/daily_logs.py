@@ -57,7 +57,8 @@ def log_activity():
     end_time_str = data.get('end_time')
     duration_minutes = data.get('duration_minutes', 0)
     notes = data.get('notes', '')
-    log_status = data.get('log_status', 'DRAFT') # 追加
+    log_status = data.get('log_status', 'DRAFT')
+    attendance_record_id = data.get('attendance_record_id') # 追加
     
     start_time = datetime.fromisoformat(start_time_str) if start_time_str else datetime.now(JST)
     end_time = datetime.fromisoformat(end_time_str) if end_time_str else datetime.now(JST)
@@ -74,7 +75,8 @@ def log_activity():
             duration_minutes=duration_minutes,
             user_id=user_id,
             notes=notes,
-            log_status=log_status # 追加
+            log_status=log_status,
+            attendance_record_id=attendance_record_id # 追加
         )
         db.session.commit()
         return jsonify({"msg": "Activity logged successfully"}), 201

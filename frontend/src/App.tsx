@@ -14,6 +14,7 @@ import UserListPage from './pages/UserListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import ActionItemsPage from './pages/ActionItemsPage';
 import SettingsPage from './pages/SettingsPage';
+import TodayUsersPage from './pages/TodayUsersPage';
 
 
 // =================================================================
@@ -48,6 +49,7 @@ const App: React.FC = () => {
           {/* MainLayoutの <Outlet /> にレンダリングされる子ルート */}
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="today-users" element={<TodayUsersPage />} />
           
           <Route path="users" element={<UserListPage />} />
           <Route path="users/:id/*" element={<UserDetailPage />} />

@@ -31,6 +31,12 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
 
   // モーダルとフォーム状態
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [attendanceInfo, setAttendanceInfo] = useState<{
+    recordId: number;
+    checkIn: string;
+    checkOut?: string;
+    date: string;
+  } | null>(null);
   const [tags, setTags] = useState<ActivityTag[]>([]);
   const [selectedTagId, setSelectedTagId] = useState<string>('');
   const [logDate, setLogDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -58,10 +64,45 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
   useEffect(() => {
     if (dateParam) {
       setLogDate(dateParam);
+      
+      const recordId = searchParams.get('attendance_record_id');
+      const checkInAt = searchParams.get('check_in_at');
+      const checkOutAt = searchParams.get('check_out_at');
+      
+      if (recordId && checkInAt) {
+        setAttendanceInfo({
+          recordId: Number(recordId),
+          checkIn: checkInAt,
+          checkOut: checkOutAt || undefined,
+          date: dateParam
+        });
+        
+        try {
+          const ci = new Date(checkInAt);
+          const formattedCI = ci.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+          setStartTime(formattedCI);
+          
+          if (checkOutAt) {
+            const co = new Date(checkOutAt);
+            const formattedCO = co.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            setEndTime(formattedCO);
+          } else {
+            const co = new Date(ci.getTime() + 60 * 60 * 1000);
+            const formattedCO = co.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' });
+            setEndTime(formattedCO);
+          }
+        } catch (e) {
+          console.error('打刻時間のパースに失敗しました', e);
+        }
+      }
+      
       handleOpenModal();
       
       const newParams = new URLSearchParams(searchParams);
       newParams.delete('date');
+      newParams.delete('attendance_record_id');
+      newParams.delete('check_in_at');
+      newParams.delete('check_out_at');
       setSearchParams(newParams, { replace: true });
     }
   }, [dateParam, searchParams, setSearchParams]);
@@ -89,6 +130,9 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
     setNotes('');
     setFormError(null);
     setLogDate(new Date().toISOString().split('T')[0]);
+    setAttendanceInfo(null);
+    setStartTime('10:00');
+    setEndTime('11:00');
   };
 
   const handleSubmit = async (status: 'DRAFT' | 'COMPLETED') => {
@@ -122,7 +166,8 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
         end_time: endTimeISO,
         duration_minutes: duration,
         notes: notes,
-        log_status: status
+        log_status: status,
+        attendance_record_id: attendanceInfo?.recordId || undefined
       });
 
       handleCloseModal();
@@ -213,6 +258,24 @@ export const UserDailyLogsTab: React.FC<{ userId: number }> = ({ userId }) => {
 
             {/* コンテンツ */}
             <div className="p-6 overflow-y-auto space-y-4 flex-1">
+              {/* 対象日の利用実績カード */}
+              {attendanceInfo && (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-2xl p-4 flex flex-col gap-1.5 shadow-inner">
+                  <h4 className="text-xs font-black text-indigo-600 flex items-center gap-1.5 uppercase tracking-wider">
+                    <Clock className="w-3.5 h-3.5" /> 対象日の利用実績と紐付け
+                  </h4>
+                  <div className="text-sm font-black text-slate-800">
+                    実績日: {attendanceInfo.date}
+                  </div>
+                  <div className="flex gap-4 text-xs font-bold text-slate-500">
+                    <div>来所: <span className="text-indigo-600 font-black">{new Date(attendanceInfo.checkIn).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                    {attendanceInfo.checkOut && (
+                      <div>退所: <span className="text-indigo-600 font-black">{new Date(attendanceInfo.checkOut).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}</span></div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {formError && (
                 <div className="bg-rose-50 text-rose-600 p-4 rounded-xl font-bold flex items-start gap-2 text-sm border border-rose-200">
                   <AlertCircle className="w-5 h-5 shrink-0 mt-0.5" />

@@ -39,8 +39,20 @@ def get_action_items():
     # MVPでは CHECK_IN のみ支援記録未作成チェックの対象
     # 欠席時対応記録は次フェーズで ABSENT / NO_SHOW を起点に実装
     # TODO: cancellation / no-show / check-out consistency を考慮する
+    from sqlalchemy import func
     for (user_id, att_date), att in unique_attendances.items():
         user_name = att.user.display_name if att.user else "不明"
+        
+        # 同日の退所打刻 (CHECK_OUT) が存在するかを探す
+        check_out = AttendanceRecord.query.filter_by(
+            user_id=user_id, 
+            record_type='CHECK_OUT'
+        ).filter(
+            func.date(AttendanceRecord.timestamp) == att_date
+        ).first()
+        
+        check_out_at = check_out.timestamp.isoformat() if check_out else None
+        check_in_at = att.timestamp.isoformat()
         
         # 同日の日報を探す
         log = DailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
@@ -55,7 +67,10 @@ def get_action_items():
                 "user_name": user_name,
                 "title": f"{user_name}さんの利用実績に対する支援記録が未作成です",
                 "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（日報）が作成されていません。",
-                "target_date": att_date.strftime('%Y-%m-%d')
+                "target_date": att_date.strftime('%Y-%m-%d'),
+                "attendance_record_id": att.id,
+                "check_in_at": check_in_at,
+                "check_out_at": check_out_at
             })
         elif log.log_status == 'DRAFT':
             # 日報はあるが下書き状態
@@ -67,7 +82,10 @@ def get_action_items():
                 "user_name": user_name,
                 "title": f"{user_name}さんの利用実績に対する支援記録が未完了（下書き）です",
                 "description": f"{att_date.strftime('%Y-%m-%d')}の支援記録（日報）が下書き状態のままになっています。完了させてください。",
-                "target_date": att_date.strftime('%Y-%m-%d')
+                "target_date": att_date.strftime('%Y-%m-%d'),
+                "attendance_record_id": att.id,
+                "check_in_at": check_in_at,
+                "check_out_at": check_out_at
             })
         
     # 2. 同意待ち計画 (PENDING_CONSENT)

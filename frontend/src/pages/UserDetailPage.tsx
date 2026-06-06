@@ -8,6 +8,7 @@ import { UserMonitoringTab } from './tabs/UserMonitoringTab';
 import { UserCaseConferenceTab } from './tabs/UserCaseConferenceTab';
 import { UserActionItemsTab } from './tabs/UserActionItemsTab';
 import { UserHistoryTab } from './tabs/UserHistoryTab';
+import { UserAttendanceTab } from './tabs/UserAttendanceTab';
 
 const UserOverview: React.FC<{ userId: number }> = ({ userId }) => {
   const [user, setUser] = useState<UserPiiResponse | null>(null);
@@ -116,6 +117,7 @@ const UserDetailPage: React.FC = () => {
       <div className="flex gap-4 border-b border-slate-200 mb-6 pb-2 overflow-x-auto whitespace-nowrap">
         <NavLink to={`/users/${id}`} end className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>概要</NavLink>
         <NavLink to={`/users/${id}/support-plans`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>計画</NavLink>
+        <NavLink to={`/users/${id}/attendance`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>実績</NavLink>
         <NavLink to={`/users/${id}/daily-logs`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>日報</NavLink>
         <NavLink to={`/users/${id}/monitoring-reports`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>モニタリング</NavLink>
         <NavLink to={`/users/${id}/case-conferences`} className={({ isActive }) => `pb-2 ${isActive ? 'font-bold text-indigo-600 border-b-2 border-indigo-600' : 'text-slate-500'}`}>ケース会議</NavLink>
@@ -127,6 +129,7 @@ const UserDetailPage: React.FC = () => {
         <Routes>
           <Route index element={<UserOverview userId={Number(id)} />} />
           <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
+          <Route path="attendance" element={<UserAttendanceTab userId={Number(id)} />} />
           <Route path="daily-logs" element={<UserDailyLogsTab userId={Number(id)} />} />
           <Route path="monitoring-reports" element={<UserMonitoringTab userId={Number(id)} />} />
           <Route path="case-conferences" element={<UserCaseConferenceTab userId={Number(id)} />} />

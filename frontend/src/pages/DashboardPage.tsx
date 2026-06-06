@@ -29,10 +29,10 @@ const DashboardPage: React.FC = () => {
       id: 'today-users',
       title: '今日の利用者',
       value: summary.today_users,
-      detail: '本日の日報が記録された利用者数',
+      detail: '本日の来所実績（チェックイン）数',
       icon: <Users className="w-8 h-8 text-indigo-600" />,
       colorClass: 'bg-indigo-50 border-indigo-100',
-      path: '/users',
+      path: '/today-users',
     },
     {
       id: 'incomplete-daily-logs',
