@@ -387,3 +387,81 @@ def create_next_draft(plan_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Cloning plan failed: {e}"}), 500
+
+
+# -------------------------------------------------------------------
+# 7. 計画詳細取得 API
+# -------------------------------------------------------------------
+
+@plans_bp.route('/<int:plan_id>', methods=['GET'])
+@jwt_required()
+def get_plan_details(plan_id):
+    """
+    特定の個別支援計画の詳細（目標ツリー、方針等を含む）を取得する。
+    """
+    plan = db.session.get(SupportPlan, plan_id)
+    if not plan:
+        return jsonify({"msg": "SupportPlan not found"}), 404
+        
+    from backend.app.api.users.user_plans_api import _serialize_active_plan
+    try:
+        data = _serialize_active_plan(plan)
+        return jsonify(data), 200
+    except Exception as e:
+        return jsonify({"msg": f"Failed to serialize plan: {e}"}), 500
+
+
+# -------------------------------------------------------------------
+# 8. 計画本体の更新 API
+# -------------------------------------------------------------------
+
+@plans_bp.route('/<int:plan_id>', methods=['PUT'])
+@jwt_required()
+def update_plan(plan_id):
+    """
+    計画の基本情報（期間・方針）を更新する。
+    DRAFT 状態の計画のみ編集可能（ガードレール）。
+    """
+    plan = db.session.get(SupportPlan, plan_id)
+    if not plan:
+        return jsonify({"msg": "SupportPlan not found"}), 404
+        
+    if plan.plan_status != 'DRAFT':
+        return jsonify({"msg": "Only DRAFT plans can be edited"}), 400
+
+    data = request.get_json()
+    plan_start_date = data.get('plan_start_date')
+    plan_end_date = data.get('plan_end_date')
+    user_intention_content = data.get('user_intention_content')
+    support_policy_content = data.get('support_policy_content')
+
+    from datetime import datetime, date
+    from backend.app.models import HolisticSupportPolicy
+    
+    try:
+        if plan_start_date:
+            plan.plan_start_date = datetime.strptime(plan_start_date, "%Y-%m-%d").date()
+        if plan_end_date:
+            plan.plan_end_date = datetime.strptime(plan_end_date, "%Y-%m-%d").date()
+            
+        if user_intention_content or support_policy_content:
+            if plan.holistic_policy:
+                plan.holistic_policy.user_intention_content = user_intention_content or plan.holistic_policy.user_intention_content
+                plan.holistic_policy.support_policy_content = support_policy_content or plan.holistic_policy.support_policy_content
+            else:
+                policy = HolisticSupportPolicy(
+                    user_id=plan.user_id,
+                    effective_date=date.today(),
+                    user_intention_content=user_intention_content or "本人の意向未記入",
+                    support_policy_content=support_policy_content or "支援の方針未記入"
+                )
+                db.session.add(policy)
+                db.session.flush()
+                plan.holistic_support_policy_id = policy.id
+                
+        db.session.commit()
+        return jsonify({"msg": "Plan updated successfully"}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": f"Failed to update plan: {e}"}), 500

@@ -14,6 +14,8 @@ import {
   createSupportPlanDraft,
   createNextSupportPlanDraft,
   saveSupportPlanGoals,
+  getSupportPlanDetails,
+  updateSupportPlanDraft,
   type UserSupportPlansResponse,
   type UserMonitoringResponse,
   type CaseConferenceItem,
@@ -127,6 +129,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [editingPlanId, setEditingPlanId] = useState<number | null>(null);
   
   const [formPlanStartDate, setFormPlanStartDate] = useState('');
   const [formPlanEndDate, setFormPlanEndDate] = useState('');
@@ -169,27 +172,42 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
   const [formLongTermGoals, setFormLongTermGoals] = useState<any[]>([DEFAULT_LONG_TERM_GOAL()]);
 
-  // 新規計画作成ハンドラー
+  // 新規計画作成＆編集ハンドラー
   const handleCreatePlanSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       setCreateSubmitting(true);
       setCreateError(null);
 
-      const newPlanRes = await createSupportPlanDraft({
-        userId,
-        planStartDate: formPlanStartDate || undefined,
-        planEndDate: formPlanEndDate || undefined,
-        userIntentionContent: formUserIntentionContent || undefined,
-        supportPolicyContent: formSupportPolicyContent || undefined
-      });
-      const planId = newPlanRes.plan_id;
+      let planId = editingPlanId;
 
-      await saveSupportPlanGoals(planId, {
+      if (planId) {
+        // 編集モード: 計画本体（日付・方針）の更新
+        await updateSupportPlanDraft(planId, {
+          planStartDate: formPlanStartDate || undefined,
+          planEndDate: formPlanEndDate || undefined,
+          userIntentionContent: formUserIntentionContent || undefined,
+          supportPolicyContent: formSupportPolicyContent || undefined
+        });
+      } else {
+        // 新規作成モード
+        const newPlanRes = await createSupportPlanDraft({
+          userId,
+          planStartDate: formPlanStartDate || undefined,
+          planEndDate: formPlanEndDate || undefined,
+          userIntentionContent: formUserIntentionContent || undefined,
+          supportPolicyContent: formSupportPolicyContent || undefined
+        });
+        planId = newPlanRes.plan_id;
+      }
+
+      // 目標ツリーの一括保存（新規作成・編集共通）
+      await saveSupportPlanGoals(planId!, {
         long_term_goals: formLongTermGoals
       });
 
       setShowCreateModal(false);
+      setEditingPlanId(null);
       setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
       setFormPlanStartDate('');
       setFormPlanEndDate('');
@@ -198,9 +216,48 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setCreateError(err.response?.data?.msg || '計画の作成または目標の登録に失敗しました。');
+      setCreateError(err.response?.data?.msg || '計画の保存または目標の登録に失敗しました。');
     } finally {
       setCreateSubmitting(false);
+    }
+  };
+
+  // 原案の編集開始ハンドラー
+  const handleEditPlanClick = async (planId: number) => {
+    try {
+      setCreateError(null);
+      const details = await getSupportPlanDetails(planId);
+      
+      setFormPlanStartDate(details.start_date ?? '');
+      setFormPlanEndDate(details.end_date ?? '');
+      setFormUserIntentionContent(details.holistic_policy?.user_intention_content ?? '');
+      setFormSupportPolicyContent(details.holistic_policy?.support_policy_content ?? '');
+      
+      // 目標ツリーの流し込み
+      if (details.long_term_goals && details.long_term_goals.length > 0) {
+        setFormLongTermGoals(details.long_term_goals.map(ltg => ({
+          description: ltg.description,
+          short_term_goals: ltg.short_term_goals.map(stg => ({
+            description: stg.description,
+            individual_goals: stg.individual_goals.map(ig => ({
+              concrete_goal: ig.concrete_goal,
+              user_commitment: ig.user_commitment,
+              support_actions: ig.support_actions,
+              service_type: ig.service_type,
+              is_facility_in_deemed: !!ig.is_facility_in_deemed,
+              is_work_preparation_positioning: !!ig.is_work_preparation_positioning
+            }))
+          }))
+        })));
+      } else {
+        setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
+      }
+      
+      setEditingPlanId(planId);
+      setShowCreateModal(true);
+    } catch (err: any) {
+      console.error(err);
+      alert('計画詳細の取得に失敗しました。');
     }
   };
 
@@ -340,8 +397,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
           )}
           <button 
             onClick={() => {
+              setEditingPlanId(null);
               setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
               initDefaultDates();
+              setFormUserIntentionContent('');
+              setFormSupportPolicyContent('');
               setCreateError(null);
               setShowCreateModal(true);
             }}
@@ -439,7 +499,15 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                   <p className="text-sm font-black text-indigo-900">作成中の計画原案があります</p>
                   <p className="text-xs text-indigo-700 mt-0.5">原案を作成後、関係者でケース会議を行い、内容をブラッシュアップします。</p>
                 </div>
-                <button className="flex items-center gap-1 bg-indigo-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm">
+                <button 
+                  onClick={() => {
+                    const draftPlanId = plansData?.plan_history.find(p => p.plan_status === 'DRAFT')?.id;
+                    if (draftPlanId) {
+                      handleEditPlanClick(draftPlanId);
+                    }
+                  }}
+                  className="flex items-center gap-1 bg-indigo-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm"
+                >
                   原案を編集 <ArrowRight className="w-3.5 h-3.5" />
                 </button>
               </div>
@@ -884,7 +952,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
               <div>
                 <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-indigo-600" /> 個別支援計画（原案）の新規作成
+                  <FileText className="w-5 h-5 text-indigo-600" /> {editingPlanId ? '個別支援計画（原案）の編集' : '個別支援計画（原案）の新規作成'}
                 </h3>
                 <p className="text-[10px] text-slate-400 font-bold mt-0.5">※ 未入力の方針項目は暫定アセスメント / 暫定支援方針として自動生成されます。</p>
               </div>
@@ -1200,10 +1268,10 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 {createSubmitting ? (
                   <>
                     <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    作成中...
+                    {editingPlanId ? '更新中...' : '作成中...'}
                   </>
                 ) : (
-                  '原案を作成して目標保存'
+                  editingPlanId ? '原案を更新' : '原案を作成して目標保存'
                 )}
               </button>
             </div>

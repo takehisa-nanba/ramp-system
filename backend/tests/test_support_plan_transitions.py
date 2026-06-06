@@ -414,3 +414,47 @@ def test_create_next_draft_cloning(client, app):
         assert len(new_draft.long_term_goals[0].short_term_goals[0].individual_goals) == 1
         assert new_draft.long_term_goals[0].short_term_goals[0].individual_goals[0].concrete_goal == "個別支援コピー元"
         assert new_draft.long_term_goals[0].short_term_goals[0].individual_goals[0].is_facility_in_deemed is True
+
+
+def test_update_plan_details_and_retrieval(client, app):
+    """
+    テスト内容: GET /api/plans/<plan_id> による計画詳細取得、
+    および PUT /api/plans/<plan_id> による期間・方針更新の検証。
+    """
+    from flask_jwt_extended import create_access_token
+    from backend.tests.test_support_plan_service import setup_masters_and_user
+    
+    with app.app_context():
+        user, sabikan, policy = setup_masters_and_user(db.session, display_name="TestUserUpdate", staff_code="S555")
+        user_id = user.id
+        sabikan_id = sabikan.id
+        policy_id = policy.id
+        
+        token = create_access_token(identity=f"staff:{sabikan_id}", additional_claims={"role_type": "staff"})
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        
+        service = SupportPlanService()
+        draft_plan = service.create_plan_draft(user_id, sabikan_id, policy_id)
+        db.session.commit()
+        plan_id = draft_plan.id
+
+    # 1. 計画の基本情報（日付・方針）更新
+    update_data = {
+        "plan_start_date": "2026-08-01",
+        "plan_end_date": "2026-10-31",
+        "user_intention_content": "新意向",
+        "support_policy_content": "新方針"
+    }
+    response = client.put(f"/api/plans/{plan_id}", json=update_data, headers=headers)
+    assert response.status_code == 200
+    
+    # 2. 計画詳細の取得と検証
+    response = client.get(f"/api/plans/{plan_id}", headers=headers)
+    assert response.status_code == 200
+    details = response.get_json()
+    assert details["start_date"] == "2026-08-01"
+    assert details["end_date"] == "2026-10-31"
+    assert details["holistic_policy"]["user_intention_content"] == "新意向"
+    assert details["holistic_policy"]["support_policy_content"] == "新方針"

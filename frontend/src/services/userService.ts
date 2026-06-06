@@ -374,6 +374,60 @@ export const saveSupportPlanGoals = async (planId: number, data: SaveGoalsData):
   return response.data;
 };
 
+export interface DetailedSupportPlanResponse {
+  id: number;
+  plan_version: number;
+  plan_status: string;
+  start_date: string | null;
+  end_date: string | null;
+  based_on_plan_id: number | null;
+  holistic_policy: {
+    id: number;
+    user_intention_content: string;
+    support_policy_content: string;
+  } | null;
+  long_term_goals: {
+    id: number;
+    description: string;
+    short_term_goals: {
+      id: number;
+      description: string;
+      individual_goals: {
+        id: number;
+        concrete_goal: string;
+        user_commitment: string;
+        support_actions: string;
+        service_type: string;
+        is_facility_in_deemed?: boolean;
+        is_work_preparation_positioning?: boolean;
+      }[];
+    }[];
+  }[];
+}
+
+export const getSupportPlanDetails = async (planId: number): Promise<DetailedSupportPlanResponse> => {
+  const response = await apiClient.get<DetailedSupportPlanResponse>(`/plans/${planId}`);
+  return response.data;
+};
+
+export const updateSupportPlanDraft = async (
+  planId: number,
+  params: {
+    planStartDate?: string;
+    planEndDate?: string;
+    userIntentionContent?: string;
+    supportPolicyContent?: string;
+  }
+): Promise<{ msg: string }> => {
+  const response = await apiClient.put<{ msg: string }>(`/plans/${planId}`, {
+    plan_start_date: params.planStartDate,
+    plan_end_date: params.planEndDate,
+    user_intention_content: params.userIntentionContent,
+    support_policy_content: params.supportPolicyContent,
+  });
+  return response.data;
+};
+
 // --- 日報 ---
 export interface DailyLogActivity {
   id: number;
