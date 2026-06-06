@@ -348,4 +348,24 @@ export interface UserCaseConferencesResponse {
 export const fetchUserCaseConferences = async (userId: number): Promise<UserCaseConferencesResponse> => {
   const response = await apiClient.get<UserCaseConferencesResponse>(`/users/${userId}/case-conferences`);
   return response.data;
+};
+
+// --- 管理確認事項 (Action Items) ---
+export interface ActionItem {
+  type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference';
+  category_label: string;
+  severity: 'high' | 'medium' | 'low';
+  user_id: number;
+  user_name: string;
+  title: string;
+  description: string;
+}
+
+export interface ActionItemsResponse {
+  items: ActionItem[];
+}
+
+export const fetchActionItems = async (): Promise<ActionItemsResponse> => {
+  const response = await apiClient.get<ActionItemsResponse>('/action-items');
+  return response.data;
 };
