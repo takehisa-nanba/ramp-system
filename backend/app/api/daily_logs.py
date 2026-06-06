@@ -57,10 +57,11 @@ def log_activity():
     end_time_str = data.get('end_time')
     duration_minutes = data.get('duration_minutes', 0)
     notes = data.get('notes', '')
+    log_status = data.get('log_status', 'DRAFT') # 追加
     
-    log_date = datetime.now(JST).date()
     start_time = datetime.fromisoformat(start_time_str) if start_time_str else datetime.now(JST)
     end_time = datetime.fromisoformat(end_time_str) if end_time_str else datetime.now(JST)
+    log_date = start_time.date() # start_time から日付を決定
     
     try:
         service = DailyLogService()
@@ -72,7 +73,8 @@ def log_activity():
             end_time=end_time,
             duration_minutes=duration_minutes,
             user_id=user_id,
-            notes=notes
+            notes=notes,
+            log_status=log_status # 追加
         )
         db.session.commit()
         return jsonify({"msg": "Activity logged successfully"}), 201

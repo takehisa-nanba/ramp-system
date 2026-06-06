@@ -130,7 +130,7 @@ const UserDetailPage: React.FC = () => {
           <Route path="daily-logs" element={<UserDailyLogsTab userId={Number(id)} />} />
           <Route path="monitoring-reports" element={<UserMonitoringTab userId={Number(id)} />} />
           <Route path="case-conferences" element={<UserCaseConferenceTab userId={Number(id)} />} />
-          <Route path="action-items" element={<UserActionItemsTab />} />
+          <Route path="action-items" element={<UserActionItemsTab userId={Number(id)} />} />
           <Route path="history" element={<UserHistoryTab />} />
         </Routes>
       </div>

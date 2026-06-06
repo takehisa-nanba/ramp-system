@@ -368,4 +368,31 @@ export interface ActionItemsResponse {
 export const fetchActionItems = async (): Promise<ActionItemsResponse> => {
   const response = await apiClient.get<ActionItemsResponse>('/action-items');
   return response.data;
+};
+
+// --- 日報登録関連 ---
+export interface ActivityTag {
+  id: number;
+  name: string;
+  is_direct_support: boolean;
+}
+
+export interface CreateDailyLogData {
+  tag_id: number;
+  user_id: number;
+  start_time: string;
+  end_time: string;
+  duration_minutes: number;
+  notes: string;
+  log_status: 'DRAFT' | 'COMPLETED';
+}
+
+export const fetchActivityTags = async (): Promise<ActivityTag[]> => {
+  const response = await apiClient.get<ActivityTag[]>('/daily-logs/tags');
+  return response.data;
+};
+
+export const createDailyLog = async (data: CreateDailyLogData): Promise<{ msg: string }> => {
+  const response = await apiClient.post<{ msg: string }>('/daily-logs', data);
+  return response.data;
 };

@@ -16,7 +16,8 @@ class DailyLogService:
         end_time: datetime,
         duration_minutes: int,
         user_id: int = None,
-        notes: str = ""
+        notes: str = "",
+        log_status: str = 'DRAFT'
     ):
         """
         日報（活動）を記録する。
@@ -55,11 +56,19 @@ class DailyLogService:
                     user_id=user_id,
                     log_date=log_date,
                     location_type='ON_SITE', # デフォルト値
-                    support_content_notes='活動トラッカーによる自動生成', # 必須項目
-                    log_status='DRAFT'
+                    support_content_notes=notes if notes else '支援記録なし', 
+                    log_status=log_status
                 )
                 db.session.add(daily_log)
                 db.session.flush() # ID確定
+            else:
+                # 既に存在する場合も、ステータスを更新し、ノートを追記
+                daily_log.log_status = log_status
+                if notes:
+                    if daily_log.support_content_notes and daily_log.support_content_notes != '活動トラッカーによる自動生成':
+                        daily_log.support_content_notes += f"\n{notes}"
+                    else:
+                        daily_log.support_content_notes = notes
                 
             # 該当利用者の最新の目標を自動取得する（簡易化のため）
             goal = db.session.query(IndividualSupportGoal)\
