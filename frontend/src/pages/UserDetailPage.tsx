@@ -2,6 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { useParams, Routes, Route, NavLink } from 'react-router-dom';
 import { User, Calendar, Activity, CheckCircle, AlertCircle } from 'lucide-react';
 import { fetchUserPii, type UserPiiResponse } from '../services/userService';
+import { UserDailyLogsTab } from './tabs/UserDailyLogsTab';
+import { UserSupportPlanTab } from './tabs/UserSupportPlanTab';
 
 const UserOverview: React.FC<{ userId: number }> = ({ userId }) => {
   const [user, setUser] = useState<UserPiiResponse | null>(null);
@@ -120,8 +122,8 @@ const UserDetailPage: React.FC = () => {
       <div>
         <Routes>
           <Route index element={<UserOverview userId={Number(id)} />} />
-          <Route path="support-plans" element={<div>個別支援計画のプレースホルダー</div>} />
-          <Route path="daily-logs" element={<div>日報のプレースホルダー</div>} />
+          <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
+          <Route path="daily-logs" element={<UserDailyLogsTab userId={Number(id)} />} />
           <Route path="monitoring-reports" element={<div>モニタリングのプレースホルダー</div>} />
           <Route path="case-conferences" element={<div>ケース会議のプレースホルダー</div>} />
           <Route path="action-items" element={<div>管理確認事項のプレースホルダー</div>} />
