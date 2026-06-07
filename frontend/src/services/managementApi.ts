@@ -56,6 +56,20 @@ export interface Role {
   scope: 'JOB' | 'CORPORATE' | 'SYSTEM';
 }
 
+export interface OfficeService {
+  id?: number;
+  service_type_master_id: number;
+  jigyosho_bango: string;
+  capacity: number;
+  manager_supporter_id: number | null;
+  initial_designation_date?: string;
+  designation_expiry_date?: string;
+  regional_category?: string;
+  target_disabilities?: Record<string, boolean> | null;
+  cooperating_medical_institution?: string;
+  manager_name?: string;
+}
+
 export interface OfficeSettings {
   id: number;
   corporation_id?: number | null;
@@ -88,6 +102,7 @@ export interface OfficeSettings {
   target_disabilities?: Record<string, boolean> | null;
   cooperating_medical_institution?: string;
   manager_name?: string;
+  services?: OfficeService[];
 }
 
 export interface AdditiveFiling {

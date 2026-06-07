@@ -22,9 +22,9 @@ def get_office_settings():
         return jsonify({"msg": "Office not found"}), 404
     
     office = OfficeSetting.query.get(current.office_id)
-    service = office.service_configs.first()
+    configs = office.service_configs.all()
     
-    if not service:
+    if not configs:
         from backend.app.models import ServiceTypeMaster
         st = ServiceTypeMaster.query.first()
         service = OfficeServiceConfiguration(
@@ -35,7 +35,25 @@ def get_office_settings():
         )
         db.session.add(service)
         db.session.commit()
+        configs = [service]
 
+    services_list = []
+    for service in configs:
+        services_list.append({
+            "id": service.id,
+            "service_type_master_id": service.service_type_master_id,
+            "manager_supporter_id": service.manager_supporter_id,
+            "jigyosho_bango": service.jigyosho_bango,
+            "capacity": service.capacity,
+            "initial_designation_date": service.initial_designation_date.isoformat() if service.initial_designation_date else None,
+            "designation_expiry_date": service.designation_expiry_date.isoformat() if service.designation_expiry_date else None,
+            "regional_category": service.regional_category,
+            "target_disabilities": service.target_disabilities,
+            "cooperating_medical_institution": service.cooperating_medical_institution,
+            "manager_name": f"{service.manager_supporter.last_name} {service.manager_supporter.first_name}" if service.manager_supporter else "未設定"
+        })
+
+    first_s = services_list[0]
     corp = office.corporation
 
     return jsonify({
@@ -59,28 +77,33 @@ def get_office_settings():
         "fax_number": office.fax_number,
         "email_address": office.email_address,
         "representative_name": office.representative_name,
-        "service_config_id": service.id,
-        "service_type_master_id": service.service_type_master_id,
-        "manager_supporter_id": service.manager_supporter_id,
-        "jigyosho_bango": service.jigyosho_bango,
-        "capacity": service.capacity,
-        "initial_designation_date": service.initial_designation_date.isoformat() if service.initial_designation_date else None,
-        "designation_expiry_date": service.designation_expiry_date.isoformat() if service.designation_expiry_date else None,
-        "regional_category": service.regional_category,
-        "target_disabilities": service.target_disabilities,
-        "cooperating_medical_institution": service.cooperating_medical_institution,
-        "manager_name": f"{service.manager_supporter.last_name} {service.manager_supporter.first_name}" if service.manager_supporter else "未設定"
+        
+        # 互換性のための単一サービス用の設定
+        "service_config_id": first_s["id"],
+        "service_type_master_id": first_s["service_type_master_id"],
+        "manager_supporter_id": first_s["manager_supporter_id"],
+        "jigyosho_bango": first_s["jigyosho_bango"],
+        "capacity": first_s["capacity"],
+        "initial_designation_date": first_s["initial_designation_date"],
+        "designation_expiry_date": first_s["designation_expiry_date"],
+        "regional_category": first_s["regional_category"],
+        "target_disabilities": first_s["target_disabilities"],
+        "cooperating_medical_institution": first_s["cooperating_medical_institution"],
+        "manager_name": first_s["manager_name"],
+        
+        # 複数サービス（多機能型）の配列データ
+        "services": services_list
     }), 200
 
 @management_office_bp.route('', methods=['PUT'])
 @jwt_required()
 def update_office_settings():
     from backend.app.utils.errors import ValidationError
+    from backend.app.services.core_service import reconcile_relations
     try:
         current = get_current_staff()
         data = request.get_json()
         office = OfficeSetting.query.get(current.office_id)
-        service = office.service_configs.first()
         corp = office.corporation
 
         if corp:
@@ -112,39 +135,98 @@ def update_office_settings():
         office.email_address = data.get('email_address', office.email_address)
         office.representative_name = data.get('representative_name', office.representative_name)
         
-        if service:
-            if 'service_type_master_id' in data and data['service_type_master_id']:
-                try:
-                    service.service_type_master_id = int(data['service_type_master_id'])
-                except (ValueError, TypeError):
-                    raise ValidationError("サービス種別の指定が不正です")
+        # 新しい `services` の複数同期処理
+        incoming_services = data.get('services')
+        if incoming_services is not None:
+            if not isinstance(incoming_services, list) or len(incoming_services) == 0:
+                raise ValidationError("提供サービスは最低1つ登録する必要があります。")
 
-            if 'manager_supporter_id' in data:
-                service.manager_supporter_id = int(data['manager_supporter_id']) if data.get('manager_supporter_id') else None
+            # 重複サービス種別のチェック
+            selected_service_types = [int(s.get('service_type_master_id')) for s in incoming_services if s.get('service_type_master_id')]
+            if len(selected_service_types) != len(set(selected_service_types)):
+                raise ValidationError("同じサービス種別を複数登録することはできません。")
 
-            if 'jigyosho_bango' in data and data['jigyosho_bango']:
-                service.jigyosho_bango = data['jigyosho_bango']
-            
-            if 'capacity' in data:
-                try:
-                    service.capacity = int(data['capacity'])
-                except (ValueError, TypeError):
-                    raise ValidationError("定員は数値で入力してください")
+            def match_service(existing, incoming):
+                inc_id = incoming.get('id')
+                if not inc_id or int(inc_id) <= 0:
+                    return False
+                return existing.id == int(inc_id)
                 
-            service.regional_category = data.get('regional_category', service.regional_category)
-            service.target_disabilities = data.get('target_disabilities', service.target_disabilities)
-            service.cooperating_medical_institution = data.get('cooperating_medical_institution', service.cooperating_medical_institution)
-            
-            if data.get('initial_designation_date'):
+            def update_service(item, incoming):
+                item.office_id = office.id
+                item.service_type_master_id = int(incoming['service_type_master_id'])
+                item.jigyosho_bango = incoming.get('jigyosho_bango', '0000000000') or '0000000000'
+                
                 try:
-                    service.initial_designation_date = datetime.fromisoformat(data['initial_designation_date']).date()
+                    item.capacity = int(incoming.get('capacity', 20))
                 except (ValueError, TypeError):
-                    raise ValidationError("指定年月日の形式が不正です")
-            if data.get('designation_expiry_date'):
-                try:
-                    service.designation_expiry_date = datetime.fromisoformat(data['designation_expiry_date']).date()
-                except (ValueError, TypeError):
-                    raise ValidationError("指定有効期限の形式が不正です")
+                    raise ValidationError("定員は数値で入力してください。")
+                    
+                item.manager_supporter_id = int(incoming['manager_supporter_id']) if incoming.get('manager_supporter_id') else None
+                item.regional_category = incoming.get('regional_category')
+                item.target_disabilities = incoming.get('target_disabilities')
+                item.cooperating_medical_institution = incoming.get('cooperating_medical_institution')
+                
+                if incoming.get('initial_designation_date'):
+                    try:
+                        item.initial_designation_date = datetime.fromisoformat(incoming['initial_designation_date']).date()
+                    except (ValueError, TypeError):
+                        raise ValidationError("初回指定年月日の形式が不正です")
+                else:
+                    item.initial_designation_date = None
+                    
+                if incoming.get('designation_expiry_date'):
+                    try:
+                        item.designation_expiry_date = datetime.fromisoformat(incoming['designation_expiry_date']).date()
+                    except (ValueError, TypeError):
+                        raise ValidationError("指定有効期限の形式が不正です")
+                else:
+                    item.designation_expiry_date = None
+
+            reconcile_relations(
+                office.service_configs,
+                incoming_services,
+                OfficeServiceConfiguration,
+                db.session,
+                match_service,
+                update_service
+            )
+        else:
+            # 後方互換：services 配列が渡されなかった場合は、単一の first() を更新
+            service = office.service_configs.first()
+            if service:
+                if 'service_type_master_id' in data and data['service_type_master_id']:
+                    try:
+                        service.service_type_master_id = int(data['service_type_master_id'])
+                    except (ValueError, TypeError):
+                        raise ValidationError("サービス種別の指定が不正です")
+
+                if 'manager_supporter_id' in data:
+                    service.manager_supporter_id = int(data['manager_supporter_id']) if data.get('manager_supporter_id') else None
+
+                if 'jigyosho_bango' in data and data['jigyosho_bango']:
+                    service.jigyosho_bango = data['jigyosho_bango']
+                
+                if 'capacity' in data:
+                    try:
+                        service.capacity = int(data['capacity'])
+                    except (ValueError, TypeError):
+                        raise ValidationError("定員は数値で入力してください")
+                    
+                service.regional_category = data.get('regional_category', service.regional_category)
+                service.target_disabilities = data.get('target_disabilities', service.target_disabilities)
+                service.cooperating_medical_institution = data.get('cooperating_medical_institution', service.cooperating_medical_institution)
+                
+                if data.get('initial_designation_date'):
+                    try:
+                        service.initial_designation_date = datetime.fromisoformat(data['initial_designation_date']).date()
+                    except (ValueError, TypeError):
+                        raise ValidationError("指定年月日の形式が不正です")
+                if data.get('designation_expiry_date'):
+                    try:
+                        service.designation_expiry_date = datetime.fromisoformat(data['designation_expiry_date']).date()
+                    except (ValueError, TypeError):
+                        raise ValidationError("指定有効期限の形式が不正です")
             
         db.session.commit()
         return jsonify({"msg": "Office settings updated"}), 200

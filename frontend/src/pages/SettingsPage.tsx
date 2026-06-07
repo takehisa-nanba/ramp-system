@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, Save, ShieldCheck, UserCog, Plus, X, RefreshCw } from 'lucide-react';
-import { managementApi, type JobAssignment, type JobTitle, type ManagementMasters, type OfficeSettings, type Role, type StaffMember } from '../services/managementApi';
+import { managementApi, type JobAssignment, type JobTitle, type ManagementMasters, type OfficeSettings, type Role, type StaffMember, type OfficeService } from '../services/managementApi';
 import { toKatakana } from '../utils/inputHelpers';
 
 type TabKey = 'office' | 'staff';
@@ -108,6 +108,16 @@ const SettingsPage: React.FC = () => {
 
   const saveOffice = async () => {
     if (!office) return;
+    if (!office.services || office.services.length === 0) {
+      setError('提供サービスは最低1つ登録する必要があります。');
+      return;
+    }
+    const selectedTypes = office.services.map((s) => s.service_type_master_id);
+    if (selectedTypes.length !== new Set(selectedTypes).size) {
+      setError('同じサービス種別を複数登録することはできません。');
+      return;
+    }
+
     setSaving(true);
     setError(null);
     setMessage(null);
@@ -190,69 +200,109 @@ const SettingsPage: React.FC = () => {
     setOffice((prev) => prev ? { ...prev, [key]: value } : prev);
   };
 
-  const handleServiceTypeChange = (serviceTypeMasterId: number | undefined) => {
-    if (!office || !masters) return;
-    if (!serviceTypeMasterId) {
-      updateOffice('service_type_master_id', undefined);
-      return;
-    }
+  const updateServiceItem = (index: number, patch: Partial<OfficeService>) => {
+    setOffice((prev) => {
+      if (!prev || !prev.services) return prev;
+      const nextServices = [...prev.services];
+      nextServices[index] = { ...nextServices[index], ...patch };
+      return { ...prev, services: nextServices };
+    });
+  };
+
+  const handleServiceTypeChangeForIndex = (index: number, serviceTypeMasterId: number) => {
+    if (!office || !masters || !office.services) return;
     
     const selectedService = masters.service_types.find((s) => s.id === serviceTypeMasterId);
-    let updatedOffice = { ...office, service_type_master_id: serviceTypeMasterId };
+    let patch: Partial<OfficeService> = { service_type_master_id: serviceTypeMasterId };
     
     if (selectedService) {
       switch (selectedService.service_code) {
         case 'TRANSITION': // 就労移行支援
-          updatedOffice.capacity = 20;
-          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
-          updatedOffice.target_disabilities = {
+        case 'CONTINUOUS_B': // 就労継続支援B型
+        case 'RETENTION': // 就労定着支援
+        case 'SELECTION': // 就労選択支援
+          patch.capacity = 20;
+          patch.target_disabilities = {
             physical: true,
             intellectual: true,
             mental: true,
             developmental: true,
             intractable: true
           };
-          setFullTimeWeeklyHoursText('40');
           break;
         case 'CONTINUOUS_A': // 就労継続支援A型
-          updatedOffice.capacity = 10;
-          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
-          updatedOffice.target_disabilities = {
+          patch.capacity = 10;
+          patch.target_disabilities = {
             physical: true,
             intellectual: true,
             mental: true,
             developmental: true,
             intractable: true
           };
-          setFullTimeWeeklyHoursText('40');
-          break;
-        case 'CONTINUOUS_B': // 就労継続支援B型
-          updatedOffice.capacity = 20;
-          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
-          updatedOffice.target_disabilities = {
-            physical: true,
-            intellectual: true,
-            mental: true,
-            developmental: true,
-            intractable: true
-          };
-          setFullTimeWeeklyHoursText('40');
           break;
         case 'TRAINING': // 自立訓練（生活訓練）
-          updatedOffice.capacity = 20;
-          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
-          updatedOffice.target_disabilities = {
+          patch.capacity = 20;
+          patch.target_disabilities = {
             physical: false,
             intellectual: true,
             mental: true,
             developmental: true,
             intractable: true
           };
-          setFullTimeWeeklyHoursText('40');
           break;
       }
     }
-    setOffice(updatedOffice);
+    updateServiceItem(index, patch);
+  };
+
+  const addServiceItem = () => {
+    if (!office || !masters) return;
+    const defaultServiceId = masters.service_types[0]?.id || 1;
+    const newService: OfficeService = {
+      service_type_master_id: defaultServiceId,
+      jigyosho_bango: '',
+      capacity: 20,
+      manager_supporter_id: null,
+      target_disabilities: {
+        physical: true,
+        intellectual: true,
+        mental: true,
+        developmental: true,
+        intractable: true
+      }
+    };
+    
+    const selectedService = masters.service_types.find((s) => s.id === defaultServiceId);
+    if (selectedService) {
+      switch (selectedService.service_code) {
+        case 'CONTINUOUS_A':
+          newService.capacity = 10;
+          break;
+        case 'TRAINING':
+          newService.target_disabilities = {
+            physical: false,
+            intellectual: true,
+            mental: true,
+            developmental: true,
+            intractable: true
+          };
+          break;
+      }
+    }
+    
+    setOffice((prev) => {
+      if (!prev) return prev;
+      const services = prev.services ? [...prev.services, newService] : [newService];
+      return { ...prev, services };
+    });
+  };
+
+  const removeServiceItem = (index: number) => {
+    setOffice((prev) => {
+      if (!prev || !prev.services) return prev;
+      const services = prev.services.filter((_, i) => i !== index);
+      return { ...prev, services };
+    });
   };
 
   const updateStaffForm = (key: keyof StaffForm, value: any) => {
@@ -363,36 +413,67 @@ const SettingsPage: React.FC = () => {
               <Field label="事業所代表者" value={office.representative_name || ''} onChange={(v) => updateOffice('representative_name', v)} />
             </div>
 
-            <SectionTitle title="サービス設定" description="受給者証・請求・配置基準と接続する提供サービス" />
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <SelectField label="サービス種別" value={office.service_type_master_id || ''} onChange={(v) => handleServiceTypeChange(Number(v) || undefined)}>
-                <option value="">未設定</option>
-                {masters?.service_types.map((s) => <option key={s.id} value={s.id}>{s.service_name} {s.service_code ? `(${s.service_code})` : ''}</option>)}
-              </SelectField>
-              <Field label="事業所番号" value={office.jigyosho_bango || ''} onChange={(v) => updateOffice('jigyosho_bango', v)} />
-              <Field label="定員" type="number" value={office.capacity || 0} onChange={(v) => updateOffice('capacity', Number(v))} />
-              <SelectField label="サービス管理責任者" value={office.manager_supporter_id || ''} onChange={(v) => updateOffice('manager_supporter_id', Number(v) || null)}>
-                <option value="">未設定</option>
-                {staffOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </SelectField>
-              <Field label="初回指定年月日" type="date" value={office.initial_designation_date || ''} onChange={(v) => updateOffice('initial_designation_date', v)} />
-              <Field label="指定有効期限" type="date" value={office.designation_expiry_date || ''} onChange={(v) => updateOffice('designation_expiry_date', v)} />
-              <Field label="地域区分" value={office.regional_category || ''} onChange={(v) => updateOffice('regional_category', v)} />
-              <div className="md:col-span-2 lg:col-span-3">
-                <label className="block text-xs font-black text-slate-500 mb-2">主たる対象者</label>
-                <div className="flex flex-wrap gap-2">
-                  {disabilityKeys.map(([key, label]) => {
-                    const checked = !!office.target_disabilities?.[key];
-                    return (
-                      <button key={key} type="button" onClick={() => updateOffice('target_disabilities', { ...(office.target_disabilities || {}), [key]: !checked })} className={`px-3 py-2 rounded-xl text-xs font-bold border ${checked ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'}`}>{label}</button>
-                    );
-                  })}
+            <div className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+              <SectionTitle title="サービス設定" description="受給者証・請求・配置基準と接続する提供サービス" />
+              <button type="button" onClick={addServiceItem} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-black hover:bg-indigo-700">
+                <Plus size={16} /> サービスを追加
+              </button>
+            </div>
+
+            <div className="space-y-6 mt-4">
+              {office.services?.map((service, index) => (
+                <div key={index} className="bg-slate-50 p-5 rounded-2xl border border-slate-200 relative space-y-4">
+                  <div className="flex items-center justify-between">
+                    <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-lg text-xs font-bold">
+                      サービス #{index + 1}
+                    </span>
+                    <button type="button" onClick={() => removeServiceItem(index)} className="text-rose-500 hover:text-rose-700 text-sm font-bold flex items-center gap-1">
+                      <X size={16} /> 削除
+                    </button>
+                  </div>
+                  
+                  <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <SelectField label="サービス種別" value={service.service_type_master_id || ''} onChange={(v) => handleServiceTypeChangeForIndex(index, Number(v))}>
+                      <option value="">未設定</option>
+                      {masters?.service_types.map((s) => <option key={s.id} value={s.id}>{s.service_name} {s.service_code ? `(${s.service_code})` : ''}</option>)}
+                    </SelectField>
+                    
+                    <Field label="事業所番号" value={service.jigyosho_bango || ''} onChange={(v) => updateServiceItem(index, { jigyosho_bango: v })} placeholder="10桁の事業所番号" />
+                    
+                    <Field label="定員" type="number" value={service.capacity || 0} onChange={(v) => updateServiceItem(index, { capacity: Number(v) })} />
+                    
+                    <SelectField label="サービス管理責任者" value={service.manager_supporter_id || ''} onChange={(v) => updateServiceItem(index, { manager_supporter_id: Number(v) || null })}>
+                      <option value="">未設定</option>
+                      {staffOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </SelectField>
+                    
+                    <Field label="初回指定年月日" type="date" value={service.initial_designation_date || ''} onChange={(v) => updateServiceItem(index, { initial_designation_date: v })} />
+                    
+                    <Field label="指定有効期限" type="date" value={service.designation_expiry_date || ''} onChange={(v) => updateServiceItem(index, { designation_expiry_date: v })} />
+                    
+                    <Field label="地域区分" value={service.regional_category || ''} onChange={(v) => updateServiceItem(index, { regional_category: v })} placeholder="例: 1級地" />
+                    
+                    <div className="md:col-span-2 lg:col-span-3">
+                      <label className="block text-xs font-black text-slate-500 mb-2">主たる対象者</label>
+                      <div className="flex flex-wrap gap-2">
+                        {disabilityKeys.map(([key, label]) => {
+                          const checked = !!service.target_disabilities?.[key];
+                          return (
+                            <button key={key} type="button" onClick={() => updateServiceItem(index, { target_disabilities: { ...(service.target_disabilities || {}), [key]: !checked } })} className={`px-3 py-2 rounded-xl text-xs font-bold border ${checked ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-500 border-slate-200'}`}>
+                              {label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    <label className="md:col-span-2 lg:col-span-3 block">
+                      <span className="block text-xs font-black text-slate-500 mb-1">協力医療機関</span>
+                      <textarea value={service.cooperating_medical_institution || ''} onChange={(e) => updateServiceItem(index, { cooperating_medical_institution: e.target.value })} className="w-full min-h-20 px-3 py-2 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
+                    </label>
+                  </div>
                 </div>
-              </div>
-              <label className="md:col-span-2 lg:col-span-3 block">
-                <span className="block text-xs font-black text-slate-500 mb-1">協力医療機関</span>
-                <textarea value={office.cooperating_medical_institution || ''} onChange={(e) => updateOffice('cooperating_medical_institution', e.target.value)} className="w-full min-h-24 px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
-              </label>
+              ))}
             </div>
 
             <div className="flex justify-end">
