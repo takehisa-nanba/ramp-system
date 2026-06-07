@@ -88,11 +88,24 @@ with app.app_context():
     
     # サービス種別と設定
     from backend.app.models import ServiceTypeMaster, OfficeServiceConfiguration
+    
+    services_to_seed = [
+        {'name': '就労移行支援', 'service_code': 'TRANSITION', 'required_review_months': 6},
+        {'name': '就労継続支援A型', 'service_code': 'CONTINUOUS_A', 'required_review_months': 6},
+        {'name': '就労継続支援B型', 'service_code': 'CONTINUOUS_B', 'required_review_months': 6},
+        {'name': '自立訓練（生活訓練）', 'service_code': 'TRAINING', 'required_review_months': 6},
+    ]
+    for s_info in services_to_seed:
+        st = ServiceTypeMaster.query.filter_by(service_code=s_info['service_code']).first()
+        if not st:
+            db.session.add(ServiceTypeMaster(
+                name=s_info['name'],
+                service_code=s_info['service_code'],
+                required_review_months=s_info['required_review_months']
+            ))
+    db.session.commit()
+    
     service_type = ServiceTypeMaster.query.filter_by(service_code='TRANSITION').first()
-    if not service_type:
-        service_type = ServiceTypeMaster(name='就労移行支援', service_code='TRANSITION', required_review_months=6)
-        db.session.add(service_type)
-        db.session.commit()
     
     service_config = OfficeServiceConfiguration.query.filter_by(office_id=office.id).first()
     if not service_config:

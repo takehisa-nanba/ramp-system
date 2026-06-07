@@ -190,6 +190,71 @@ const SettingsPage: React.FC = () => {
     setOffice((prev) => prev ? { ...prev, [key]: value } : prev);
   };
 
+  const handleServiceTypeChange = (serviceTypeMasterId: number | undefined) => {
+    if (!office || !masters) return;
+    if (!serviceTypeMasterId) {
+      updateOffice('service_type_master_id', undefined);
+      return;
+    }
+    
+    const selectedService = masters.service_types.find((s) => s.id === serviceTypeMasterId);
+    let updatedOffice = { ...office, service_type_master_id: serviceTypeMasterId };
+    
+    if (selectedService) {
+      switch (selectedService.service_code) {
+        case 'TRANSITION': // 就労移行支援
+          updatedOffice.capacity = 20;
+          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
+          updatedOffice.target_disabilities = {
+            physical: true,
+            intellectual: true,
+            mental: true,
+            developmental: true,
+            intractable: true
+          };
+          setFullTimeWeeklyHoursText('40');
+          break;
+        case 'CONTINUOUS_A': // 就労継続支援A型
+          updatedOffice.capacity = 10;
+          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
+          updatedOffice.target_disabilities = {
+            physical: true,
+            intellectual: true,
+            mental: true,
+            developmental: true,
+            intractable: true
+          };
+          setFullTimeWeeklyHoursText('40');
+          break;
+        case 'CONTINUOUS_B': // 就労継続支援B型
+          updatedOffice.capacity = 20;
+          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
+          updatedOffice.target_disabilities = {
+            physical: true,
+            intellectual: true,
+            mental: true,
+            developmental: true,
+            intractable: true
+          };
+          setFullTimeWeeklyHoursText('40');
+          break;
+        case 'TRAINING': // 自立訓練（生活訓練）
+          updatedOffice.capacity = 20;
+          updatedOffice.full_time_weekly_minutes = 2400; // 40時間
+          updatedOffice.target_disabilities = {
+            physical: false,
+            intellectual: true,
+            mental: true,
+            developmental: true,
+            intractable: true
+          };
+          setFullTimeWeeklyHoursText('40');
+          break;
+      }
+    }
+    setOffice(updatedOffice);
+  };
+
   const updateStaffForm = (key: keyof StaffForm, value: any) => {
     setStaffForm((prev) => prev ? { ...prev, [key]: value } : prev);
   };
@@ -300,7 +365,7 @@ const SettingsPage: React.FC = () => {
 
             <SectionTitle title="サービス設定" description="受給者証・請求・配置基準と接続する提供サービス" />
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <SelectField label="サービス種別" value={office.service_type_master_id || ''} onChange={(v) => updateOffice('service_type_master_id', Number(v) || undefined)}>
+              <SelectField label="サービス種別" value={office.service_type_master_id || ''} onChange={(v) => handleServiceTypeChange(Number(v) || undefined)}>
                 <option value="">未設定</option>
                 {masters?.service_types.map((s) => <option key={s.id} value={s.id}>{s.service_name} {s.service_code ? `(${s.service_code})` : ''}</option>)}
               </SelectField>
