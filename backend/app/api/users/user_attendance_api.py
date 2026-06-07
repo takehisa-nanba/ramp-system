@@ -5,7 +5,7 @@ GET /api/users/<user_id>/attendance-records
 from flask import jsonify
 from flask_jwt_extended import jwt_required
 from backend.app import db
-from backend.app.models import User, DailyLog
+from backend.app.models import User, UserDailyLog
 from backend.app.models.support.attendance_workflow import AttendanceRecord
 from sqlalchemy import func
 from . import users_bp
@@ -61,7 +61,7 @@ def get_user_attendance_records(user_id: int):
         att_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         
         # 同日の日報を探す
-        log = DailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
+        log = UserDailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
         if log:
             if log.log_status == 'COMPLETED':
                 info["daily_log_status"] = "completed"

@@ -5,7 +5,7 @@ GET /api/users/<user_id>/daily-logs
 from flask import jsonify, request
 from flask_jwt_extended import jwt_required
 from backend.app import db
-from backend.app.models import User, DailyLog, DailyLogActivity, Supporter
+from backend.app.models import User, UserDailyLog, SupportRecord, Supporter
 from . import users_bp
 
 
@@ -29,15 +29,17 @@ def get_user_daily_logs(user_id: int):
     limit = request.args.get('limit', 20, type=int)
     offset = request.args.get('offset', 0, type=int)
 
-    logs_query = DailyLog.query.filter_by(user_id=user_id)\
-        .order_by(DailyLog.log_date.desc())\
+    logs_query = UserDailyLog.query.filter_by(user_id=user_id)\
+        .order_by(UserDailyLog.log_date.desc())\
         .limit(limit).offset(offset).all()
 
     items = []
     for log in logs_query:
-        # 活動明細（支援記録）を取得
+        # その日の支援記録（SupportRecord）を取得
+        records = SupportRecord.query.filter_by(user_id=user_id, log_date=log.log_date)\
+            .order_by(SupportRecord.support_start_time.asc()).all()
         activities = []
-        for act in log.activities:
+        for act in records:
             supporter = db.session.get(Supporter, act.supporter_id)
             supporter_name = supporter.display_name if supporter and hasattr(supporter, 'display_name') else f"ID:{act.supporter_id}"
             activities.append({

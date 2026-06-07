@@ -128,22 +128,22 @@ class FinanceService:
 
     def _check_daily_validation(self, user_id: int, target_month: date) -> bool:
         """
-        支援実績整合性チェック第二段: その月の支援記録(DailyLog)が存在するか。
+        支援実績整合性チェック第二段: その月の支援記録(SupportRecord)が存在するか。
         """
-        from backend.app.models import DailyLog
+        from backend.app.models import SupportRecord
         if target_month.month == 12:
             next_month = target_month.replace(year=target_month.year + 1, month=1)
         else:
             next_month = target_month.replace(month=target_month.month + 1)
         month_end_date = next_month - timedelta(days=1)
 
-        logs_count = DailyLog.query.filter(
-            DailyLog.user_id == user_id,
-            DailyLog.log_date >= target_month,
-            DailyLog.log_date <= month_end_date
+        records_count = SupportRecord.query.filter(
+            SupportRecord.user_id == user_id,
+            SupportRecord.log_date >= target_month,
+            SupportRecord.log_date <= month_end_date
         ).count()
 
-        return logs_count > 0
+        return records_count > 0
     
     def check_support_consistency(self, user_id: int, target_month: date) -> dict:
         """

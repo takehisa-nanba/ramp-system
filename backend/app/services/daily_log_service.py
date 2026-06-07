@@ -1,5 +1,5 @@
 from backend.app.extensions import db
-from backend.app.models import StaffActivityMaster, DailyLog, DailyLogActivity, StaffActivityAllocationLog, User, IndividualSupportGoal, ShortTermGoal, LongTermGoal, SupportPlan, AuditActionLog
+from backend.app.models import StaffActivityMaster, UserDailyLog, SupportRecord, StaffActivityAllocationLog, User, IndividualSupportGoal, ShortTermGoal, LongTermGoal, SupportPlan, AuditActionLog
 from datetime import datetime, timezone
 import logging
 from backend.app.utils.errors import ValidationError
@@ -22,7 +22,7 @@ class DailyLogService:
     ):
         """
         日報（活動）を記録する。
-        直接支援ならDailyLogActivityへ、間接業務ならStaffActivityAllocationLogへ保存する。
+        直接支援ならSupportRecordへ、間接業務ならStaffActivityAllocationLogへ保存する。
         """
         tag = db.session.get(StaffActivityMaster, tag_id)
         if not tag:
@@ -32,36 +32,39 @@ class DailyLogService:
             if not user_id:
                 raise ValidationError("直接支援の場合、利用者の選択が必須です")
 
-            # 🛡️ 重複時間帯ガードレール
-            overlapping_activity = db.session.query(DailyLogActivity)\
-                .join(DailyLog, DailyLogActivity.daily_log_id == DailyLog.id)\
+            # 🛡️ 重複時間帯ガードレール (直接支援のみ)
+            # 支援記録(SupportRecord)に対して重複チェックを実施
+            overlapping_record = db.session.query(SupportRecord)\
                 .filter(
-                    DailyLogActivity.supporter_id == supporter_id,
-                    DailyLog.log_date == log_date,
-                    DailyLog.user_id != user_id,
-                    DailyLogActivity.support_start_time < end_time,
-                    start_time < DailyLogActivity.support_end_time
+                    SupportRecord.supporter_id == supporter_id,
+                    SupportRecord.log_date == log_date,
+                    SupportRecord.user_id != user_id,
+                    SupportRecord.support_record_type == 'DIRECT_SUPPORT',
+                    SupportRecord.support_start_time != None,
+                    SupportRecord.support_end_time != None,
+                    SupportRecord.support_start_time < end_time,
+                    start_time < SupportRecord.support_end_time
                 ).first()
 
-            if overlapping_activity:
-                other_user = db.session.get(User, overlapping_activity.daily_log.user_id)
+            if overlapping_record:
+                other_user = db.session.get(User, overlapping_record.user_id)
                 other_user_name = other_user.display_name if other_user else "他の利用者"
-                start_formatted = overlapping_activity.support_start_time.strftime('%H:%M') if overlapping_activity.support_start_time else "--:--"
-                end_formatted = overlapping_activity.support_end_time.strftime('%H:%M') if overlapping_activity.support_end_time else "--:--"
+                start_formatted = overlapping_record.support_start_time.strftime('%H:%M') if overlapping_record.support_start_time else "--:--"
+                end_formatted = overlapping_record.support_end_time.strftime('%H:%M') if overlapping_record.support_end_time else "--:--"
                 raise ValidationError(f"既に同時間帯（{start_formatted}〜{end_formatted}）に別の利用者（{other_user_name}様）の支援記録が登録されています。重複した時間帯での支援記録は作成できません。")
 
-            # 該当利用者の当日のDailyLogを探す（なければ作成）
-            daily_log = DailyLog.query.filter_by(user_id=user_id, log_date=log_date).first()
+            # 該当利用者の当日のUserDailyLogを探す（なければ自動作成）
+            daily_log = UserDailyLog.query.filter_by(user_id=user_id, log_date=log_date).first()
             if not daily_log:
-                daily_log = DailyLog(
+                daily_log = UserDailyLog(
                     user_id=user_id,
                     log_date=log_date,
                     location_type='ON_SITE', # デフォルト値
                     support_content_notes=notes if notes else '支援記録なし', 
-                    log_status=log_status
+                    log_status=log_status,
+                    auto_created=True,
+                    created_reason='support_record_compatibility'
                 )
-                # TODO: 永続化設計 - 将来的に DailyLog モデルに attendance_record_id カラムを追加し、ここで設定する:
-                # daily_log.attendance_record_id = attendance_record_id
                 db.session.add(daily_log)
                 db.session.flush() # ID確定
             else:
@@ -73,28 +76,35 @@ class DailyLogService:
                     else:
                         daily_log.support_content_notes = notes
                 
-            # 該当利用者の最新の目標を自動取得する（簡易化のため）
-            goal = db.session.query(IndividualSupportGoal)\
-                .join(ShortTermGoal)\
-                .join(LongTermGoal)\
-                .join(SupportPlan)\
-                .filter(SupportPlan.user_id == user_id)\
-                .filter(SupportPlan.plan_status == 'ACTIVE')\
-                .first()
-                
-            if not goal:
-                raise ValidationError("この利用者に有効な支援目標が見つかりません。活動を記録できません。")
+            # 該当利用者の最新のアクティブな支援計画・目標を自動取得する（任意）
+            plan = SupportPlan.query.filter_by(user_id=user_id, plan_status='ACTIVE').first()
+            plan_id = plan.id if plan else None
+            
+            goal = None
+            if plan:
+                goal = db.session.query(IndividualSupportGoal)\
+                    .join(ShortTermGoal)\
+                    .join(LongTermGoal)\
+                    .filter(LongTermGoal.plan_id == plan.id)\
+                    .first()
+            goal_id = goal.id if goal else None
 
-            activity = DailyLogActivity(
-                daily_log_id=daily_log.id,
+            # 支援記録(SupportRecord)を作成
+            record = SupportRecord(
+                user_id=user_id,
+                log_date=log_date,
                 supporter_id=supporter_id, 
-                support_goal_id=goal.id, 
-                support_content=f"[{tag.activity_name}] {notes}",
                 support_start_time=start_time,
-                support_end_time=end_time
+                support_end_time=end_time,
+                support_record_type='DIRECT_SUPPORT',
+                support_plan_id=plan_id,
+                support_goal_id=goal_id,
+                support_content=f"[{tag.activity_name}] {notes}"
             )
 
-            db.session.add(activity)
+            db.session.add(record)
+            db.session.flush() # record.id 確定
+            entity_id = record.id
 
         else:
             # 間接業務として保存
@@ -114,14 +124,16 @@ class DailyLogService:
                     allocated_minutes=duration_minutes
                 )
                 db.session.add(allocation)
+                db.session.flush()
+            entity_id = allocation.id
                 
         audit_log = AuditActionLog(
             action="CREATE_DAILY_LOG",
             user_id=user_id,
             actor_supporter_id=supporter_id,
-            entity_type="DailyLog",
-            entity_id=daily_log.id if tag.is_direct_support else allocation.id,
-            reason=f"Daily log recorded for tag {tag_id} by supporter {supporter_id}."
+            entity_type="SupportRecord" if tag.is_direct_support else "StaffActivityAllocationLog",
+            entity_id=entity_id,
+            reason=f"Support record recorded for tag {tag_id} by supporter {supporter_id}."
         )
         db.session.add(audit_log)
         

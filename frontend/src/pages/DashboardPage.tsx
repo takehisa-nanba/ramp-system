@@ -36,7 +36,7 @@ const DashboardPage: React.FC = () => {
     },
     {
       id: 'incomplete-daily-logs',
-      title: '未完了日報',
+      title: '未完了の支援記録',
       value: summary.pending_daily_logs,
       detail: summary.pending_daily_logs > 0 ? '至急対応推奨' : '対応不要',
       icon: <FileText className="w-8 h-8 text-amber-600" />,
@@ -47,7 +47,7 @@ const DashboardPage: React.FC = () => {
       id: 'action-items',
       title: '管理確認事項',
       value: summary.action_items,
-      detail: '未完了日報・期限超過等の合計',
+      detail: '未完了の支援記録・期限超過等の合計',
       icon: <AlertCircle className="w-8 h-8 text-rose-600" />,
       colorClass: summary.action_items > 0 ? 'bg-rose-50 border-rose-100' : 'bg-slate-50 border-slate-100',
       path: '/action-items',

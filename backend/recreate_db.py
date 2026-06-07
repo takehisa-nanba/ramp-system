@@ -25,8 +25,14 @@ with app.app_context():
                 
     # Drop all tables first for a clean recreate
     try:
-        db.drop_all()
-        print("Dropped all existing tables successfully")
+        if db_uri.startswith('postgresql'):
+            from sqlalchemy import text
+            db.session.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+            db.session.commit()
+            print("Dropped public schema via CASCADE successfully")
+        else:
+            db.drop_all()
+            print("Dropped all existing tables successfully")
     except Exception as e:
         print(f"Could not drop tables: {e}")
             

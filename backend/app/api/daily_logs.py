@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
-from backend.app.models import StaffActivityMaster, DailyLog, DailyLogActivity, StaffActivityAllocationLog, User
+from backend.app.models import StaffActivityMaster, UserDailyLog, SupportRecord, StaffActivityAllocationLog, User
 from datetime import datetime, date, timedelta, timezone
 try:
     from zoneinfo import ZoneInfo
@@ -102,11 +102,10 @@ def get_today_timeline():
     today = datetime.now(JST).date()
     
     # 直接支援の取得
-    # 自分が担当したActivityをすべて取得
-    direct_activities = db.session.query(DailyLogActivity, User.display_name)\
-        .join(DailyLog, DailyLogActivity.daily_log_id == DailyLog.id)\
-        .join(User, DailyLog.user_id == User.id)\
-        .filter(DailyLog.log_date == today, DailyLogActivity.supporter_id == supporter_id)\
+    # 自分が担当したSupportRecordをすべて取得
+    direct_activities = db.session.query(SupportRecord, User.display_name)\
+        .join(User, SupportRecord.user_id == User.id)\
+        .filter(SupportRecord.log_date == today, SupportRecord.supporter_id == supporter_id)\
         .all()
 
         

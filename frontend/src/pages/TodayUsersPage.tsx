@@ -84,20 +84,20 @@ const TodayUsersPage: React.FC = () => {
     if (item.daily_log_status === 'missing') {
       return (
         <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
-          <AlertTriangle className="w-3.5 h-3.5" /> 日報 未作成
+          <AlertTriangle className="w-3.5 h-3.5" /> 支援記録 未作成
         </span>
       );
     }
     if (item.daily_log_status === 'draft') {
       return (
         <span className="flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50/50 border border-amber-100 px-3 py-1.5 rounded-full">
-          <FileEdit className="w-3.5 h-3.5" /> 日報 下書き
+          <FileEdit className="w-3.5 h-3.5" /> 支援記録 下書き
         </span>
       );
     }
     return (
       <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
-        <CheckCircle className="w-3.5 h-3.5" /> 日報 完了
+        <CheckCircle className="w-3.5 h-3.5" /> 支援記録 完了
       </span>
     );
   };
@@ -139,7 +139,7 @@ const TodayUsersPage: React.FC = () => {
           本日の利用状況
         </h1>
         <p className="text-slate-500 mt-2 font-medium">
-          本日来所している利用者の打刻実績と、日報の記録状況です。未処理の記録から優先して表示されます。
+          本日来所している利用者の打刻実績と、支援記録の登録状況です。未処理の記録から優先して表示されます。
         </p>
       </div>
 
@@ -181,7 +181,7 @@ const TodayUsersPage: React.FC = () => {
               <AlertTriangle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 未作成</p>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">支援記録 未作成</p>
               <p className="text-2xl font-black text-amber-600 mt-0.5">{stats.missing} <span className="text-sm font-bold text-slate-400">件</span></p>
             </div>
           </div>
@@ -201,7 +201,7 @@ const TodayUsersPage: React.FC = () => {
               <FileEdit className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 下書き</p>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">支援記録 下書き</p>
               <p className="text-2xl font-black text-blue-600 mt-0.5">{stats.draft} <span className="text-sm font-bold text-slate-400">件</span></p>
             </div>
           </div>
@@ -221,7 +221,7 @@ const TodayUsersPage: React.FC = () => {
               <CheckCircle className="w-6 h-6" />
             </div>
             <div>
-              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">日報 完了</p>
+              <p className="text-xs font-black text-slate-400 uppercase tracking-wider">支援記録 完了</p>
               <p className="text-2xl font-black text-emerald-600 mt-0.5">{stats.completed} <span className="text-sm font-bold text-slate-400">件</span></p>
             </div>
           </div>
@@ -233,9 +233,9 @@ const TodayUsersPage: React.FC = () => {
         <div className="mb-4 flex items-center justify-between bg-slate-100/80 px-4 py-2.5 rounded-xl border border-slate-200 animate-in fade-in slide-in-from-top-2 duration-200">
           <p className="text-xs font-bold text-slate-600">
             フィルター適用中: <span className="text-slate-800 font-black">
-              {selectedFilter === 'missing' && '日報 未作成'}
-              {selectedFilter === 'draft' && '日報 下書き'}
-              {selectedFilter === 'completed' && '日報 完了'}
+              {selectedFilter === 'missing' && '支援記録 未作成'}
+              {selectedFilter === 'draft' && '支援記録 下書き'}
+              {selectedFilter === 'completed' && '支援記録 完了'}
             </span> のみ表示中 ({filteredAndSortedItems.length}名 / 全{items.length}名中)
           </p>
           <button
@@ -311,7 +311,7 @@ const TodayUsersPage: React.FC = () => {
                   >
                     {item.daily_log_status === 'missing' && '記録する'}
                     {item.daily_log_status === 'draft' && '続きから記録'}
-                    {item.daily_log_status === 'completed' && '日報を確認'}
+                    {item.daily_log_status === 'completed' && '支援記録を確認'}
                     <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>

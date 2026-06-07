@@ -68,6 +68,7 @@ class SupportPlan(db.Model):
         lazy='dynamic'
     )
     billings = db.relationship('BillingData', back_populates='support_plan', lazy='dynamic', cascade="all, delete-orphan")
+    support_records = db.relationship('SupportRecord', back_populates='support_plan', lazy='dynamic')
 
     long_term_goals = db.relationship('LongTermGoal', back_populates='plan', cascade="all, delete-orphan")
     conferences = db.relationship('SupportConferenceLog', back_populates='plan', lazy='dynamic', cascade="all, delete-orphan")
@@ -147,8 +148,7 @@ class IndividualSupportGoal(db.Model):
     is_work_preparation_positioning = Column(Boolean, default=False, nullable=False)
     
     short_term_goal = db.relationship('ShortTermGoal', back_populates='individual_goals')
-    daily_activities = db.relationship('DailyLogActivity', back_populates='individual_support_goal', lazy='dynamic', cascade="all, delete-orphan")
-    daily_activities = db.relationship('DailyLogActivity', back_populates='individual_support_goal', lazy='dynamic', cascade="all, delete-orphan")
+    support_records = db.relationship('SupportRecord', back_populates='individual_support_goal', lazy='dynamic', cascade="all, delete-orphan")
 
 # ====================================================================
 # 5. SupportConferenceLog (支援会議ログ / 議事録)

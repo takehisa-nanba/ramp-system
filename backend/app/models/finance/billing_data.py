@@ -14,7 +14,7 @@ class BillingData(db.Model):
     
     # 請求根拠 (Plan-Activity ガードレール)
     plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True, index=True)
-    daily_log_id = Column(Integer, ForeignKey('daily_logs.id'), nullable=True, index=True)
+    user_daily_log_id = Column(Integer, ForeignKey('user_daily_logs.id'), nullable=True, index=True)
     
     # 請求詳細
     service_type = Column(String(50), nullable=False)
@@ -30,4 +30,4 @@ class BillingData(db.Model):
     
     user = db.relationship('User', back_populates='billings')
     support_plan = db.relationship('SupportPlan', back_populates='billings')
-    daily_log = db.relationship('DailyLog', back_populates='billing_data')
+    user_daily_log = db.relationship('UserDailyLog', back_populates='billing_data')

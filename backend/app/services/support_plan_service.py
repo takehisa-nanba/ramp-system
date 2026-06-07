@@ -5,7 +5,7 @@ from backend.app.models import (
     User, Supporter, 
     SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
     SupportConferenceLog, DocumentConsentLog,
-    DailyLog,
+    UserDailyLog,
     HolisticSupportPolicy,
     ServiceTypeMaster, # 法定期間取得用
     AbsenceResponseLog, # 不在時の証拠取得用

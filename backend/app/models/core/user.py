@@ -70,7 +70,8 @@ class User(db.Model):
 
     # --- 支援プロセスの子テーブル ---
     support_plans = db.relationship('SupportPlan', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
-    daily_logs = db.relationship('DailyLog', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    user_daily_logs = db.relationship('UserDailyLog', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
+    support_records = db.relationship('SupportRecord', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")
 
     # --- 請求・会計の子テーブル ---
     billings = db.relationship('BillingData', back_populates='user', lazy='dynamic', cascade="all, delete-orphan")

@@ -7,7 +7,7 @@ export const UserHistoryTab: React.FC = () => {
       id: 1,
       date: '2026/06/05',
       type: 'daily_log',
-      title: '日報を記録',
+      title: '支援記録を登録',
       user: '山田 太郎',
       icon: <Edit3 className="w-4 h-4" />,
       color: 'bg-blue-100 text-blue-600'

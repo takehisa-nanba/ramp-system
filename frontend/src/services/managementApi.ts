@@ -7,6 +7,7 @@ export interface JobAssignment {
   job_title_id: number;
   title_name?: string;
   assigned_minutes: number;
+  assigned_hours_text?: string;
   office_service_configuration_id?: number;
   is_deemed_assignment?: boolean;
   deemed_expiry_date?: string | null;
@@ -54,6 +55,7 @@ export interface Role {
   id: number;
   name: string;
   scope: 'JOB' | 'CORPORATE' | 'SYSTEM';
+  is_admin?: boolean;
 }
 
 export interface OfficeService {

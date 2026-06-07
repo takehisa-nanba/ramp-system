@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
-from backend.app.models import User, AttendanceRecord, DailyLog, IndividualSupportGoal, SupportPlan, UserDailyLogSetting
+from backend.app.models import User, AttendanceRecord, UserDailyLog, IndividualSupportGoal, SupportPlan, UserDailyLogSetting
 
 from datetime import datetime
 try:
@@ -37,7 +37,7 @@ def get_user_status():
         status = "CLOCKED_IN" if last_record.record_type == 'CHECK_IN' else "CLOCKED_OUT"
         
     # 本日の日報を取得
-    daily_log = DailyLog.query.filter_by(user_id=user_id, log_date=today).first()
+    daily_log = UserDailyLog.query.filter_by(user_id=user_id, log_date=today).first()
     
     # 事業所の設定を取得
 
@@ -100,7 +100,7 @@ def submit_daily_log():
     data = request.get_json() or {}
     today = datetime.now(JST).date()
     
-    daily_log = DailyLog.query.filter_by(user_id=user_id, log_date=today).first()
+    daily_log = UserDailyLog.query.filter_by(user_id=user_id, log_date=today).first()
     
     physical_condition = data.get('physical_condition_score')
     sleep_quality = data.get('sleep_quality_score')
@@ -108,7 +108,7 @@ def submit_daily_log():
     custom_data = data.get('custom_data', {})
     
     if not daily_log:
-        daily_log = DailyLog(
+        daily_log = UserDailyLog(
             user_id=user_id,
             log_date=today,
             location_type='ON_SITE',

@@ -62,7 +62,8 @@ def me():
         "user_id": user_id,
         "role_name": claims.get('role_name'),
         "full_name": claims.get('full_name'),
-        "role_scopes": claims.get('role_scopes', [])
+        "role_scopes": claims.get('role_scopes', []),
+        "permissions": claims.get('permissions', [])
     }), 200
 
 @auth_bp.route('/salaries', methods=['GET'])

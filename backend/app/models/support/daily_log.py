@@ -1,17 +1,17 @@
-# backend/app/models/support_process/daily_log.py
+# backend/app/models/support/daily_log.py
 
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Date, ForeignKey, DateTime, Text, Boolean, func
 
 # ====================================================================
-# 1. DailyLog (サービス提供記録 - 親)
+# 1. UserDailyLog (利用者の作業日報)
 # ====================================================================
-class DailyLog(db.Model):
+class UserDailyLog(db.Model):
     """
-    日報（サービス提供記録）。請求の基点となる最小単位。
-    利用者の実態と、職員の記録の「親」となる。
+    利用者の作業日報。1日1件。
+    体調、自己評価、生産活動実績などを保持する。
     """
-    __tablename__ = 'daily_logs'
+    __tablename__ = 'user_daily_logs'
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     log_date = Column(Date, nullable=False, index=True)
@@ -36,49 +36,57 @@ class DailyLog(db.Model):
     # --- 入力完了フラグ ---
     morning_completed = Column(Boolean, default=False)
     evening_completed = Column(Boolean, default=False)
-
     
     # --- 財産化（原理5：失敗の構造化）---
     failure_factor_id = Column(Integer, ForeignKey('failure_factor_master.id'))
     challenge_analysis_notes = Column(Text) 
     heartwarming_episode = Column(Text)
+
+    # --- ⚠️ 自動生成メタデータ ---
+    auto_created = Column(Boolean, default=False)
+    created_reason = Column(String(100))
     
     # --- リレーションシップ ---
-    activities = db.relationship('DailyLogActivity', back_populates='daily_log', cascade="all, delete-orphan")
-    break_records = db.relationship('BreakRecord', back_populates='daily_log', lazy='dynamic', cascade="all, delete-orphan")
-    productivity_logs = db.relationship('DailyProductivityLog', back_populates='daily_log', lazy='dynamic', cascade="all, delete-orphan")
-    user = db.relationship('User', back_populates='daily_logs')
-    billing_data = db.relationship('BillingData', back_populates='daily_log', uselist=False) # 1:1
-    failure_factor = db.relationship('FailureFactorMaster', back_populates='daily_logs')
+    break_records = db.relationship('BreakRecord', back_populates='user_daily_log', lazy='dynamic', cascade="all, delete-orphan")
+    productivity_logs = db.relationship('DailyProductivityLog', back_populates='user_daily_log', lazy='dynamic', cascade="all, delete-orphan")
+    user = db.relationship('User', back_populates='user_daily_logs')
+    billing_data = db.relationship('BillingData', back_populates='user_daily_log', uselist=False) # 1:1
+    failure_factor = db.relationship('FailureFactorMaster', back_populates='user_daily_logs')
 
 # ====================================================================
-# 2. DailyLogActivity (活動実績 - 変動費請求の根拠)
+# 2. SupportRecord (支援記録)
 # ====================================================================
-class DailyLogActivity(db.Model):
+class SupportRecord(db.Model):
     """
-    日報に紐づく具体的な活動実績。変動費請求の根拠となる最小単位。
+    利用者に対する具体的な支援記録。
+    同じ日付に複数登録可能で、目標紐付けは任意。
     """
-    __tablename__ = 'daily_log_activities'
+    __tablename__ = 'support_records'
     id = Column(Integer, primary_key=True)
-    daily_log_id = Column(Integer, ForeignKey('daily_logs.id'), nullable=False)
-    
-    # --- 請求ファクト ---
-    support_goal_id = Column(Integer, ForeignKey('individual_support_goals.id'), nullable=False) 
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    log_date = Column(Date, nullable=False, index=True)
     supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False)
     
-    # 時間実績
-    support_start_time = Column(DateTime, nullable=False)
-    support_end_time = Column(DateTime, nullable=False)
+    # 時間実績 (直接支援などの場合は時間が入るが、欠席連絡などは空もあり得るため nullable=True)
+    support_start_time = Column(DateTime, nullable=True)
+    support_end_time = Column(DateTime, nullable=True)
     
-    # 加算対象の時間 (個別の活動で時間計測)
-    work_preparation_minutes = Column(Integer, default=0) 
+    # 支援の種別
+    support_record_type = Column(String(30), nullable=False, default='DIRECT_SUPPORT')
     
-    support_content = Column(Text, nullable=False) # 個別の活動内容
+    # 紐づく計画・目標 (任意)
+    support_plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True)
+    support_goal_id = Column(Integer, ForeignKey('individual_support_goals.id'), nullable=True)
+    
+    support_content = Column(Text, nullable=False) # 支援内容・詳細
+    decision_reason = Column(Text)                 # 判断理由等 (オプション)
+    observation_note = Column(Text)                # 観察事項等 (オプション)
     
     # --- リレーションシップ ---
-    daily_log = db.relationship('DailyLog', back_populates='activities')
+    user = db.relationship('User', back_populates='support_records')
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
-    individual_support_goal = db.relationship('IndividualSupportGoal', back_populates='daily_activities')
+    support_plan = db.relationship('SupportPlan', back_populates='support_records')
+    individual_support_goal = db.relationship('IndividualSupportGoal', back_populates='support_records')
 
 # ====================================================================
 # 3. BreakRecord (休憩記録)
@@ -87,12 +95,12 @@ class BreakRecord(db.Model):
     """個別の休憩記録"""
     __tablename__ = 'break_records'
     id = Column(Integer, primary_key=True)
-    daily_log_id = Column(Integer, ForeignKey('daily_logs.id'), nullable=False, index=True)
+    user_daily_log_id = Column(Integer, ForeignKey('user_daily_logs.id'), nullable=False, index=True)
     
     break_start_time = Column(DateTime, nullable=False)
     break_end_time = Column(DateTime)
     
-    daily_log = db.relationship('DailyLog', back_populates='break_records')
+    user_daily_log = db.relationship('UserDailyLog', back_populates='break_records')
 
 
 # ====================================================================
@@ -101,13 +109,11 @@ class BreakRecord(db.Model):
 class DailyProductivityLog(db.Model):
     """
     A型・B型の生産活動実績。
-    DailyLog（親）にも失敗分析機能がついたが、
-    製品ごとの厳密な不良数管理のためにこのモデルは維持する。
     """
     __tablename__ = 'daily_productivity_logs'
     
     id = Column(Integer, primary_key=True)
-    daily_log_id = Column(Integer, ForeignKey('daily_logs.id'), nullable=False, index=True)
+    user_daily_log_id = Column(Integer, ForeignKey('user_daily_logs.id'), nullable=False, index=True)
     
     product_id = Column(Integer, ForeignKey('product_master.id'), nullable=False)
     
@@ -120,6 +126,6 @@ class DailyProductivityLog(db.Model):
     rejection_analysis_notes = Column(Text) 
     is_repaired = Column(Boolean, default=False) 
     
-    daily_log = db.relationship('DailyLog', back_populates='productivity_logs')
+    user_daily_log = db.relationship('UserDailyLog', back_populates='productivity_logs')
     product = db.relationship('ProductMaster')
     failure_factor = db.relationship('FailureFactorMaster')

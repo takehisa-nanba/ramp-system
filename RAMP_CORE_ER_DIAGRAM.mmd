@@ -8,9 +8,9 @@ erDiagram
     LONG_TERM_GOALS ||--o{ SHORT_TERM_GOALS : "短期目標"
     SHORT_TERM_GOALS ||--o{ INDIVIDUAL_SUPPORT_GOALS : "個別支援目標"
 
-    USERS ||--o{ DAILY_LOGS : "日報"
-    DAILY_LOGS ||--o{ DAILY_LOG_ACTIVITIES : "活動実績"
-    INDIVIDUAL_SUPPORT_GOALS ||--o{ DAILY_LOG_ACTIVITIES : "目標に紐づく支援"
+    USERS ||--o{ USER_DAILY_LOGS : "作業日報"
+    USERS ||--o{ SUPPORT_RECORDS : "支援記録"
+    INDIVIDUAL_SUPPORT_GOALS ||--o{ SUPPORT_RECORDS : "目標に紐づく支援"
 
     SUPPORT_PLANS ||--o{ MONITORING_REPORTS : "モニタリング"
 
@@ -18,16 +18,16 @@ erDiagram
     CASE_CONFERENCE_LOGS ||--o{ CASE_CONFERENCE_PARTICIPANTS : "参加者"
 
     USERS ||--o{ ATTENDANCE_RECORDS : "出欠実績"
-    DAILY_LOGS ||--o| ABSENCE_RESPONSE_LOGS : "欠席時対応"
+    USER_DAILY_LOGS ||--o| ABSENCE_RESPONSE_LOGS : "欠席時対応"
     SUPPORT_PLANS ||--o{ ABSENCE_RESPONSE_LOGS : "計画に基づく対応"
 
     USERS ||--o{ BILLING_DATA : "請求根拠"
     SUPPORT_PLANS ||--o{ BILLING_DATA : "計画根拠"
-    DAILY_LOGS ||--o| BILLING_DATA : "日報根拠"
+    USER_DAILY_LOGS ||--o| BILLING_DATA : "日報根拠"
 
     SUPPORTERS ||--|| SUPPORTER_PII : "職員PII"
     SUPPORTERS ||--o{ USERS : "主担当"
-    SUPPORTERS ||--o{ DAILY_LOG_ACTIVITIES : "支援実施者"
+    SUPPORTERS ||--o{ SUPPORT_RECORDS : "支援実施者"
     SUPPORTERS ||--o{ MONITORING_REPORTS : "実施者"
     SUPPORTERS ||--o{ CASE_CONFERENCE_LOGS : "主催者"
     SUPPORTERS ||--o{ CASE_CONFERENCE_PARTICIPANTS : "参加"

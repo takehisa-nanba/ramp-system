@@ -35,6 +35,7 @@ with app.app_context():
         {'title_name': '生活支援員', 'is_management': False, 'is_qualified': False},
         {'title_name': '職業指導員', 'is_management': False, 'is_qualified': False},
         {'title_name': '就労支援員', 'is_management': False, 'is_qualified': False},
+        {'title_name': '事務員', 'is_management': False, 'is_qualified': False},
     ]
     for jt in job_titles_seed:
         if not JobTitleMaster.query.filter_by(title_name=jt['title_name']).first():
@@ -133,6 +134,9 @@ with app.app_context():
         {'name': 'EDIT_PII', 'desc': '個人情報の編集'},
         {'name': 'EXPORT_PII', 'desc': '個人情報の出力'},
         {'name': 'VIEW_AUDIT_LOG', 'desc': '監査ログの閲覧'},
+        {'name': 'VIEW_STAFF', 'desc': '職員情報の閲覧'},
+        {'name': 'CREATE_STAFF', 'desc': '職員情報の登録'},
+        {'name': 'EDIT_STAFF', 'desc': '職員情報の編集'},
     ]
     perm_objs = {}
     for p in permissions:
@@ -144,28 +148,26 @@ with app.app_context():
     db.session.commit()
 
     roles = [
-        {'name': '一般支援員', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'VIEW_PII']},
-        {'name': 'サービス管理責任者', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'VIEW_PII', 'EDIT_PII']},
-        {'name': '事業所管理者', 'scope': 'JOB', 'perms': 'ALL'},
-        {'name': '法人管理者', 'scope': 'CORPORATE', 'perms': 'ALL'},
-        {'name': 'システム管理者', 'scope': 'SYSTEM', 'perms': 'ALL'},
-        {'name': '事務員', 'scope': 'STAFF', 'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']},
-        {'name': '監査担当', 'scope': 'SYSTEM', 'perms': ['VIEW', 'VIEW_AUDIT_LOG']},
+        {'name': '法人管理者', 'scope': 'CORPORATE', 'is_admin': True, 'perms': 'ALL'},
+        {'name': 'システム管理者', 'scope': 'SYSTEM', 'is_admin': True, 'perms': 'ALL'},
+        {'name': '監査担当', 'scope': 'SYSTEM', 'is_admin': False, 'perms': ['VIEW', 'VIEW_AUDIT_LOG']},
     ]
     role_objs = []
-    staff_role_obj = None
     for r in roles:
         obj = RoleMaster.query.filter_by(name=r['name']).first()
         if not obj:
-            obj = RoleMaster(name=r['name'], role_scope=r['scope'])
-            if r['perms'] == 'ALL':
-                obj.permissions = list(perm_objs.values())
-            else:
-                obj.permissions = [perm_objs[pname] for pname in r['perms'] if pname in perm_objs]
+            obj = RoleMaster(name=r['name'], role_scope=r['scope'], is_admin=r['is_admin'])
             db.session.add(obj)
+        else:
+            obj.role_scope = r['scope']
+            obj.is_admin = r['is_admin']
+        
+        # 既存・新規に関わらずパーミッション設定を同期する
+        if r['perms'] == 'ALL':
+            obj.permissions = list(perm_objs.values())
+        else:
+            obj.permissions = [perm_objs[pname] for pname in r['perms'] if pname in perm_objs]
         role_objs.append(obj)
-        if r['scope'] == 'STAFF':
-            staff_role_obj = obj
     db.session.commit()
 
     # 4. 支援員 (Admin)
@@ -177,17 +179,32 @@ with app.app_context():
           hire_date=date.today(), employment_type='FULL_TIME',
           weekly_scheduled_minutes=2400, is_active=True, office_id=office.id
       )
-      # 3つの異なる操作レイヤー（システム・法人・事業所）それぞれの管理ロールを同時に付与（多層ロール設計）
-      admin.roles = [r for r in role_objs if r.role_scope in ('SYSTEM', 'CORPORATE', 'JOB')]
+      admin.roles = [r for r in role_objs if r.role_scope in ('SYSTEM', 'CORPORATE') and r.is_admin]
       db.session.add(admin)
       db.session.commit()
+
+      # admin-001 に実務上の「管理者」職種をアタッチ
+      admin_title = JobTitleMaster.query.filter_by(title_name='管理者').first()
+      if admin_title and service_config:
+          from backend.app.models import SupporterJobAssignment
+          assignment = SupporterJobAssignment(
+              supporter_id=admin.id,
+              job_title_id=admin_title.id,
+              office_service_configuration_id=service_config.id,
+              start_date=date.today(),
+              assigned_minutes=2400,
+              is_deemed_assignment=False
+          )
+          db.session.add(assignment)
+          db.session.commit()
+
       pii = SupporterPII(supporter_id=admin.id, email='admin@example.com')
       pii.set_password('password123')
       db.session.add(pii)
       db.session.commit()
     admin = Supporter.query.filter_by(staff_code='admin-001').first()
 
-    # 4-2. 一般支援員 (セキュリティロールを持たない一般ユーザー) の追加
+    # 4-2. 支援員 (セキュリティロールを持たない一般ユーザー) の追加
     pii_staff = SupporterPII.query.filter_by(email='staff@example.com').first()
     if not pii_staff:
         staff_user = Supporter(
@@ -196,11 +213,24 @@ with app.app_context():
             hire_date=date.today(), employment_type='FULL_TIME',
             weekly_scheduled_minutes=2400, is_active=True, office_id=office.id
         )
-        # 一般支援員ロールを付与
-        staff_user.roles = [staff_role_obj] if staff_role_obj else []
         db.session.add(staff_user)
         db.session.commit()
         
+        # 職務として「生活支援員」を割り当てる
+        staff_title = JobTitleMaster.query.filter_by(title_name='生活支援員').first()
+        if staff_title and service_config:
+            from backend.app.models import SupporterJobAssignment
+            assignment = SupporterJobAssignment(
+                supporter_id=staff_user.id,
+                job_title_id=staff_title.id,
+                office_service_configuration_id=service_config.id,
+                start_date=date.today(),
+                assigned_minutes=2400,
+                is_deemed_assignment=False
+            )
+            db.session.add(assignment)
+            db.session.commit()
+
         pii_staff = SupporterPII(supporter_id=staff_user.id, email='staff@example.com')
         pii_staff.set_password('password123')
         db.session.add(pii_staff)

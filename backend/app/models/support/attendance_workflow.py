@@ -100,8 +100,8 @@ class AbsenceResponseLog(db.Model):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     absence_date = Column(Date, nullable=False, index=True) # 欠席日
     
-    # 関連するDailyLog（あれば）
-    daily_log_id = Column(Integer, ForeignKey('daily_logs.id'), nullable=True, unique=True)
+    # 関連するUserDailyLog（あれば）
+    user_daily_log_id = Column(Integer, ForeignKey('user_daily_logs.id'), nullable=True, unique=True)
     
     # --- 対応の証跡（原理1） ---
     response_timestamp = Column(DateTime, default=func.now())
@@ -115,7 +115,7 @@ class AbsenceResponseLog(db.Model):
     linked_plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True, index=True)
 
     user = db.relationship('User')
-    daily_log = db.relationship('DailyLog')
+    user_daily_log = db.relationship('UserDailyLog')
     supporter = db.relationship('Supporter', foreign_keys=[response_supporter_id])
     # ★ 修正点: リレーションシップ定義の追加
     # (ここでは簡略化のため、既存のカラムをベースに修正)

@@ -12,6 +12,7 @@ export interface LoginResponse {
   role_name: string;
   full_name: string;
   role_scopes?: string[];
+  permissions?: string[];
 }
 
 
@@ -28,4 +29,5 @@ export interface AuthUser {
   roleId: number;
   roleName: string; // JWTのclaimsから取得されるロール名（例: '管理者', '利用者'）
   roleScopes?: string[];
+  permissions?: string[];
 }

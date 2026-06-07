@@ -63,7 +63,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         fullName: response.full_name,
         roleId: 0, // 互換性のため一旦0
         roleName: response.role_name,
-        roleScopes: response.role_scopes || []
+        roleScopes: response.role_scopes || [],
+        permissions: response.permissions || []
       };
 
 
@@ -115,7 +116,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           fullName: response.full_name,
           roleId: 0,
           roleName: response.role_name,
-          roleScopes: response.role_scopes || []
+          roleScopes: response.role_scopes || [],
+          permissions: response.permissions || []
         };
         
         setUser(restoredUser);

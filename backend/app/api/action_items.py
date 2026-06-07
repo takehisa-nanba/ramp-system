@@ -4,7 +4,7 @@ from flask_jwt_extended import jwt_required
 from datetime import date, datetime
 from backend.app import db
 from backend.app.models import (
-    User, SupportPlan, DailyLog, CaseConferenceLog, StatusMaster
+    User, SupportPlan, UserDailyLog, CaseConferenceLog, StatusMaster
 )
 
 action_items_bp = Blueprint('action_items', __name__, url_prefix='/api/action-items')
@@ -55,7 +55,7 @@ def get_action_items():
         check_in_at = att.timestamp.isoformat()
         
         # 同日の日報を探す
-        log = DailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
+        log = UserDailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
         
         if not log:
             # 日報自体が未作成

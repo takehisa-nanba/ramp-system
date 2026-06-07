@@ -1,5 +1,6 @@
 # backend/app/services/core_service.py
 
+from datetime import date
 from flask import current_app # ★この行をインポートに追加★
 from backend.app.extensions import db
 from backend.app.models import (
@@ -168,6 +169,25 @@ def check_permission(supporter_id, permission_name):
     if not supporter:
         return False
     
+    today = date.today()
+    # 職員が持つ職務割り当て（JobTitle）から、その職種に紐づくパーミッションを自動認可
+    for assignment in supporter.job_assignments:
+        if assignment.start_date and assignment.start_date > today:
+            continue
+        if assignment.end_date and assignment.end_date < today:
+            continue
+            
+        title = assignment.job_title.title_name if assignment.job_title else None
+        if title == '管理者':
+            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'DELETE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF', 'CREATE_STAFF', 'EDIT_STAFF']:
+                return True
+        elif title == 'サービス管理責任者':
+            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF']:
+                return True
+        elif title in ['生活支援員', '職業指導員', '就労支援員', '事務員']:
+            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']:
+                return True
+
     # 職員が持つ全てのロールから、権限セットを収集
     for role in supporter.roles:
         for perm in role.permissions:
@@ -244,4 +264,101 @@ def reconcile_relations(existing_items, incoming_payload, model_class, db_sessio
             
     # ペイロードに含まれていなかった既存レコードはDELETE
     for leftover in unmatched_existing:
-        db_session.delete(leftover)
+        db_session.delete(leftover)
+
+def validate_last_admin_protection(staff, data):
+    """
+    唯一の有効なシステム管理者(SYSTEM)または法人管理者(CORPORATE)が不在になるのを防ぐバリデーション。
+    """
+    from backend.app.models import Supporter, RoleMaster, OfficeSetting
+    from backend.app.utils.errors import ValidationError
+    from datetime import date, datetime
+    
+    # 新しい状態（is_active, retirement_date, role_ids）を取得。渡されていない場合は現在の値。
+    new_is_active = data.get('is_active', staff.is_active)
+    
+    new_ret_date = staff.retirement_date
+    if 'retirement_date' in data:
+        raw_val = data['retirement_date']
+        if raw_val:
+            if isinstance(raw_val, str):
+                try:
+                    new_ret_date = datetime.fromisoformat(raw_val).date()
+                except (ValueError, TypeError):
+                    new_ret_date = staff.retirement_date
+            else:
+                new_ret_date = raw_val
+        else:
+            new_ret_date = None
+ 
+    if 'role_ids' in data:
+        new_role_ids = data['role_ids']
+    else:
+        new_role_ids = [r.id for r in staff.roles]
+ 
+    today = date.today()
+    
+    is_now_valid_system = any(
+        r.role_scope == 'SYSTEM' and r.is_admin
+        for r in staff.roles
+    ) and staff.is_active and (staff.retirement_date is None or staff.retirement_date > today)
+    
+    is_now_valid_corporate = any(
+        r.role_scope == 'CORPORATE' and r.is_admin
+        for r in staff.roles
+    ) and staff.is_active and (staff.retirement_date is None or staff.retirement_date > today)
+
+    is_new_valid_system = False
+    is_new_valid_corporate = False
+    
+    if new_is_active and new_ret_date is None:
+        new_roles = RoleMaster.query.filter(RoleMaster.id.in_(new_role_ids)).all()
+        is_new_valid_system = any(
+            r.role_scope == 'SYSTEM' and r.is_admin
+            for r in new_roles
+        )
+        is_new_valid_corporate = any(
+            r.role_scope == 'CORPORATE' and r.is_admin
+            for r in new_roles
+        )
+
+    # 1. SYSTEM（システム全体）のラストワン保護
+    if is_now_valid_system and not is_new_valid_system:
+        other_active_system_count = Supporter.query.filter(
+            Supporter.id != staff.id,
+            Supporter.is_active == True,
+            (Supporter.retirement_date == None) | (Supporter.retirement_date > today)
+        ).filter(
+            Supporter.roles.any(
+                (RoleMaster.role_scope == 'SYSTEM') &
+                (RoleMaster.is_admin == True)
+            )
+        ).count()
+        
+        if other_active_system_count == 0:
+            raise ValidationError("システム全体で有効なSYSTEMロール保持者が不在になるため、この変更は行えません。別の職員に同管理者ロールを付与してから、再度お試しください。")
+
+    # 2. CORPORATE（法人内）のラストワン保護
+    if is_now_valid_corporate and not is_new_valid_corporate:
+        # 職員の所属する事業所経由で Corporation ID を特定
+        office = db.session.get(OfficeSetting, staff.office_id) if staff.office_id else None
+        corp_id = office.corporation_id if office else None
+        
+        if corp_id:
+            other_active_corp_count = Supporter.query.filter(
+                Supporter.id != staff.id,
+                Supporter.is_active == True,
+                (Supporter.retirement_date == None) | (Supporter.retirement_date > today)
+            ).filter(
+                Supporter.roles.any(
+                    (RoleMaster.role_scope == 'CORPORATE') &
+                    (RoleMaster.is_admin == True)
+                )
+            ).join(
+                OfficeSetting, Supporter.office_id == OfficeSetting.id
+            ).filter(
+                OfficeSetting.corporation_id == corp_id
+            ).count()
+            
+            if other_active_corp_count == 0:
+                raise ValidationError("法人内で有効なCORPORATEロール保持者が不在になるため、この変更は行えません。別の職員に同管理者ロールを付与してから、再度お試しください。")

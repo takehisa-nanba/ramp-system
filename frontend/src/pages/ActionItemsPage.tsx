@@ -35,7 +35,7 @@ const ActionItemsPage: React.FC = () => {
 
   const tabs = [
     { id: 'all', label: 'すべて' },
-    { id: 'daily_log', label: '日報' },
+    { id: 'daily_log', label: '支援記録' },
     { id: 'monitoring', label: '支援計画期限' },
     { id: 'approval', label: '承認待ち' },
     { id: 'case_conference', label: 'ケース会議' },

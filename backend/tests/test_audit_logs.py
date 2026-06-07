@@ -54,7 +54,7 @@ def test_soft_delete_creates_audit_log(app):
             
         admin_role = RoleMaster.query.filter_by(name='Admin Role').first()
         if not admin_role:
-            admin_role = RoleMaster(name='Admin Role', role_scope='SYSTEM')
+            admin_role = RoleMaster(name='Admin Role', role_scope='SYSTEM', is_admin=True)
             db.session.add(admin_role)
             admin_role.permissions.append(edit_pii_perm)
             

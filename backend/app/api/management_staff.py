@@ -19,12 +19,14 @@ def get_current_staff():
 @management_staff_bp.route('', methods=['GET'])
 @jwt_required()
 def list_staff():
+    from backend.app.services.core_service import check_permission
     current = get_current_staff()
     if not current: return jsonify({"msg": "Unauthorized"}), 401
-    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
-        return jsonify({"msg": "アクセス権限がありません。"}), 403
     
-    is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] for r in current.roles)
+    # 職員情報の詳細を閲覧するための権限チェック
+    has_view_staff = check_permission(f"staff:{current.id}", "VIEW_STAFF")
+    
+    is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] and r.is_admin for r in current.roles)
     
     query = Supporter.query.options(
         joinedload(Supporter.pii),
@@ -44,6 +46,26 @@ def list_staff():
             staff_members = query.filter_by(office_id=office_id).all()
         else:
             staff_members = []
+    
+    if not has_view_staff:
+        return jsonify([{
+            "id": s.id,
+            "name": f"{s.last_name} {s.first_name}",
+            "last_name": s.last_name,
+            "first_name": s.first_name,
+            "last_name_kana": s.last_name_kana,
+            "first_name_kana": s.first_name_kana,
+            "staff_code": s.staff_code,
+            "is_active": s.is_active,
+            "roles": [r.name for r in s.roles],
+            "role_ids": [r.id for r in s.roles],
+            "job_assignments": [],
+            "shift_patterns": [],
+            "email": "N/A",
+            "personal_phone": "",
+            "address": "",
+            "bank_account_info": ""
+        } for s in staff_members]), 200
     
     return jsonify([{
         "id": s.id,
@@ -88,16 +110,26 @@ def list_staff():
 def update_staff(staff_id):
     from backend.app.models import SupporterPII, RoleMaster, SupporterJobAssignment, OfficeServiceConfiguration
     from datetime import date
+    from backend.app.services.core_service import check_permission
     
     current = get_current_staff()
     if not current: return jsonify({"msg": "Unauthorized"}), 401
-    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
-        return jsonify({"msg": "アクセス権限がありません。"}), 403
+    if not check_permission(f"staff:{current.id}", "EDIT_STAFF"):
+        return jsonify({"msg": "アクセス権限がありません。必要な権限: EDIT_STAFF"}), 403
     
     staff = Supporter.query.get_or_404(staff_id)
+    
+    is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] and r.is_admin for r in current.roles)
+    if not is_global_admin:
+        if staff.office_id != current.office_id:
+            return jsonify({"msg": "他事業所の職員情報を編集する権限がありません。"}), 403
     data = request.get_json()
     
     try:
+        # ラストワン保護の検証
+        from backend.app.services.core_service import validate_last_admin_protection
+        validate_last_admin_protection(staff, data)
+
         if 'staff_code' in data and data['staff_code'] != staff.staff_code:
             if Supporter.query.filter_by(staff_code=data['staff_code']).first():
                 raise ValidationError(f"職員コード「{data['staff_code']}」は既に別のスタッフで使用されています")
@@ -246,10 +278,22 @@ def update_staff(staff_id):
         
     except AppError as e:
         db.session.rollback()
-        raise e
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": e.code,
+                "message": str(e)
+            }
+        }), e.status_code
     except Exception as e:
         db.session.rollback()
-        raise AppError(f"更新に失敗しました: {str(e)}", status_code=500)
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SYSTEM_ERROR",
+                "message": f"更新に失敗しました: {str(e)}"
+            }
+        }), 500
 
 @management_staff_bp.route('', methods=['POST'])
 @jwt_required()
@@ -257,11 +301,12 @@ def register_staff():
     from backend.app.models import SupporterPII, RoleMaster, SupporterJobAssignment, OfficeServiceConfiguration
     from backend.app.extensions import bcrypt
     from datetime import date
+    from backend.app.services.core_service import check_permission
     
     current = get_current_staff()
     if not current: return jsonify({"msg": "Unauthorized"}), 401
-    if not any(r.role_scope in ['SYSTEM', 'CORPORATE', 'JOB'] for r in current.roles):
-        return jsonify({"msg": "アクセス権限がありません。"}), 403
+    if not check_permission(f"staff:{current.id}", "CREATE_STAFF"):
+        return jsonify({"msg": "アクセス権限がありません。必要な権限: CREATE_STAFF"}), 403
     data = request.get_json()
     
     try:
@@ -397,20 +442,65 @@ def register_staff():
         
     except AppError as e:
         db.session.rollback()
-        raise e
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": e.code,
+                "message": str(e)
+            }
+        }), e.status_code
     except Exception as e:
         db.session.rollback()
-        raise AppError(f"登録に失敗しました: {str(e)}", status_code=500)
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SYSTEM_ERROR",
+                "message": f"登録に失敗しました: {str(e)}"
+            }
+        }), 500
 
 @management_staff_bp.route('/<int:staff_id>/roles', methods=['PUT'])
 @jwt_required()
 def update_staff_roles(staff_id):
-    data = request.get_json()
+    from backend.app.services.core_service import check_permission
+    current = get_current_staff()
+    if not current: return jsonify({"msg": "Unauthorized"}), 401
+    if not check_permission(f"staff:{current.id}", "EDIT_STAFF"):
+        return jsonify({"msg": "アクセス権限がありません。必要な権限: EDIT_STAFF"}), 403
+        
     staff = Supporter.query.get_or_404(staff_id)
     
+    is_global_admin = any(r.role_scope in ['SYSTEM', 'CORPORATE'] and r.is_admin for r in current.roles)
+    if not is_global_admin:
+        if staff.office_id != current.office_id:
+            return jsonify({"msg": "他事業所の職員情報を編集する権限がありません。"}), 403
+            
+    data = request.get_json()
     role_ids = data.get('role_ids', [])
-    new_roles = RoleMaster.query.filter(RoleMaster.id.in_(role_ids)).all()
     
-    staff.roles = new_roles
-    db.session.commit()
-    return jsonify({"msg": "Roles updated"}), 200
+    try:
+        from backend.app.services.core_service import validate_last_admin_protection
+        validate_last_admin_protection(staff, {"role_ids": role_ids})
+
+        new_roles = RoleMaster.query.filter(RoleMaster.id.in_(role_ids)).all()
+        staff.roles = new_roles
+        db.session.commit()
+        return jsonify({"msg": "Roles updated"}), 200
+    except AppError as e:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": e.code,
+                "message": str(e)
+            }
+        }), e.status_code
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SYSTEM_ERROR",
+                "message": f"ロールの更新に失敗しました: {str(e)}"
+            }
+        }), 500

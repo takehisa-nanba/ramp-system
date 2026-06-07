@@ -13,9 +13,9 @@ from backend.app.models import (
     Corporation, OfficeSetting, OfficeServiceConfiguration, ServiceUnitMaster, 
     BillingData,
     # Support/Process Models (Plan, Log, Timecard, Assignment)
-    SupportPlan, DailyLog, SupporterTimecard, SupporterJobAssignment,
+    SupportPlan, UserDailyLog, SupporterTimecard, SupporterJobAssignment,
     # 依存関係としてインポート (テスト内で直接使用しなくても定義が必要な場合がある)
-    LongTermGoal, ShortTermGoal, IndividualSupportGoal, DailyLogActivity, HolisticSupportPolicy 
+    LongTermGoal, ShortTermGoal, IndividualSupportGoal, SupportRecord, HolisticSupportPolicy 
 )
 from backend.app.services.finance_service import FinanceService
 from backend.app.services.support_plan_service import SupportPlanService
@@ -227,8 +227,14 @@ def test_support_consistency_missing_plan_creates_urac(app):
         user.primary_supporter_id = supporter.id
         session.commit()
         
-        # Setup DailyLog so the second check passes, and only the plan check fails
-        log = DailyLog(user_id=user.id, log_date=date(2025, 1, 15), location_type='ON_SITE', support_content_notes="Test")
+        # Setup SupportRecord so the second check passes, and only the plan check fails
+        log = SupportRecord(
+            user_id=user.id, 
+            log_date=date(2025, 1, 15), 
+            supporter_id=supporter.id, 
+            support_content="Test", 
+            support_record_type='DIRECT_SUPPORT'
+        )
         session.add(log)
         session.commit()
         
@@ -266,8 +272,14 @@ def test_support_consistency_duplicate_risk_increments_counter(app):
         user.primary_supporter_id = supporter.id
         session.commit()
         
-        # Setup DailyLog
-        log = DailyLog(user_id=user.id, log_date=date(2025, 1, 15), location_type='ON_SITE', support_content_notes="Test")
+        # Setup SupportRecord
+        log = SupportRecord(
+            user_id=user.id, 
+            log_date=date(2025, 1, 15), 
+            supporter_id=supporter.id, 
+            support_content="Test", 
+            support_record_type='DIRECT_SUPPORT'
+        )
         session.add(log)
         session.commit()
         

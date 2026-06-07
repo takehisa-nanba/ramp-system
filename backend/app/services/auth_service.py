@@ -18,7 +18,14 @@ def perform_login(login_id, password, user_type):
             identity = f"staff:{supporter.id}"
             full_name = f"{supporter.last_name} {supporter.first_name}"
             user_id = supporter.id
-            role_scopes = [r.role_scope for r in supporter.roles]
+            # role_scopes は互換用。実態は admin scopes (is_admin == True のロールスコープのみを含める)。
+            role_scopes = [r.role_scope for r in supporter.roles if r.is_admin]
+            permissions = []
+
+            for r in supporter.roles:
+                for p in r.permissions:
+                    if p.name not in permissions:
+                        permissions.append(p.name)
         else:
             return False, None, "Invalid credentials"
             
@@ -30,6 +37,7 @@ def perform_login(login_id, password, user_type):
             full_name = user.display_name
             user_id = user.id
             role_scopes = []
+            permissions = []
         else:
             return False, None, "Invalid credentials"
             
@@ -41,13 +49,15 @@ def perform_login(login_id, password, user_type):
         'claims': {
             "role_name": role_name,
             "full_name": full_name,
-            "role_scopes": role_scopes
+            "role_scopes": role_scopes,
+            "permissions": permissions
         },
         'response_data': {
             "user_id": user_id, 
             "role_name": role_name, 
             "full_name": full_name,
-            "role_scopes": role_scopes
+            "role_scopes": role_scopes,
+            "permissions": permissions
         }
     }
     

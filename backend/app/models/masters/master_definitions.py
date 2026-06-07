@@ -124,7 +124,7 @@ class FailureFactorMaster(db.Model):
     name = Column(String(100), nullable=False, unique=True) # 例: 個人要因, 環境要因, 指導要因
     description = Column(Text)
     productivity_logs = db.relationship('DailyProductivityLog', back_populates='failure_factor', lazy='dynamic')
-    daily_logs = db.relationship('DailyLog', back_populates='failure_factor', lazy='dynamic')
+    user_daily_logs = db.relationship('UserDailyLog', back_populates='failure_factor', lazy='dynamic')
     
 # ★ NEW: 問題の所在マスタ (IssueCategoryMaster) - ナレッジ共有用
 class IssueCategoryMaster(db.Model):
@@ -213,6 +213,7 @@ class RoleMaster(db.Model):
     id = Column(Integer, primary_key=True)
     name = Column(String(50), nullable=False, unique=True)
     role_scope = Column(String(20), nullable=False) # JOB, CORPORATE, SYSTEM
+    is_admin = Column(Boolean, default=False, nullable=False)
     sort_order = Column(Integer, default=0)
     supporters = db.relationship('Supporter', secondary=supporter_role_link, back_populates='roles')
     permissions = db.relationship('PermissionMaster', secondary=role_permission_link, back_populates='roles')

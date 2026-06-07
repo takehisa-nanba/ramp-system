@@ -3,7 +3,7 @@ from backend.app.models import (
     IncidentReport, ComplaintLog, 
     CommitteeActivityLog, TrainingLog, OfficeTrainingEvent,
     Supporter, CommitteeTypeMaster,
-    OfficeSetting, DailyLog, SupporterJobAssignment, # ★ 日次チェック用モデル
+    OfficeSetting, UserDailyLog, SupportRecord, SupporterJobAssignment, # ★ 日次チェック用モデル
     ComplianceEventLog, # ★ 減算監査ログ記録用
     UnresolvedRiskCounter # ★ リスクの可視化 (URAC) モデル
 )
@@ -121,14 +121,23 @@ class ComplianceService:
         OFFICE_CAPACITY = service_config.capacity if service_config and service_config.capacity else 20
         REQUIRED_STAFF_RATIO = 6.0 # 必要に応じて比率も設定から取得可能に拡張
         
-        # 1. 施設外活動の特定 (DailyLog)
-        off_site_logs = DailyLog.query.filter(
-            func.date(DailyLog.log_date) == target_date,
-            DailyLog.location_type.in_(['OFF_SITE_EXTERNAL', 'OFF_SITE_USER_HOME'])
+        # 1. 施設外活動の特定 (UserDailyLog & SupportRecord)
+        off_site_logs = UserDailyLog.query.filter(
+            func.date(UserDailyLog.log_date) == target_date,
+            UserDailyLog.location_type.in_(['OFF_SITE_EXTERNAL', 'OFF_SITE_USER_HOME'])
         ).all()
         
         users_off_site = set([log.user_id for log in off_site_logs])
-        staff_off_site = set([log.supporter_id for log in off_site_logs])
+        
+        # 施設外に出ている利用者を支援した職員をSupportRecordから特定
+        if users_off_site:
+            off_site_records = SupportRecord.query.filter(
+                SupportRecord.log_date == target_date,
+                SupportRecord.user_id.in_(users_off_site)
+            ).all()
+            staff_off_site = set([rec.supporter_id for rec in off_site_records])
+        else:
+            staff_off_site = set()
         
         # 2. 事業所内にいる利用者/職員数を計算 (簡略化)
         users_on_site_count = max(0, OFFICE_CAPACITY - len(users_off_site)) 

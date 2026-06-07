@@ -281,20 +281,20 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
       case 'completed':
         return (
           <span className="flex items-center gap-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
-            <CheckCircle className="w-3.5 h-3.5" /> 日報 完了
+            <CheckCircle className="w-3.5 h-3.5" /> 支援記録 完了
           </span>
         );
       case 'draft':
         return (
           <span className="flex items-center gap-1 text-xs font-bold text-amber-600 bg-amber-50/50 border border-amber-100 px-2.5 py-1 rounded-full">
-            <FileEdit className="w-3.5 h-3.5" /> 日報 下書き
+            <FileEdit className="w-3.5 h-3.5" /> 支援記録 下書き
           </span>
         );
       case 'missing':
       default:
         return (
           <span className="flex items-center gap-1 text-xs font-bold text-rose-700 bg-rose-50 border border-rose-200 px-2.5 py-1 rounded-full">
-            <AlertTriangle className="w-3.5 h-3.5" /> 日報 未作成
+            <AlertTriangle className="w-3.5 h-3.5" /> 支援記録 未作成
           </span>
         );
     }
@@ -317,7 +317,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
             <Calendar className="w-6 h-6 text-indigo-600" />
             利用実績と記録状況
           </h2>
-          <p className="text-sm text-slate-500 mt-1 font-medium">客観的な来所・退所打刻と、それに対応する日報の作成状態です。実績行から直接記録を作成できます。</p>
+          <p className="text-sm text-slate-500 mt-1 font-medium">客観的な来所・退所打刻と、それに対応する支援記録の作成状態です。実績行から直接記録を作成できます。</p>
         </div>
 
         {attendanceRecords.length === 0 ? (
@@ -358,9 +358,9 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
                         : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
                     }`}
                   >
-                    {item.daily_log_status === 'missing' && 'この実績の日報を作成'}
+                    {item.daily_log_status === 'missing' && 'この実績の支援記録を作成'}
                     {item.daily_log_status === 'draft' && '続きから記録する'}
-                    {item.daily_log_status === 'completed' && '日報を確認'}
+                    {item.daily_log_status === 'completed' && '支援記録を確認'}
                     <ArrowRight className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -375,14 +375,14 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
         <div>
           <h2 className="text-xl font-black text-slate-800 flex items-center gap-2">
             <LinkIcon className="w-5 h-5 text-indigo-600" />
-            日報履歴
+            支援記録履歴
           </h2>
           <p className="text-sm text-slate-500 mt-1 font-medium">作成された支援記録のタイムラインです。</p>
         </div>
 
         {dailyLogs.length === 0 ? (
           <div className="bg-slate-50 text-slate-500 p-8 rounded-2xl text-center font-bold border border-slate-200">
-            まだ日報が記録されていません。
+            まだ支援記録が登録されていません。
           </div>
         ) : (
           <div className="space-y-4 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-200 before:to-transparent">
@@ -430,7 +430,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
         )}
       </div>
 
-      {/* 新規日報作成モーダル */}
+      {/* 新規支援記録作成モーダル */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-[2rem] shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden flex flex-col max-h-[90vh] animate-in zoom-in-95 duration-200">

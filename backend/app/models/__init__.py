@@ -65,7 +65,7 @@ from backend.app.models.support.support_plan import (
 
 )
 from backend.app.models.support.daily_log import (
-    DailyLog, DailyLogActivity, BreakRecord, DailyProductivityLog
+    UserDailyLog, SupportRecord, BreakRecord, DailyProductivityLog
 )
 from backend.app.models.support.user_dashboard_settings import (
     UserDailyLogSetting

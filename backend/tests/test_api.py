@@ -22,10 +22,8 @@ with app.app_context():
     headers = {'Authorization': f'Bearer {token}'}
     
     # 2. Get Job Titles and Roles
-    role = RoleMaster.query.filter_by(name="一般支援員").first()
     job_title = JobTitleMaster.query.filter_by(title_name="サービス管理責任者").first()
     
-    print(f"Using Role: {role.name} (ID: {role.id})")
     print(f"Using Job Title: {job_title.title_name} (ID: {job_title.id})")
     
     # 3. Payload with roles and job assignments
@@ -39,7 +37,7 @@ with app.app_context():
         "employment_type": "FULL_TIME",
         "hire_date": "2025-01-01",
         "weekly_scheduled_minutes": 2400,
-        "role_ids": [role.id],
+        "role_ids": [],
         "allow_overlap_calculation": False,
         "is_active": True,
         "job_assignments": [

@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')
 
 from backend.app import create_app
 from backend.app.extensions import db
-from backend.app.models import User, AttendanceRecord, DailyLog
+from backend.app.models import User, AttendanceRecord, UserDailyLog, SupportRecord
 from sqlalchemy import func
 
 app = create_app()
@@ -19,8 +19,9 @@ with app.app_context():
         # SQLiteの場合は func.date(timestamp) で比較可能
         AttendanceRecord.query.filter_by(user_id=user.id).filter(func.date(AttendanceRecord.timestamp) == today).delete()
         
-        # 今日の日報を削除
-        DailyLog.query.filter_by(user_id=user.id, log_date=today).delete()
+        # 今日の日報・支援記録を削除
+        UserDailyLog.query.filter_by(user_id=user.id, log_date=today).delete()
+        SupportRecord.query.filter_by(user_id=user.id, log_date=today).delete()
         
         db.session.commit()
         print(f"✅ Reset status for {user.display_name} for today ({today}).")

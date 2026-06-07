@@ -5,7 +5,7 @@ Dashboard用の集計データを1回のAPIで返す。
 from flask import Blueprint, jsonify
 from flask_jwt_extended import jwt_required
 from backend.app import db
-from backend.app.models import DailyLog, SupportPlan, CaseConferenceLog
+from backend.app.models import UserDailyLog, SupportPlan, CaseConferenceLog
 from datetime import date, datetime
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
@@ -39,8 +39,8 @@ def get_dashboard_summary():
         ).distinct().count()
 
     # 未完了日報数（DRAFT状態）
-    pending_daily_logs = DailyLog.query\
-        .filter(DailyLog.log_status == 'DRAFT')\
+    pending_daily_logs = UserDailyLog.query\
+        .filter(UserDailyLog.log_status == 'DRAFT')\
         .count()
 
     # 承認待ち計画数
@@ -106,7 +106,7 @@ def get_today_users():
         ).first()
         
         # 同日の日報を探す
-        log = DailyLog.query.filter_by(user_id=user_id, log_date=today).first()
+        log = UserDailyLog.query.filter_by(user_id=user_id, log_date=today).first()
         
         daily_log_status = "missing"
         if log:

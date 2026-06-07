@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta, time
 from flask_jwt_extended import create_access_token
 from backend.app import db
 from backend.app.models import (
-    User, Supporter, StatusMaster, DailyLog, DailyLogActivity, 
+    User, Supporter, StatusMaster, UserDailyLog, SupportRecord, 
     EmploymentShiftPattern, StaffActivityMaster,
     SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal
 )
@@ -125,17 +125,19 @@ def test_daily_log_overlap_guardrail(app, client):
 
         # 既存の支援記録 (利用者Aに対する直接支援: 10:00〜11:00) を登録
         today = datetime.now().date()
-        daily_log_a = DailyLog(user_id=user_a.id, log_date=today, location_type='ON_SITE', support_content_notes='テスト')
+        daily_log_a = UserDailyLog(user_id=user_a.id, log_date=today, location_type='ON_SITE', support_content_notes='テスト')
         db.session.add(daily_log_a)
         db.session.flush()
 
-        existing_activity = DailyLogActivity(
-            daily_log_id=daily_log_a.id,
+        existing_activity = SupportRecord(
+            user_id=user_a.id,
+            log_date=today,
             supporter_id=staff.id,
             support_start_time=datetime.combine(today, time(10, 0)),
             support_end_time=datetime.combine(today, time(11, 0)),
             support_content='テスト',
-            support_goal_id=isg_a.id
+            support_goal_id=isg_a.id,
+            support_record_type='DIRECT_SUPPORT'
         )
         db.session.add(existing_activity)
         db.session.commit()
@@ -204,16 +206,32 @@ def test_staff_extended_features(app, client):
     logger.info("🚀 TEST START: スタッフ管理拡張機能（カナ変換・PII・みなし配置等）のテスト")
 
     from backend.app.models.core.supporter import SupporterJobAssignment, SupporterPII
-    from backend.app.models.masters.master_definitions import JobTitleMaster, RoleMaster
+    from backend.app.models.masters.master_definitions import JobTitleMaster, RoleMaster, PermissionMaster
     from backend.app.models.core.rbac_links import supporter_role_link
 
     with app.app_context():
+        # 必要なパーミッションを準備
+        permissions = ['VIEW_STAFF', 'CREATE_STAFF', 'EDIT_STAFF']
+        perm_objs = []
+        for pname in permissions:
+            perm = db.session.query(PermissionMaster).filter_by(name=pname).first()
+            if not perm:
+                perm = PermissionMaster(name=pname)
+                db.session.add(perm)
+            perm_objs.append(perm)
+        db.session.flush()
+
         # テスト用のセキュリティロールと職種を取得または作成
         sys_role = db.session.query(RoleMaster).filter_by(role_scope="SYSTEM").first()
         if not sys_role:
-            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM")
+            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM", is_admin=True)
             db.session.add(sys_role)
             db.session.flush()
+
+        for p in perm_objs:
+            if p not in sys_role.permissions:
+                sys_role.permissions.append(p)
+        db.session.flush()
 
         job_title = db.session.query(JobTitleMaster).filter_by(title_name="サービス管理責任者").first()
         if not job_title:
@@ -396,24 +414,34 @@ def test_staff_role_based_visibility(app, client):
     """
     logger.info("🚀 TEST START: 管理者ロールに応じたスタッフ表示制御のテスト")
 
-    from backend.app.models.masters.master_definitions import RoleMaster
+    from backend.app.models.masters.master_definitions import RoleMaster, PermissionMaster
     from backend.app.models.core.office import OfficeSetting, Corporation
     from backend.app.models import MunicipalityMaster
     from backend.app.models.core.rbac_links import supporter_role_link
 
     with app.app_context():
+        # 必要なパーミッションを準備
+        permissions = ['VIEW_STAFF', 'CREATE_STAFF', 'EDIT_STAFF']
+        perm_objs = []
+        for pname in permissions:
+            perm = db.session.query(PermissionMaster).filter_by(name=pname).first()
+            if not perm:
+                perm = PermissionMaster(name=pname)
+                db.session.add(perm)
+            perm_objs.append(perm)
+        db.session.flush()
+
         # 1. ロールと事業所の準備
         sys_role = db.session.query(RoleMaster).filter_by(role_scope="SYSTEM").first()
         if not sys_role:
-            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM")
+            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM", is_admin=True)
             db.session.add(sys_role)
             db.session.flush()
 
-        job_role = db.session.query(RoleMaster).filter_by(role_scope="JOB").first()
-        if not job_role:
-            job_role = RoleMaster(name="事業所管理者", role_scope="JOB")
-            db.session.add(job_role)
-            db.session.flush()
+        for p in perm_objs:
+            if p not in sys_role.permissions:
+                sys_role.permissions.append(p)
+        db.session.flush()
 
         corp = db.session.query(Corporation).first()
         if not corp:
@@ -465,7 +493,40 @@ def test_staff_role_based_visibility(app, client):
 
         # ロールの紐付け
         db.session.execute(supporter_role_link.insert().values(supporter_id=global_admin.id, role_id=sys_role.id))
-        db.session.execute(supporter_role_link.insert().values(supporter_id=job_admin.id, role_id=job_role.id))
+        
+        # 現場管理者にはロールではなく管理者職種（JobTitle）をアサインする
+        from backend.app.models import ServiceTypeMaster, OfficeServiceConfiguration, JobTitleMaster, SupporterJobAssignment
+        service_type = db.session.query(ServiceTypeMaster).filter_by(service_code='TRANSITION').first()
+        if not service_type:
+            service_type = ServiceTypeMaster(name="就労移行支援", service_code="TRANSITION", required_review_months=6)
+            db.session.add(service_type)
+            db.session.flush()
+            
+        service_config = OfficeServiceConfiguration(
+            office_id=office1.id,
+            service_type_master_id=service_type.id,
+            jigyosho_bango="1111111111",
+            capacity=20,
+            initial_designation_date=date(2023, 4, 1)
+        )
+        db.session.add(service_config)
+        db.session.flush()
+
+        admin_title = db.session.query(JobTitleMaster).filter_by(title_name="管理者").first()
+        if not admin_title:
+            admin_title = JobTitleMaster(title_name="管理者", is_management_role=True, is_qualified_role=False)
+            db.session.add(admin_title)
+            db.session.flush()
+
+        assignment = SupporterJobAssignment(
+            supporter_id=job_admin.id,
+            job_title_id=admin_title.id,
+            office_service_configuration_id=service_config.id,
+            start_date=date(2025, 1, 1),
+            assigned_minutes=2400,
+            is_deemed_assignment=False
+        )
+        db.session.add(assignment)
         db.session.commit()
 
         # ----------------------------------------------------
@@ -495,3 +556,171 @@ def test_staff_role_based_visibility(app, client):
         assert "S_VIS_GLB" not in job_codes
 
         logger.info("✅ 管理者ロールに応じたスタッフ表示制御のテスト完了")
+
+
+def test_last_admin_protection(app, client):
+    """
+    システム管理者 (SYSTEM) および 法人管理者 (CORPORATE) のラストワン保護バリデーションのテスト
+    """
+    logger.info("🚀 TEST START: システム管理者・法人管理者のラストワン保護バリデーションテスト")
+
+    from backend.app.models.masters.master_definitions import RoleMaster, PermissionMaster
+    from backend.app.models.core.office import OfficeSetting, Corporation
+    from backend.app.models import MunicipalityMaster
+    from backend.app.models.core.rbac_links import supporter_role_link
+
+    with app.app_context():
+        from backend.app.models import SupporterPII, SupporterJobAssignment, EmploymentShiftPattern
+        db.session.execute(supporter_role_link.delete())
+        db.session.query(SupporterPII).delete()
+        db.session.query(SupporterJobAssignment).delete()
+        db.session.query(EmploymentShiftPattern).delete()
+        db.session.query(Supporter).delete()
+        db.session.commit()
+
+        # 必要権限とロールの準備
+        permissions = ['VIEW_STAFF', 'EDIT_STAFF']
+        perm_objs = []
+        for pname in permissions:
+            perm = db.session.query(PermissionMaster).filter_by(name=pname).first()
+            if not perm:
+                perm = PermissionMaster(name=pname)
+                db.session.add(perm)
+            perm_objs.append(perm)
+        db.session.flush()
+
+        sys_role = db.session.query(RoleMaster).filter_by(role_scope="SYSTEM").first()
+        if not sys_role:
+            sys_role = RoleMaster(name="システム管理者", role_scope="SYSTEM", is_admin=True)
+            db.session.add(sys_role)
+            db.session.flush()
+            
+        corp_role = db.session.query(RoleMaster).filter_by(role_scope="CORPORATE").first()
+        if not corp_role:
+            corp_role = RoleMaster(name="法人管理者", role_scope="CORPORATE", is_admin=True)
+            db.session.add(corp_role)
+            db.session.flush()
+
+        # パーミッションアタッチ
+        for p in perm_objs:
+            if p not in sys_role.permissions:
+                sys_role.permissions.append(p)
+            if p not in corp_role.permissions:
+                corp_role.permissions.append(p)
+        db.session.flush()
+
+        corp = db.session.query(Corporation).first()
+        if not corp:
+            corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
+            db.session.add(corp)
+            db.session.flush()
+        muni = db.session.query(MunicipalityMaster).first()
+        if not muni:
+            muni = MunicipalityMaster(municipality_code="999999", name="Test City")
+            db.session.add(muni)
+            db.session.flush()
+
+        office = OfficeSetting(corporation_id=corp.id, office_name="Test Office", municipality_id=muni.id, full_time_weekly_minutes=2400)
+        db.session.add(office)
+        db.session.flush()
+
+        # システム管理者 1 (SYSTEM)
+        admin_sys = Supporter(
+            staff_code="S_PROT_SYS1",
+            last_name="システム", first_name="管理一", last_name_kana="システム", first_name_kana="イチ",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office.id, is_active=True
+        )
+        # 法人管理者 1 (CORPORATE)
+        admin_corp = Supporter(
+            staff_code="S_PROT_CORP1",
+            last_name="法人", first_name="管理一", last_name_kana="ホウジン", first_name_kana="イチ",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office.id, is_active=True
+        )
+        db.session.add_all([admin_sys, admin_corp])
+        db.session.flush()
+
+        admin_sys.roles.append(sys_role)
+        admin_corp.roles.append(corp_role)
+        db.session.commit()
+
+        # SYSTEM管理者のアクセストークンを生成して共通で使用
+        token = create_access_token(identity=f"staff:{admin_sys.id}")
+        headers = {'Authorization': f'Bearer {token}'}
+
+        # ----------------------------------------------------
+        # 検証1: 唯一の SYSTEM ロール保持者の無効化をブロック
+        # ----------------------------------------------------
+        payload = {
+            "last_name": "システム",
+            "first_name": "管理一",
+            "is_active": False,  # 無効化を試みる
+            "role_ids": [sys_role.id]
+        }
+        res = client.put(f'/api/management/staff/{admin_sys.id}', json=payload, headers=headers)
+        assert res.status_code == 400
+        assert "SYSTEMロール保持者が不在になる" in res.get_json()["error"]["message"]
+
+        # ----------------------------------------------------
+        # 検証2: 唯一の CORPORATE ロール保持者の無効化をブロック
+        # ----------------------------------------------------
+        payload = {
+            "last_name": "法人",
+            "first_name": "管理一",
+            "is_active": False,  # 無効化を試みる
+            "role_ids": [corp_role.id]
+        }
+        res = client.put(f'/api/management/staff/{admin_corp.id}', json=payload, headers=headers)
+        assert res.status_code == 400
+        assert "CORPORATEロール保持者が不在になる" in res.get_json()["error"]["message"]
+
+        # ----------------------------------------------------
+        # 検証3: 管理者ロールの剥奪も同様にブロックされること
+        # ----------------------------------------------------
+        payload = {
+            "last_name": "システム",
+            "first_name": "管理一",
+            "is_active": True,
+            "role_ids": []  # ロールを空にする（剥奪）
+        }
+        res = client.put(f'/api/management/staff/{admin_sys.id}', json=payload, headers=headers)
+        assert res.status_code == 400
+        assert "SYSTEMロール保持者が不在になる" in res.get_json()["error"]["message"]
+
+        # ----------------------------------------------------
+        # 検証3b: ロール専用更新APIを使用したロールの剥奪もブロックされること
+        # ----------------------------------------------------
+        payload_roles = {
+            "role_ids": []  # ロールを空にする（剥奪）
+        }
+        res = client.put(f'/api/management/staff/{admin_sys.id}/roles', json=payload_roles, headers=headers)
+        assert res.status_code == 400
+        assert "SYSTEMロール保持者が不在になる" in res.get_json()["error"]["message"]
+
+        # ----------------------------------------------------
+        # 検証4: 複数いる場合は無効化が成功すること
+        # ----------------------------------------------------
+        # システム管理者 2 を追加
+        admin_sys2 = Supporter(
+            staff_code="S_PROT_SYS2",
+            last_name="システム", first_name="管理二", last_name_kana="システム", first_name_kana="ニ",
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1),
+            office_id=office.id, is_active=True
+        )
+        db.session.add(admin_sys2)
+        db.session.flush()
+        admin_sys2.roles.append(sys_role)
+        db.session.commit()
+
+        # 2人いる状態であれば、admin_sys2 を無効化できること
+        payload = {
+            "last_name": "システム",
+            "first_name": "管理二",
+            "is_active": False,
+            "role_ids": [sys_role.id]
+        }
+        res = client.put(f'/api/management/staff/{admin_sys2.id}', json=payload, headers=headers)
+        assert res.status_code == 200
+
+        logger.info("✅ システム管理者・法人管理者のラストワン保護バリデーションテスト完了")

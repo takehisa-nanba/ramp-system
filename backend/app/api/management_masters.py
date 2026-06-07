@@ -33,7 +33,8 @@ def get_available_roles():
     return jsonify([{
         "id": r.id,
         "name": r.name,
-        "scope": r.role_scope
+        "scope": r.role_scope,
+        "is_admin": r.is_admin
     } for r in roles]), 200
 
 @management_masters_bp.route('/job-titles', methods=['GET'])
