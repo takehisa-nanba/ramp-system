@@ -1290,6 +1290,33 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             </div>
           </div>
 
+          {!activePlan && (
+            <div className="bg-rose-50 border border-rose-200/80 p-4 rounded-2xl flex items-start gap-3 text-rose-800 mb-4 animate-in fade-in duration-300">
+              <AlertTriangle className="w-5 h-5 shrink-0 text-rose-600 mt-0.5" />
+              <div>
+                <p className="text-xs font-black">モニタリングの登録は現在制限されています</p>
+                <p className="text-[10px] text-rose-700 mt-1 leading-relaxed">
+                  モニタリング結果を登録するには、有効な支援計画（ACTIVE）が必要です。<br />
+                  上の個別支援計画サイクルに則り、以下の手続きを進めて計画を有効化してください：
+                </p>
+                <ul className="text-[10px] text-rose-700 mt-1.5 list-disc list-inside space-y-1 font-medium">
+                  {latestPlanStatus === 'NONE' && (
+                    <li>個別支援計画が作成されていません。右上の<strong>「新規計画作成」</strong>ボタンから原案を作成してください。</li>
+                  )}
+                  {latestPlanStatus === 'DRAFT' && (
+                    <li>個別支援計画が下書き（DRAFT）のままです。本人同席の会議記録を登録した上で、サービス管理責任者アカウントで計画を<strong>承認（成案化）</strong>してください。</li>
+                  )}
+                  {latestPlanStatus === 'PENDING_CONSENT' && (
+                    <li>計画の承認は完了していますが、本人説明・同意手続きが完了していません。<strong>同意手続き</strong>を実行して計画を「有効（ACTIVE）」にしてください。</li>
+                  )}
+                  {latestPlanStatus !== 'NONE' && latestPlanStatus !== 'DRAFT' && latestPlanStatus !== 'PENDING_CONSENT' && (
+                    <li>現在アクティブな支援計画が存在しません。個別支援計画の新規作成または次期原案の作成を進めてください。</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
           {/* 期限表示 */}
           {monitoringData?.next_monitoring_due ? (
             <div className={`border-l-4 p-4 rounded-r-2xl mb-4 flex items-center justify-between ${
