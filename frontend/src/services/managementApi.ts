@@ -9,6 +9,7 @@ export interface JobAssignment {
   assigned_minutes: number;
   office_service_configuration_id?: number;
   is_deemed_assignment?: boolean;
+  deemed_expiry_date?: string | null;
 }
 
 export interface JobTitle {
@@ -35,6 +36,8 @@ export interface StaffMember {
   last_name_kana: string;
   first_name_kana: string;
   email: string | null;
+  personal_phone?: string;
+  address?: string;
   roles: string[];
   role_ids: number[];
   is_active: boolean;
@@ -42,6 +45,7 @@ export interface StaffMember {
   weekly_scheduled_minutes: number;
   allow_overlap_calculation: boolean;
   hire_date: string | null;
+  retirement_date?: string | null;
   job_assignments: JobAssignment[];
   shift_patterns?: EmploymentShiftPattern[];
 }
@@ -54,22 +58,34 @@ export interface Role {
 
 export interface OfficeSettings {
   id: number;
+  corporation_id?: number | null;
+  corporation_name?: string;
+  corporation_type?: string;
+  corporation_number?: string;
+  corporation_representative_name?: string;
+  corporation_postal_code?: string;
+  corporation_address?: string;
+  corporation_phone_number?: string;
+  tenant_id?: string;
   office_name: string;
+  municipality_id?: number;
   full_time_weekly_minutes: number;
   is_active: boolean;
-  // 連絡先
   postal_code?: string;
   address?: string;
   phone_number?: string;
   fax_number?: string;
   email_address?: string;
   representative_name?: string;
-  // サービス設定
+  service_config_id?: number;
+  service_type_master_id?: number;
+  manager_supporter_id?: number | null;
   jigyosho_bango?: string;
   capacity?: number;
   initial_designation_date?: string;
   designation_expiry_date?: string;
   regional_category?: string;
+  target_disabilities?: Record<string, boolean> | null;
   cooperating_medical_institution?: string;
   manager_name?: string;
 }
@@ -83,18 +99,37 @@ export interface AdditiveFiling {
   end_date?: string | null;
 }
 
+export interface MasterOption {
+  id: number;
+  name?: string;
+  city_name?: string;
+  city_code?: string;
+  service_name?: string;
+  service_code?: string;
+}
+
+export interface ManagementMasters {
+  municipalities: MasterOption[];
+  service_types: MasterOption[];
+  genders: MasterOption[];
+  disabilities: MasterOption[];
+}
+
 export const managementApi = {
-  // Staff
   getStaffMembers: async (): Promise<StaffMember[]> => {
     const res = await apiClient.get(`${API_URL}/staff`);
     return res.data;
   },
   getAvailableRoles: async (): Promise<Role[]> => {
-    const res = await apiClient.get(`${API_URL}/roles`);
+    const res = await apiClient.get(`${API_URL}/masters/roles`);
     return res.data;
   },
   getJobTitles: async (): Promise<JobTitle[]> => {
-    const res = await apiClient.get(`${API_URL}/job-titles`);
+    const res = await apiClient.get(`${API_URL}/masters/job-titles`);
+    return res.data;
+  },
+  getMasters: async (): Promise<ManagementMasters> => {
+    const res = await apiClient.get(`${API_URL}/masters`);
     return res.data;
   },
   updateStaffRoles: async (staffId: number, roleIds: number[]): Promise<void> => {
@@ -107,8 +142,6 @@ export const managementApi = {
   updateStaff: async (staffId: number, data: any): Promise<void> => {
     await apiClient.put(`${API_URL}/staff/${staffId}`, data);
   },
-
-  // Office
   getOfficeSettings: async (): Promise<OfficeSettings> => {
     const res = await apiClient.get(`${API_URL}/office`);
     return res.data;
@@ -116,8 +149,6 @@ export const managementApi = {
   updateOfficeSettings: async (settings: Partial<OfficeSettings>): Promise<void> => {
     await apiClient.put(`${API_URL}/office`, settings);
   },
-
-  // Additive Filings
   getAdditiveFilings: async (): Promise<AdditiveFiling[]> => {
     const res = await apiClient.get(`${API_URL}/office/additive-filings`);
     return res.data;

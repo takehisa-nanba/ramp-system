@@ -36,9 +36,21 @@ def get_office_settings():
         db.session.add(service)
         db.session.commit()
 
+    corp = office.corporation
+
     return jsonify({
         "id": office.id,
+        "corporation_id": corp.id if corp else None,
+        "corporation_name": corp.corporation_name if corp else "",
+        "corporation_type": corp.corporation_type if corp else "",
+        "corporation_number": corp.corporation_number if corp else "",
+        "corporation_representative_name": corp.representative_name if corp else "",
+        "corporation_postal_code": corp.postal_code if corp else "",
+        "corporation_address": corp.address if corp else "",
+        "corporation_phone_number": corp.phone_number if corp else "",
+        "tenant_id": corp.tenant_id if corp else "",
         "office_name": office.office_name,
+        "municipality_id": office.municipality_id,
         "full_time_weekly_minutes": office.full_time_weekly_minutes,
         "is_active": office.is_active,
         "postal_code": office.postal_code,
@@ -47,11 +59,15 @@ def get_office_settings():
         "fax_number": office.fax_number,
         "email_address": office.email_address,
         "representative_name": office.representative_name,
+        "service_config_id": service.id,
+        "service_type_master_id": service.service_type_master_id,
+        "manager_supporter_id": service.manager_supporter_id,
         "jigyosho_bango": service.jigyosho_bango,
         "capacity": service.capacity,
         "initial_designation_date": service.initial_designation_date.isoformat() if service.initial_designation_date else None,
         "designation_expiry_date": service.designation_expiry_date.isoformat() if service.designation_expiry_date else None,
         "regional_category": service.regional_category,
+        "target_disabilities": service.target_disabilities,
         "cooperating_medical_institution": service.cooperating_medical_institution,
         "manager_name": f"{service.manager_supporter.last_name} {service.manager_supporter.first_name}" if service.manager_supporter else "未設定"
     }), 200
@@ -65,8 +81,24 @@ def update_office_settings():
         data = request.get_json()
         office = OfficeSetting.query.get(current.office_id)
         service = office.service_configs.first()
+        corp = office.corporation
+
+        if corp:
+            corp.corporation_name = data.get('corporation_name', corp.corporation_name) or corp.corporation_name
+            corp.corporation_type = data.get('corporation_type', corp.corporation_type) or corp.corporation_type
+            corp.corporation_number = data.get('corporation_number', corp.corporation_number) or corp.corporation_number
+            corp.representative_name = data.get('corporation_representative_name', corp.representative_name)
+            corp.postal_code = data.get('corporation_postal_code', corp.postal_code)
+            corp.address = data.get('corporation_address', corp.address)
+            corp.phone_number = data.get('corporation_phone_number', corp.phone_number)
+            corp.tenant_id = data.get('tenant_id', corp.tenant_id) or corp.tenant_id
         
         if 'office_name' in data: office.office_name = data['office_name'] or "未設定事業所"
+        if 'municipality_id' in data and data['municipality_id']:
+            try:
+                office.municipality_id = int(data['municipality_id'])
+            except (ValueError, TypeError):
+                raise ValidationError("自治体の指定が不正です")
         if 'full_time_weekly_minutes' in data: 
             try:
                 office.full_time_weekly_minutes = int(float(data['full_time_weekly_minutes']))
@@ -81,6 +113,15 @@ def update_office_settings():
         office.representative_name = data.get('representative_name', office.representative_name)
         
         if service:
+            if 'service_type_master_id' in data and data['service_type_master_id']:
+                try:
+                    service.service_type_master_id = int(data['service_type_master_id'])
+                except (ValueError, TypeError):
+                    raise ValidationError("サービス種別の指定が不正です")
+
+            if 'manager_supporter_id' in data:
+                service.manager_supporter_id = int(data['manager_supporter_id']) if data.get('manager_supporter_id') else None
+
             if 'jigyosho_bango' in data and data['jigyosho_bango']:
                 service.jigyosho_bango = data['jigyosho_bango']
             
@@ -91,6 +132,7 @@ def update_office_settings():
                     raise ValidationError("定員は数値で入力してください")
                 
             service.regional_category = data.get('regional_category', service.regional_category)
+            service.target_disabilities = data.get('target_disabilities', service.target_disabilities)
             service.cooperating_medical_institution = data.get('cooperating_medical_institution', service.cooperating_medical_institution)
             
             if data.get('initial_designation_date'):
