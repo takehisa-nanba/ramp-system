@@ -20,8 +20,8 @@ def get_masters():
     disabilities = DisabilityTypeMaster.query.order_by(DisabilityTypeMaster.id).all()
     
     return jsonify({
-        "municipalities": [{"id": m.id, "city_name": m.city_name, "city_code": m.city_code} for m in municipalities],
-        "service_types": [{"id": s.id, "service_name": s.service_name, "service_code": s.service_code} for s in service_types],
+        "municipalities": [{"id": m.id, "city_name": m.name, "city_code": m.municipality_code} for m in municipalities],
+        "service_types": [{"id": s.id, "service_name": s.name, "service_code": s.service_code} for s in service_types],
         "genders": [{"id": g.id, "name": g.name} for g in genders],
         "disabilities": [{"id": d.id, "name": d.name} for d in disabilities]
     }), 200
