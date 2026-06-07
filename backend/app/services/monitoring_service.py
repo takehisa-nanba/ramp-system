@@ -24,6 +24,7 @@ class MonitoringService:
             target_goal_progress_notes=goal_notes,
             contextual_analysis=context
         )
+        db.session.add(report)
         db.session.flush() # get ID
         
         audit_log = AuditActionLog(

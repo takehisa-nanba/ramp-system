@@ -644,3 +644,83 @@ def test_challenges_validation_and_cloning(client, app):
         assert len(next_plan.long_term_goals) == 1
         assert next_plan.long_term_goals[0].challenges == "検証用の課題・相談内容"
         assert next_plan.long_term_goals[0].description == "長期目標の検証"
+
+
+def test_monitoring_report_flow(client, app):
+    """
+    テスト内容: モニタリングレポートの新規登録、DB永続化、および取得APIの検証。
+    """
+    from flask_jwt_extended import create_access_token
+    from backend.tests.test_support_plan_service import setup_masters_and_user
+    from backend.app.models import SupportPlan, DocumentConsentLog, MonitoringReport
+    from datetime import date, datetime
+    
+    with app.app_context():
+        user, sabikan, policy = setup_masters_and_user(db.session, display_name="TestMonUser", staff_code="S7777")
+        user_id = user.id
+        sabikan_id = sabikan.id
+        policy_id = policy.id
+        
+        token = create_access_token(identity=f"staff:{sabikan_id}", additional_claims={"role_type": "staff"})
+        headers = {
+            "Authorization": f"Bearer {token}"
+        }
+        
+        # 1. 計画をACTIVEまで進める
+        service = SupportPlanService()
+        draft_plan = service.create_plan_draft(user_id, sabikan_id, policy_id)
+        db.session.commit()
+        plan_id = draft_plan.id
+        
+        # 原案承認
+        service.log_support_conference_and_approve(
+            plan_id=plan_id,
+            sabikan_id=sabikan_id,
+            conference_date=datetime.now().date(),
+            content="モニタリングテスト用会議",
+            user_participated=True
+        )
+        db.session.commit()
+        
+        # 同意
+        consent_log = DocumentConsentLog(
+            document_id=plan_id,
+            document_type='SUPPORT_PLAN',
+            user_id=user_id,
+            consent_proof='DIGITAL_SIGNATURE'
+        )
+        db.session.add(consent_log)
+        db.session.commit()
+        
+        # 有効化
+        active_plan = service.finalize_and_activate_plan(plan_id, consent_log.id)
+        db.session.commit()
+        assert active_plan.plan_status == 'ACTIVE'
+
+    # 2. モニタリング結果を登録
+    mon_data = {
+        "support_plan_id": plan_id,
+        "report_date": "2026-06-07",
+        "monitoring_summary": "テスト評価概要",
+        "target_goal_progress_notes": "目標進捗所見",
+        "contextual_analysis": "背景分析文脈"
+    }
+    response = client.post("/api/monitoring-reports", json=mon_data, headers=headers)
+    assert response.status_code == 201
+    
+    # 3. DBに永続化されているか検証
+    with app.app_context():
+        reports = MonitoringReport.query.filter_by(support_plan_id=plan_id).all()
+        assert len(reports) == 1
+        assert reports[0].monitoring_summary == "テスト評価概要"
+        assert reports[0].target_goal_progress_notes == "目標進捗所見"
+        assert reports[0].contextual_analysis == "背景分析文脈"
+
+    # 4. 取得APIで履歴が含まれているか検証
+    response = client.get(f"/api/users/{user_id}/monitoring-reports", headers=headers)
+    assert response.status_code == 200
+    res_data = response.get_json()
+    assert len(res_data["history"]) == 1
+    assert res_data["history"][0]["monitoring_summary"] == "テスト評価概要"
+    assert res_data["history"][0]["target_goal_progress_notes"] == "目標進捗所見"
+
