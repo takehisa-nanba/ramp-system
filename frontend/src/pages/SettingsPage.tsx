@@ -73,6 +73,8 @@ const SettingsPage: React.FC = () => {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [staffForm, setStaffForm] = useState<StaffForm | null>(null);
+  const [fullTimeWeeklyHoursText, setFullTimeWeeklyHoursText] = useState<string>('');
+  const [weeklyScheduledHoursText, setWeeklyScheduledHoursText] = useState<string>('');
 
   const loadAll = async () => {
     setLoading(true);
@@ -86,6 +88,7 @@ const SettingsPage: React.FC = () => {
         managementApi.getMasters()
       ]);
       setOffice(officeRes);
+      setFullTimeWeeklyHoursText(officeRes.full_time_weekly_minutes ? String(officeRes.full_time_weekly_minutes / 60) : '40');
       setStaff(staffRes);
       setRoles(rolesRes);
       setJobTitles(jobTitlesRes);
@@ -109,7 +112,12 @@ const SettingsPage: React.FC = () => {
     setError(null);
     setMessage(null);
     try {
-      await managementApi.updateOfficeSettings(office);
+      const hours = parseFloat(fullTimeWeeklyHoursText) || 0;
+      const payload: OfficeSettings = {
+        ...office,
+        full_time_weekly_minutes: Math.round(hours * 60)
+      };
+      await managementApi.updateOfficeSettings(payload);
       setMessage('事業者・事業所・サービス設定を保存しました。');
       await loadAll();
     } catch (err: any) {
@@ -122,6 +130,7 @@ const SettingsPage: React.FC = () => {
   const openStaffForm = (member?: StaffMember) => {
     if (!member) {
       setStaffForm({ ...EMPTY_STAFF_FORM });
+      setWeeklyScheduledHoursText(String(EMPTY_STAFF_FORM.weekly_scheduled_minutes / 60));
       return;
     }
     setStaffForm({
@@ -143,6 +152,7 @@ const SettingsPage: React.FC = () => {
       role_ids: member.role_ids || [],
       job_assignments: member.job_assignments?.length ? member.job_assignments.map((j) => ({ ...j })) : []
     });
+    setWeeklyScheduledHoursText(String((member.weekly_scheduled_minutes || 0) / 60));
   };
 
   const saveStaff = async () => {
@@ -151,8 +161,10 @@ const SettingsPage: React.FC = () => {
     setError(null);
     setMessage(null);
     try {
+      const hours = parseFloat(weeklyScheduledHoursText) || 0;
       const payload = {
         ...staffForm,
+        weekly_scheduled_minutes: Math.round(hours * 60),
         last_name_kana: toKatakana(staffForm.last_name_kana),
         first_name_kana: toKatakana(staffForm.first_name_kana),
         retirement_date: staffForm.retirement_date || null,
@@ -277,7 +289,7 @@ const SettingsPage: React.FC = () => {
                 <option value="">未設定</option>
                 {masters?.municipalities.map((m) => <option key={m.id} value={m.id}>{m.city_name} {m.city_code ? `(${m.city_code})` : ''}</option>)}
               </SelectField>
-              <Field label="常勤週所定分数" type="number" value={office.full_time_weekly_minutes || 0} onChange={(v) => updateOffice('full_time_weekly_minutes', Number(v))} />
+              <Field label="常勤週所定時間" type="number" value={fullTimeWeeklyHoursText} onChange={(v) => setFullTimeWeeklyHoursText(v)} />
               <Field label="郵便番号" value={office.postal_code || ''} onChange={(v) => updateOffice('postal_code', v)} />
               <Field label="電話番号" value={office.phone_number || ''} onChange={(v) => updateOffice('phone_number', v)} />
               <Field label="FAX" value={office.fax_number || ''} onChange={(v) => updateOffice('fax_number', v)} />
@@ -387,7 +399,7 @@ const SettingsPage: React.FC = () => {
                 <SelectField label="雇用形態" value={staffForm.employment_type} onChange={(v) => updateStaffForm('employment_type', v)}>
                   {Object.entries(employmentTypeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                 </SelectField>
-                <Field label="週所定分数" type="number" value={staffForm.weekly_scheduled_minutes} onChange={(v) => updateStaffForm('weekly_scheduled_minutes', Number(v))} />
+                <Field label="週所定時間" type="number" value={weeklyScheduledHoursText} onChange={(v) => setWeeklyScheduledHoursText(v)} />
                 <Field label="入職日" type="date" value={staffForm.hire_date} onChange={(v) => updateStaffForm('hire_date', v)} />
                 <Field label="退職日" type="date" value={staffForm.retirement_date} onChange={(v) => updateStaffForm('retirement_date', v)} />
               </div>
