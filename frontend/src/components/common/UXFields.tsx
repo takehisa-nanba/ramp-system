@@ -131,30 +131,27 @@ export const PostalAddressField: React.FC<PostalAddressFieldProps> = ({
 
 interface TimeDurationInputProps {
   label: string;
-  minutes: number;
-  seconds: number;
-  onChange: (minutes: number, seconds: number) => void;
+  totalSeconds: number;
+  onChange: (totalSeconds: number) => void;
   className?: string;
   error?: string;
 }
 
 /**
- * バックエンドの分・秒を、フロントエンドで時間・分・秒に分解して表示・編集するコンポーネント。
- * 入力された時間・分・秒は自動的に分秒に再変換されて onChange に返されます。
+ * バックエンドの総秒数を、フロントエンドで時間・分・秒に分解して表示・編集するコンポーネント。
+ * 入力された時間・分・秒は自動的に総秒数に再変換されて onChange に返されます。
  */
 export const TimeDurationInput: React.FC<TimeDurationInputProps> = ({
   label,
-  minutes,
-  seconds,
+  totalSeconds,
   onChange,
   className = '',
   error,
 }) => {
-  // 分・秒から時間・分・秒に分解する
-  const totalSeconds = (minutes || 0) * 60 + (seconds || 0);
-  const hoursVal = Math.floor(totalSeconds / 3600);
-  const minutesVal = Math.floor((totalSeconds % 3600) / 60);
-  const secondsVal = totalSeconds % 60;
+  // 総秒数から時間・分・秒に分解する
+  const hoursVal = Math.floor((totalSeconds || 0) / 3600);
+  const minutesVal = Math.floor(((totalSeconds || 0) % 3600) / 60);
+  const secondsVal = (totalSeconds || 0) % 60;
 
   const handleTimeChange = (type: 'hours' | 'minutes' | 'seconds', valStr: string) => {
     const val = parseInt(valStr, 10) || 0;
@@ -167,12 +164,9 @@ export const TimeDurationInput: React.FC<TimeDurationInputProps> = ({
     if (type === 'minutes') nextMinutes = val;
     if (type === 'seconds') nextSeconds = val;
 
-    // 分秒に再変換
+    // 総秒数に再変換
     const nextTotalSeconds = nextHours * 3600 + nextMinutes * 60 + nextSeconds;
-    const backendMins = Math.floor(nextTotalSeconds / 60);
-    const backendSecs = nextTotalSeconds % 60;
-
-    onChange(backendMins, backendSecs);
+    onChange(nextTotalSeconds);
   };
 
   return (

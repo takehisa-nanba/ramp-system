@@ -112,6 +112,10 @@ class User(db.Model):
         overlaps="participants_supporter, supporter_schedules" # ★ ここ！
     )
 
+    schedule_templates = db.relationship('UserScheduleTemplate', back_populates='user', cascade='all, delete-orphan')
+    daily_schedules = db.relationship('UserDailySchedule', back_populates='user', cascade='all, delete-orphan')
+    schedule_requests = db.relationship('UserScheduleRequest', foreign_keys='UserScheduleRequest.user_id', back_populates='user', cascade='all, delete-orphan')
+
     def __repr__(self):
         return f'<User {self.id}: {self.display_name}>'
 

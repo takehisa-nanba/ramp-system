@@ -160,7 +160,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "user_id": user_b_id,
             "start_time": datetime.combine(today, time(10, 30)).isoformat(),
             "end_time": datetime.combine(today, time(11, 30)).isoformat(),
-            "duration_minutes": 60
+            "duration_seconds": 3600
         }
         res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code == 400
@@ -176,7 +176,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "user_id": user_b_id,
             "start_time": datetime.combine(today, time(11, 0)).isoformat(),
             "end_time": datetime.combine(today, time(12, 0)).isoformat(),
-            "duration_minutes": 60
+            "duration_seconds": 3600
         }
         res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code in [200, 201]
@@ -190,7 +190,7 @@ def test_daily_log_overlap_guardrail(app, client):
             "user_id": user_a.id,
             "start_time": datetime.combine(today, time(10, 0)).isoformat(),
             "end_time": datetime.combine(today, time(11, 0)).isoformat(),
-            "duration_minutes": 60
+            "duration_seconds": 3600
         }
         res = client.post('/api/daily-logs', json=payload, headers=headers)
         assert res.status_code in [200, 201]

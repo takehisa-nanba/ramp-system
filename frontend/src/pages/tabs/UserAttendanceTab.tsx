@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Clock, CheckCircle, FileEdit, AlertTriangle, ArrowRight, Calendar, Link as LinkIcon, X, AlertCircle } from 'lucide-react';
+import { TimeDurationInput } from '../../components/common/UXFields';
 import { 
   fetchUserAttendanceRecords, 
   fetchUserDailyLogs, 
@@ -47,6 +48,22 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
   const [startTime, setStartTime] = useState<string>('10:00');
   const [endTime, setEndTime] = useState<string>('11:00');
   const [notes, setNotes] = useState<string>('');
+  const [durationSeconds, setDurationSeconds] = useState<number>(3600);
+
+  // 開始時間・終了時間変更時に所要秒数を自動計算 (ガードレール)
+  useEffect(() => {
+    const startParts = startTime.split(':').map(Number);
+    const endParts = endTime.split(':').map(Number);
+    if (startParts.length === 2 && endParts.length === 2) {
+      const startSecs = startParts[0] * 3600 + startParts[1] * 60;
+      const endSecs = endParts[0] * 3600 + endParts[1] * 60;
+      if (endSecs > startSecs) {
+        setDurationSeconds(endSecs - startSecs);
+      } else {
+        setDurationSeconds(0);
+      }
+    }
+  }, [startTime, endTime]);
   
   const [formSubmitting, setFormSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -148,6 +165,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
     setAttendanceInfo(null);
     setStartTime('10:00');
     setEndTime('11:00');
+    setDurationSeconds(3600);
   };
 
   const handleAction = (item: UserAttendanceItem) => {
@@ -173,6 +191,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
           const act = associatedLog.activities[0];
           setStartTime(act.start_time || '10:00');
           setEndTime(act.end_time || '11:00');
+          setDurationSeconds(act.duration_seconds || 3600);
         }
         
         handleOpenModal();
@@ -230,10 +249,16 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
     
     const startParts = startTime.split(':').map(Number);
     const endParts = endTime.split(':').map(Number);
-    const duration = (endParts[0] * 60 + endParts[1]) - (startParts[0] * 60 + startParts[1]);
+    const startSecs = startParts[0] * 3600 + startParts[1] * 60;
+    const endSecs = endParts[0] * 3600 + endParts[1] * 60;
 
-    if (duration <= 0) {
-      setFormError('終了時間は開始時間より後の時間に設定してください。');
+    if (endSecs <= startSecs) {
+      setFormError('終了時間は開始時間より後の時間に設定してください。日跨ぎの活動記録はサポートされていません。');
+      return;
+    }
+
+    if (durationSeconds < 0 || durationSeconds > 86400) {
+      setFormError('活動時間は0秒以上24時間（86400秒）以下で指定してください。');
       return;
     }
 
@@ -249,7 +274,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
         user_id: userId,
         start_time: startTimeISO,
         end_time: endTimeISO,
-        duration_minutes: duration,
+        duration_seconds: durationSeconds,
         notes: notes,
         log_status: status,
         attendance_record_id: attendanceInfo?.recordId || undefined
@@ -410,12 +435,21 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
                         <LinkIcon className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
                         <div className="w-full">
                           <div className="text-xs font-bold text-slate-400 mb-1">活動記録</div>
-                          {log.activities.map(act => (
-                            <div key={act.id} className="text-sm font-bold text-slate-700 flex justify-between gap-4">
-                              <span>{act.support_content}</span>
-                              <span className="text-slate-400 text-xs font-medium whitespace-nowrap">{act.start_time}〜{act.end_time}</span>
-                            </div>
-                          ))}
+                          {log.activities.map(act => {
+                            const showDuration = () => {
+                              if (!act.duration_seconds) return '';
+                              const h = Math.floor(act.duration_seconds / 3600);
+                              const m = Math.floor((act.duration_seconds % 3600) / 60);
+                              const s = act.duration_seconds % 60;
+                              return ` (${h > 0 ? `${h}時間` : ''}${m}分${s}秒)`;
+                            };
+                            return (
+                              <div key={act.id} className="text-sm font-bold text-slate-700 flex justify-between gap-4">
+                                <span>{act.support_content}{showDuration()}</span>
+                                <span className="text-slate-400 text-xs font-medium whitespace-nowrap">{act.start_time}〜{act.end_time}</span>
+                              </div>
+                            );
+                          })}
                           <div className="text-xs font-bold text-slate-500 mt-1">
                             記録者: {log.activities[0]?.supporter_name ?? '—'}
                           </div>
@@ -518,6 +552,14 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
                   />
                 </div>
               </div>
+
+              {/* 活動所要時間 */}
+              <TimeDurationInput
+                label="活動所要時間"
+                totalSeconds={durationSeconds}
+                onChange={(secs) => setDurationSeconds(secs)}
+                className="mt-2"
+              />
 
               {/* 支援記録 */}
               <div>

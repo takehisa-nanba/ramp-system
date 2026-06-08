@@ -4,7 +4,8 @@ from flask_jwt_extended import jwt_required
 from datetime import date, datetime
 from backend.app import db
 from backend.app.models import (
-    User, SupportPlan, UserDailyLog, CaseConferenceLog, StatusMaster
+    User, SupportPlan, UserDailyLog, CaseConferenceLog, StatusMaster,
+    UserScheduleTemplate, UserDailySchedule, UserScheduleRequest, SupportRecord
 )
 
 action_items_bp = Blueprint('action_items', __name__, url_prefix='/api/action-items')
@@ -223,4 +224,79 @@ def get_action_items():
                     "target_date": plan.plan_start_date.strftime('%Y-%m-%d') if plan.plan_start_date else None
                 })
                 
+    # 7. 無断欠席の検出 (過去および今日で、確定予定があるのに打刻がない場合)
+    scheduled_days = UserDailySchedule.query.filter(
+        UserDailySchedule.date <= today,
+        UserDailySchedule.is_scheduled == True
+    ).all()
+    
+    for sched in scheduled_days:
+        att = AttendanceRecord.query.filter_by(
+            user_id=sched.user_id,
+            record_type='CHECK_IN'
+        ).filter(
+            func.date(AttendanceRecord.timestamp) == sched.date
+        ).first()
+        
+        if not att:
+            user_name = sched.user.display_name if sched.user else "不明"
+            items.append({
+                "type": "unexcused_absence",
+                "category_label": "無断欠席",
+                "severity": "high",
+                "user_id": sched.user_id,
+                "user_name": user_name,
+                "title": f"【無断欠席の可能性】{user_name}さんの打刻がありません",
+                "description": f"{sched.date.strftime('%Y-%m-%d')}は通所予定日ですが、来所打刻がありません。安否確認の上、欠席対応記録を作成してください。",
+                "target_date": sched.date.strftime('%Y-%m-%d')
+            })
+
+    # 8. 予定外来所の検出 (打刻があるのに、確定予定がない、または is_scheduled == False の場合)
+    for (user_id, att_date), att in unique_attendances.items():
+        sched = UserDailySchedule.query.filter_by(user_id=user_id, date=att_date).first()
+        if not sched or not sched.is_scheduled:
+            user_name = att.user.display_name if att.user else "不明"
+            items.append({
+                "type": "unscheduled_attendance",
+                "category_label": "予定外来所",
+                "severity": "medium",
+                "user_id": user_id,
+                "user_name": user_name,
+                "title": f"【予定外来所】{user_name}さんの予定外の来所があります",
+                "description": f"{att_date.strftime('%Y-%m-%d')}に来所打刻がありますが、通所予定が登録されていないかキャンセルされています。追加利用手続きまたは予定の修正を行ってください。",
+                "target_date": att_date.strftime('%Y-%m-%d')
+            })
+
+    # 9. 支援記録漏れの検出 (打刻があるのに、SupportRecordが1件も登録されていない場合)
+    for (user_id, att_date), att in unique_attendances.items():
+        s_record = SupportRecord.query.filter_by(user_id=user_id, log_date=att_date).first()
+        if not s_record:
+            user_name = att.user.display_name if att.user else "不明"
+            items.append({
+                "type": "support_record_missing",
+                "category_label": "支援記録漏れ",
+                "severity": "high",
+                "user_id": user_id,
+                "user_name": user_name,
+                "title": f"【支援記録漏れ】{user_name}さんの支援記録が未作成です",
+                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（実績記録）が作成されていません。",
+                "target_date": att_date.strftime('%Y-%m-%d')
+            })
+
+    # 10. 予定申請の確認待ち
+    pending_requests = UserScheduleRequest.query.filter_by(request_status='PENDING').all()
+    for req in pending_requests:
+        user_name = req.user.display_name if req.user else "不明"
+        items.append({
+            "type": "schedule_request_pending",
+            "category_label": "申請確認待ち",
+            "severity": "high",
+            "user_id": req.user_id,
+            "user_name": user_name,
+            "title": f"【予定申請】{user_name}さんから予定変更申請が届いています",
+            "description": f"{req.target_date.strftime('%Y-%m-%d')}の予定申請（タイプ: {req.request_type}）が未決です。承認または却下を行ってください。",
+            "target_date": req.target_date.strftime('%Y-%m-%d'),
+            "schedule_request_id": req.id
+        })
+        
     return jsonify({"items": items}), 200

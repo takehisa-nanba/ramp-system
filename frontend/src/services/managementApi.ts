@@ -92,6 +92,8 @@ export interface OfficeSettings {
   phone_number?: string;
   fax_number?: string;
   email_address?: string;
+  default_start_time?: string;
+  default_end_time?: string;
   representative_name?: string;
   service_config_id?: number;
   service_type_master_id?: number;

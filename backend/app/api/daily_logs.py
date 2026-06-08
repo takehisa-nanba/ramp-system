@@ -55,7 +55,7 @@ def log_activity():
     user_id = data.get('user_id')
     start_time_str = data.get('start_time')
     end_time_str = data.get('end_time')
-    duration_minutes = data.get('duration_minutes', 0)
+    duration_seconds = data.get('duration_seconds', 0)
     notes = data.get('notes', '')
     log_status = data.get('log_status', 'DRAFT')
     attendance_record_id = data.get('attendance_record_id') # 追加
@@ -72,7 +72,7 @@ def log_activity():
             log_date=log_date,
             start_time=start_time,
             end_time=end_time,
-            duration_minutes=duration_minutes,
+            duration_seconds=duration_seconds,
             user_id=user_id,
             notes=notes,
             log_status=log_status,
@@ -123,6 +123,7 @@ def get_today_timeline():
             "user": user_name,
             "startTime": act.support_start_time.strftime('%H:%M') if act.support_start_time else "--:--",
             "endTime": act.support_end_time.strftime('%H:%M') if act.support_end_time else "--:--",
+            "duration": act.support_duration_seconds,
             "notes": ""
         })
         
@@ -130,7 +131,7 @@ def get_today_timeline():
         timeline.append({
             "type": "office",
             "title": alloc.activity_type.activity_name,
-            "duration": alloc.allocated_minutes,
+            "duration": alloc.allocated_duration_seconds,
             "startTime": "間接", # 間接業務は時間が固定されない設計
             "endTime": ""
         })

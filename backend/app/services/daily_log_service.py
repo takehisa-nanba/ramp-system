@@ -14,7 +14,7 @@ class DailyLogService:
         log_date: datetime.date,
         start_time: datetime,
         end_time: datetime,
-        duration_minutes: int,
+        duration_seconds: int,
         user_id: int = None,
         notes: str = "",
         log_status: str = 'DRAFT',
@@ -24,6 +24,12 @@ class DailyLogService:
         日報（活動）を記録する。
         直接支援ならSupportRecordへ、間接業務ならStaffActivityAllocationLogへ保存する。
         """
+        if duration_seconds < 0 or duration_seconds > 86400:
+            raise ValidationError("活動時間は0秒以上24時間（86400秒）以下で指定してください。")
+
+        if start_time and end_time and end_time <= start_time:
+            raise ValidationError("終了時間は開始時間より後の時間に設定してください。日跨ぎの活動記録はサポートされていません。")
+
         tag = db.session.get(StaffActivityMaster, tag_id)
         if not tag:
             raise ValidationError("無効な活動タグです")
@@ -31,6 +37,8 @@ class DailyLogService:
         if tag.is_direct_support:
             if not user_id:
                 raise ValidationError("直接支援の場合、利用者の選択が必須です")
+            if duration_seconds is None:
+                raise ValidationError("直接支援の場合は活動時間の入力が必須です。")
 
             # 🛡️ 重複時間帯ガードレール (直接支援のみ)
             # 支援記録(SupportRecord)に対して重複チェックを実施
@@ -99,7 +107,8 @@ class DailyLogService:
                 support_record_type='DIRECT_SUPPORT',
                 support_plan_id=plan_id,
                 support_goal_id=goal_id,
-                support_content=f"[{tag.activity_name}] {notes}"
+                support_content=f"[{tag.activity_name}] {notes}",
+                support_duration_seconds=duration_seconds
             )
 
             db.session.add(record)
@@ -115,13 +124,13 @@ class DailyLogService:
             ).first()
             
             if allocation:
-                allocation.allocated_minutes += duration_minutes
+                allocation.allocated_duration_seconds += duration_seconds
             else:
                 allocation = StaffActivityAllocationLog(
                     supporter_id=supporter_id,
                     activity_date=log_date,
                     staff_activity_master_id=tag_id,
-                    allocated_minutes=duration_minutes
+                    allocated_duration_seconds=duration_seconds
                 )
                 db.session.add(allocation)
                 db.session.flush()

@@ -455,6 +455,7 @@ export interface DailyLogActivity {
   start_time: string | null;
   end_time: string | null;
   supporter_name: string;
+  duration_seconds?: number;
 }
 export interface DailyLogItem {
   id: number;
@@ -585,7 +586,7 @@ export const updateTimelineDeviationReason = async (planId: number, reason: stri
 
 // --- 管理確認事項 (Action Items) ---
 export interface ActionItem {
-  type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference' | 'support_plan_timeline';
+  type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference' | 'support_plan_timeline' | 'unexcused_absence' | 'unscheduled_attendance' | 'support_record_missing' | 'schedule_request_pending';
   category_label: string;
   severity: 'high' | 'medium' | 'low';
   user_id: number;
@@ -619,7 +620,7 @@ export interface CreateDailyLogData {
   user_id: number;
   start_time: string;
   end_time: string;
-  duration_minutes: number;
+  duration_seconds: number;
   notes: string;
   log_status: 'DRAFT' | 'COMPLETED';
   attendance_record_id?: number;
@@ -669,5 +670,83 @@ export interface TodayUsersResponse {
 
 export const fetchTodayUsers = async (): Promise<TodayUsersResponse> => {
   const response = await apiClient.get<TodayUsersResponse>('/dashboard/today-users');
+  return response.data;
+};
+
+// --- 利用者予定・申請管理 ---
+export interface UserScheduleTemplateItem {
+  day_of_week: string;
+  is_scheduled: boolean;
+  start_time: string | null;
+  end_time: string | null;
+}
+
+export interface UserScheduleRequestItem {
+  id: number;
+  target_date: string;
+  request_type: 'ABSENCE' | 'EXTRA_DAY' | 'SHIFT_TIME';
+  requested_start_time: string | null;
+  requested_end_time: string | null;
+  request_reason: string;
+  request_status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  requested_by_user_id: number | null;
+  requested_by_supporter_id: number | null;
+  decided_by_supporter_id: number | null;
+  decided_at: string | null;
+  decision_reason: string | null;
+}
+
+export interface UserDailyScheduleItem {
+  id: number;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_scheduled: boolean;
+  schedule_status: 'NORMAL' | 'CANCELLED' | 'SUBSTITUTED' | 'EXTRA';
+  schedule_request_id: number | null;
+}
+
+export const fetchUserScheduleTemplates = async (userId: number): Promise<{ items: UserScheduleTemplateItem[] }> => {
+  const response = await apiClient.get<{ items: UserScheduleTemplateItem[] }>(`/users/${userId}/schedule-templates`);
+  return response.data;
+};
+
+export const saveUserScheduleTemplates = async (userId: number, data: UserScheduleTemplateItem[]): Promise<{ success: boolean, message: string }> => {
+  const response = await apiClient.post<{ success: boolean, message: string }>(`/users/${userId}/schedule-templates`, data);
+  return response.data;
+};
+
+export const fetchUserScheduleRequests = async (userId: number): Promise<{ items: UserScheduleRequestItem[] }> => {
+  const response = await apiClient.get<{ items: UserScheduleRequestItem[] }>(`/users/${userId}/schedule-requests`);
+  return response.data;
+};
+
+export const createUserScheduleRequest = async (
+  userId: number,
+  data: {
+    target_date: string;
+    request_type: 'ABSENCE' | 'EXTRA_DAY' | 'SHIFT_TIME';
+    request_reason: string;
+    requested_start_time?: string | null;
+    requested_end_time?: string | null;
+  }
+): Promise<{ success: boolean, item: { id: number, request_status: string } }> => {
+  const response = await apiClient.post<{ success: boolean, item: { id: number, request_status: string } }>(`/users/${userId}/schedule-requests`, data);
+  return response.data;
+};
+
+export const fetchUserDailySchedules = async (
+  userId: number,
+  params?: { start_date?: string; end_date?: string }
+): Promise<{ items: UserDailyScheduleItem[] }> => {
+  const response = await apiClient.get<{ items: UserDailyScheduleItem[] }>(`/users/${userId}/daily-schedules`, { params });
+  return response.data;
+};
+
+export const decideUserScheduleRequest = async (
+  requestId: number,
+  data: { status: 'APPROVED' | 'REJECTED'; decision_reason: string }
+): Promise<{ success: boolean, item: { id: number, request_status: string, decision_reason: string } }> => {
+  const response = await apiClient.post<{ success: boolean, item: { id: number, request_status: string, decision_reason: string } }>(`/schedule-requests/${requestId}/decide`, data);
   return response.data;
 };

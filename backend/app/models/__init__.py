@@ -72,7 +72,7 @@ from backend.app.models.support.user_dashboard_settings import (
 )
 
 from backend.app.models.support.schedule import (
-    Schedule
+    Schedule, UserScheduleTemplate, UserDailySchedule, UserScheduleRequest
 )
 from backend.app.models.support.job_retention import (
     JobRetentionContract, JobRetentionRecord

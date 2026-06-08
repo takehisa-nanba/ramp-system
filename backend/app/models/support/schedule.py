@@ -2,7 +2,7 @@
 
 # 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime
+from sqlalchemy import Table, Column, Integer, ForeignKey, String, DateTime, Boolean, Date, Text
 
 # ====================================================================
 # 1. schedule_participants (中間テーブル)
@@ -64,4 +64,93 @@ class Schedule(db.Model):
         secondary=schedule_participants, 
         back_populates='supporter_schedules',
         overlaps="participants_user, user_schedules" # 競合を許容
+    )
+
+
+class UserScheduleTemplate(db.Model):
+    """
+    利用者の契約曜日ごとの基本通所予定（予定テンプレート）。
+    毎週の予定作成の自動化に使用される。
+    """
+    __tablename__ = 'user_schedule_templates'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    # 曜日 ('Monday', 'Tuesday', ..., 'Sunday')
+    day_of_week = Column(String(20), nullable=False)
+    
+    # その曜日に通所する予定があるか
+    is_scheduled = Column(Boolean, default=True, nullable=False)
+    
+    # 予定される基本時間帯 (HH:MM形式)
+    start_time = Column(String(5), nullable=True) # 例: '10:00'
+    end_time = Column(String(5), nullable=True)   # 例: '16:00'
+    
+    user = db.relationship('User', back_populates='schedule_templates', foreign_keys=[user_id])
+    
+    # 複合ユニーク制約（1人の利用者に対して曜日ごとに1件）
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'day_of_week', name='_user_day_template_uc'),
+    )
+
+
+class UserScheduleRequest(db.Model):
+    """
+    予定の追加、欠席（キャンセル）、変更申請の履歴。
+    """
+    __tablename__ = 'user_schedule_requests'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    target_date = Column(Date, nullable=False, index=True)
+    
+    request_type = Column(String(30), nullable=False) # 'ABSENCE' (欠席), 'EXTRA_DAY' (臨時追加), 'SHIFT_TIME' (時間変更)
+    requested_start_time = Column(String(5), nullable=True)
+    requested_end_time = Column(String(5), nullable=True)
+    
+    # 理由（本人・代理）
+    request_reason = Column(Text, nullable=False)
+    
+    # 申請状態
+    request_status = Column(String(30), default='PENDING', nullable=False) # 'PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'
+    
+    requested_by_user_id = Column(Integer, ForeignKey('users.id'), nullable=True)
+    requested_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    
+    # 意思決定
+    decided_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    decided_at = Column(DateTime, nullable=True)
+    decision_reason = Column(Text, nullable=True) # 却下や承認時の理由
+    
+    user = db.relationship('User', foreign_keys=[user_id], back_populates='schedule_requests')
+    requested_by_user = db.relationship('User', foreign_keys=[requested_by_user_id])
+    requested_by_supporter = db.relationship('Supporter', foreign_keys=[requested_by_supporter_id])
+    decided_by_supporter = db.relationship('Supporter', foreign_keys=[decided_by_supporter_id])
+
+
+class UserDailySchedule(db.Model):
+    """
+    確定した日付ごとの通所予定の実績・事実。
+    """
+    __tablename__ = 'user_daily_schedules'
+    
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    
+    date = Column(Date, nullable=False, index=True)
+    start_time = Column(String(5), nullable=True)
+    end_time = Column(String(5), nullable=True)
+    
+    is_scheduled = Column(Boolean, default=True, nullable=False) # 確定予定が有効か
+    schedule_status = Column(String(30), default='NORMAL', nullable=False) # 'NORMAL', 'CANCELLED', 'SUBSTITUTED', 'EXTRA'
+    
+    schedule_request_id = Column(Integer, ForeignKey('user_schedule_requests.id'), nullable=True)
+    
+    user = db.relationship('User', back_populates='daily_schedules', foreign_keys=[user_id])
+    schedule_request = db.relationship('UserScheduleRequest', foreign_keys=[schedule_request_id])
+    
+    # 複合ユニーク制約（1人の利用者に対して1日1件の予定）
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'date', name='_user_daily_schedule_uc'),
     )

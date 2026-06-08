@@ -70,6 +70,11 @@ class SupportRecord(db.Model):
     # 時間実績 (直接支援などの場合は時間が入るが、欠席連絡などは空もあり得るため nullable=True)
     support_start_time = Column(DateTime, nullable=True)
     support_end_time = Column(DateTime, nullable=True)
+    # 支援所要時間（秒）
+    # NULL: 時間を記録しない種別の記録（欠席連絡、家族連絡、企業連絡など）
+    # 0: 時間を記録する種別だが、実績として0秒
+    # ※ DIRECT_SUPPORT (直接支援) の場合は 0以上の値が必須。
+    support_duration_seconds = Column(Integer, nullable=True)
     
     # 支援の種別
     support_record_type = Column(String(30), nullable=False, default='DIRECT_SUPPORT')
@@ -99,6 +104,10 @@ class BreakRecord(db.Model):
     
     break_start_time = Column(DateTime, nullable=False)
     break_end_time = Column(DateTime)
+    # 休憩所要時間（秒）
+    # NULL: 休憩中（終了打刻未済）
+    # 0: 実績0秒の休憩
+    break_duration_seconds = Column(Integer, nullable=True)
     
     user_daily_log = db.relationship('UserDailyLog', back_populates='break_records')
 

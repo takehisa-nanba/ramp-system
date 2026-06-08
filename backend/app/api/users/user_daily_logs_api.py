@@ -47,6 +47,7 @@ def get_user_daily_logs(user_id: int):
                 "support_content": act.support_content,
                 "start_time": act.support_start_time.strftime('%H:%M') if act.support_start_time else None,
                 "end_time": act.support_end_time.strftime('%H:%M') if act.support_end_time else None,
+                "duration_seconds": act.support_duration_seconds,
                 "supporter_name": supporter_name,
             })
 

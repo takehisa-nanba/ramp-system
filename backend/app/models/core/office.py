@@ -128,6 +128,8 @@ class OfficeServiceConfiguration(db.Model):
     
     # 地域区分 (1級地〜7級地、その他)
     regional_category = Column(String(20)) 
+    default_start_time = Column(String(5), nullable=True)  # HH:MM format default service start time
+    default_end_time = Column(String(5), nullable=True)  # HH:MM format default service end time
     
     # 主たる対象者 (JSON: {"physical": true, "mental": true, ...})
     target_disabilities = Column(JSON)

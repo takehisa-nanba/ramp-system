@@ -279,8 +279,8 @@ class StaffActivityAllocationLog(db.Model):
     
     staff_activity_master_id = Column(Integer, ForeignKey('staff_activity_master.id'), nullable=False)
     
-    # 合計時間 (分)
-    allocated_minutes = Column(Integer, nullable=False)
+    # 合計時間 (秒)
+    allocated_duration_seconds = Column(Integer, nullable=False, default=0)
     
     # 管理業務フラグ（同時刻の二重計上の例外判定などに使用）
     is_governance_task = Column(Boolean, default=False)

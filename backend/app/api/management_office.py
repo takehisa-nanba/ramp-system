@@ -50,7 +50,10 @@ def get_office_settings():
             "regional_category": service.regional_category,
             "target_disabilities": service.target_disabilities,
             "cooperating_medical_institution": service.cooperating_medical_institution,
-            "manager_name": f"{service.manager_supporter.last_name} {service.manager_supporter.first_name}" if service.manager_supporter else "未設定"
+            "manager_name": f"{service.manager_supporter.last_name} {service.manager_supporter.first_name}" if service.manager_supporter else "未設定",
+            "default_start_time": service.default_start_time if service.default_start_time else None,
+            "default_end_time": service.default_end_time if service.default_end_time else None,
+
         })
 
     first_s = services_list[0]
@@ -90,6 +93,8 @@ def get_office_settings():
         "target_disabilities": first_s["target_disabilities"],
         "cooperating_medical_institution": first_s["cooperating_medical_institution"],
         "manager_name": first_s["manager_name"],
+        "default_start_time": first_s.get('default_start_time'),
+        "default_end_time": first_s.get('default_end_time'),
         
         # 複数サービス（多機能型）の配列データ
         "services": services_list
@@ -166,6 +171,11 @@ def update_office_settings():
                 item.regional_category = incoming.get('regional_category')
                 item.target_disabilities = incoming.get('target_disabilities')
                 item.cooperating_medical_institution = incoming.get('cooperating_medical_institution')
+                # デフォルト開始・終了時刻の更新
+                if 'default_start_time' in incoming:
+                    item.default_start_time = incoming['default_start_time'] or None
+                if 'default_end_time' in incoming:
+                    item.default_end_time = incoming['default_end_time'] or None
                 
                 if incoming.get('initial_designation_date'):
                     try:
@@ -200,6 +210,11 @@ def update_office_settings():
                         service.service_type_master_id = int(data['service_type_master_id'])
                     except (ValueError, TypeError):
                         raise ValidationError("サービス種別の指定が不正です")
+                # デフォルト開始・終了時刻の更新
+                if 'default_start_time' in data:
+                    service.default_start_time = data['default_start_time'] or None
+                if 'default_end_time' in data:
+                    service.default_end_time = data['default_end_time'] or None
 
                 if 'manager_supporter_id' in data:
                     service.manager_supporter_id = int(data['manager_supporter_id']) if data.get('manager_supporter_id') else None

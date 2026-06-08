@@ -55,7 +55,7 @@ class OfficeTrainingEvent(db.Model):
     training_name = Column(String(255), nullable=False) # 具体的な研修名
     
     event_timestamp = Column(DateTime, nullable=False, default=func.now())
-    duration_minutes = Column(Integer) # 研修時間（分）
+    duration_seconds = Column(Integer) # 研修時間（秒）
     instructor = Column(String(100)) # 講師名
     
     office = db.relationship('OfficeSetting')
@@ -89,7 +89,7 @@ class TrainingLog(db.Model):
     obligation_status = Column(String(50))
     
     completion_date = Column(Date, nullable=False)
-    duration_minutes = Column(Integer) # 研修時間（分）
+    duration_seconds = Column(Integer) # 研修時間（秒）
     
     # --- 証憑（原理1） ---
     document_url = Column(String(500)) # 修了証のURL
