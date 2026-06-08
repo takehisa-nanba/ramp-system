@@ -22,29 +22,87 @@ with app.app_context():
     # db.drop_all()
     # db.create_all()
 
-    # 1. マスターデータの整備
+    # 1. 権限マスターの整備
+    permissions = [
+        {'name': 'VIEW', 'desc': 'データの閲覧'},
+        {'name': 'CREATE', 'desc': 'データの作成'},
+        {'name': 'EDIT', 'desc': 'データの編集'},
+        {'name': 'APPROVE', 'desc': 'データの承認'},
+        {'name': 'DELETE', 'desc': 'データの削除'},
+        {'name': 'VIEW_PII', 'desc': '個人情報の閲覧'},
+        {'name': 'EDIT_PII', 'desc': '個人情報の編集'},
+        {'name': 'EXPORT_PII', 'desc': '個人情報の出力'},
+        {'name': 'VIEW_AUDIT_LOG', 'desc': '監査ログの閲覧'},
+        {'name': 'VIEW_STAFF', 'desc': '職員情報の閲覧'},
+        {'name': 'CREATE_STAFF', 'desc': '職員情報の登録'},
+        {'name': 'EDIT_STAFF', 'desc': '職員情報の編集'},
+    ]
+    perm_objs = {}
+    for p in permissions:
+        obj = PermissionMaster.query.filter_by(name=p['name']).first()
+        if not obj:
+            obj = PermissionMaster(name=p['name'])
+            db.session.add(obj)
+        perm_objs[p['name']] = obj
+    db.session.commit()
+
+    # 福祉法令上の標準実務職種マスターの投入と権限設定
+    job_titles_seed = [
+        {
+            'title_name': '管理者', 
+            'is_management': True, 
+            'is_qualified': False,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'DELETE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF', 'CREATE_STAFF', 'EDIT_STAFF']
+        },
+        {
+            'title_name': 'サービス管理責任者', 
+            'is_management': False, 
+            'is_qualified': True,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF']
+        },
+        {
+            'title_name': '生活支援員', 
+            'is_management': False, 
+            'is_qualified': False,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']
+        },
+        {
+            'title_name': '職業指導員', 
+            'is_management': False, 
+            'is_qualified': False,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']
+        },
+        {
+            'title_name': '就労支援員', 
+            'is_management': False, 
+            'is_qualified': False,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']
+        },
+        {
+            'title_name': '事務員', 
+            'is_management': False, 
+            'is_qualified': False,
+            'perms': ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']
+        },
+    ]
+    for jt in job_titles_seed:
+        title_obj = JobTitleMaster.query.filter_by(title_name=jt['title_name']).first()
+        if not title_obj:
+            title_obj = JobTitleMaster(
+                title_name=jt['title_name'],
+                is_management_role=jt['is_management'],
+                is_qualified_role=jt['is_qualified']
+            )
+            db.session.add(title_obj)
+        # 各職種に法令上・業務上の標準パーミッションをアタッチ（文字列ハードコード回避のため）
+        title_obj.permissions = [perm_objs[pname] for pname in jt['perms'] if pname in perm_objs]
+    db.session.commit()
+
+    # 1-2. マスターデータの整備（自治体）
     municipality = MunicipalityMaster.query.filter_by(municipality_code='131016').first()
     if not municipality:
         municipality = MunicipalityMaster(municipality_code='131016', name='千代田区')
         db.session.add(municipality)
-
-    # 福祉法令上の標準実務職種マスターの投入
-    job_titles_seed = [
-        {'title_name': '管理者', 'is_management': True, 'is_qualified': False},
-        {'title_name': 'サービス管理責任者', 'is_management': False, 'is_qualified': True},
-        {'title_name': '生活支援員', 'is_management': False, 'is_qualified': False},
-        {'title_name': '職業指導員', 'is_management': False, 'is_qualified': False},
-        {'title_name': '就労支援員', 'is_management': False, 'is_qualified': False},
-        {'title_name': '事務員', 'is_management': False, 'is_qualified': False},
-    ]
-    for jt in job_titles_seed:
-        if not JobTitleMaster.query.filter_by(title_name=jt['title_name']).first():
-            db.session.add(JobTitleMaster(
-                title_name=jt['title_name'],
-                is_management_role=jt['is_management'],
-                is_qualified_role=jt['is_qualified']
-            ))
-    db.session.commit()
 
     # 活動タグ
     tags = [
@@ -123,29 +181,7 @@ with app.app_context():
         db.session.commit()
 
 
-    # 3. 権限・ロールの整備
-    permissions = [
-        {'name': 'VIEW', 'desc': 'データの閲覧'},
-        {'name': 'CREATE', 'desc': 'データの作成'},
-        {'name': 'EDIT', 'desc': 'データの編集'},
-        {'name': 'APPROVE', 'desc': 'データの承認'},
-        {'name': 'DELETE', 'desc': 'データの削除'},
-        {'name': 'VIEW_PII', 'desc': '個人情報の閲覧'},
-        {'name': 'EDIT_PII', 'desc': '個人情報の編集'},
-        {'name': 'EXPORT_PII', 'desc': '個人情報の出力'},
-        {'name': 'VIEW_AUDIT_LOG', 'desc': '監査ログの閲覧'},
-        {'name': 'VIEW_STAFF', 'desc': '職員情報の閲覧'},
-        {'name': 'CREATE_STAFF', 'desc': '職員情報の登録'},
-        {'name': 'EDIT_STAFF', 'desc': '職員情報の編集'},
-    ]
-    perm_objs = {}
-    for p in permissions:
-        obj = PermissionMaster.query.filter_by(name=p['name']).first()
-        if not obj:
-            obj = PermissionMaster(name=p['name'])
-            db.session.add(obj)
-        perm_objs[p['name']] = obj
-    db.session.commit()
+    # 3. ロールの整備 (権限マスターはファイル上部で定義・登録済み)
 
     roles = [
         {'name': '法人管理者', 'scope': 'CORPORATE', 'is_admin': True, 'perms': 'ALL'},

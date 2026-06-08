@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, ChangeEvent, CompositionEvent } from 'react';
+import { useState, useRef, useEffect } from 'react';
+import type { ChangeEvent, CompositionEvent } from 'react';
 
 // ひらがな -> カタカナへの変換ユーティリティ
 const toKatakana = (str: string): string => {

@@ -24,3 +24,14 @@ role_permission_link = Table(
     Column('role_id', Integer, ForeignKey('role_master.id'), primary_key=True),
     Column('permission_id', Integer, ForeignKey('permission_master.id'), primary_key=True)
 )
+
+# ====================================================================
+# 3. JobTitlePermissionLink (職務と権限の連携)
+# ====================================================================
+# 責務: 職務(JobTitleMaster)と権限(PermissionMaster)の多対多（N:M）関係を定義する。
+job_title_permission_link = Table(
+    'job_title_permission_link',
+    db.metadata,
+    Column('job_title_id', Integer, ForeignKey('job_title_master.id'), primary_key=True),
+    Column('permission_id', Integer, ForeignKey('permission_master.id'), primary_key=True)
+)

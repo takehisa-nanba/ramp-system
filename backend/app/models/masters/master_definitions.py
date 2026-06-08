@@ -6,7 +6,7 @@ from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, Text,
 from sqlalchemy.sql import func
 
 #  修正点: 'backend.app.models.core.rbac_links' (絶対参照)
-from backend.app.models.core.rbac_links import supporter_role_link, role_permission_link
+from backend.app.models.core.rbac_links import supporter_role_link, role_permission_link, job_title_permission_link
 
 # ====================================================================
 # 法令上の定義と分類
@@ -55,6 +55,14 @@ class JobTitleMaster(db.Model):
     is_qualified_role = Column(Boolean, default=False) # 資格必須職務フラグ
     assignments = db.relationship('SupporterJobAssignment', back_populates='job_title', lazy='dynamic')
     filing_history = db.relationship('JobFilingRecord', back_populates='job_title', lazy='dynamic')
+    
+    # 動的な権限管理用
+    permissions = db.relationship(
+        'PermissionMaster',
+        secondary=job_title_permission_link,
+        lazy='subquery',
+        backref=db.backref('job_titles', lazy='dynamic')
+    )
 
 class ServiceTypeMaster(db.Model):
     """サービス種別（就労移行, B型など）と法定見直し頻度"""

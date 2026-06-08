@@ -177,16 +177,10 @@ def check_permission(supporter_id, permission_name):
         if assignment.end_date and assignment.end_date < today:
             continue
             
-        title = assignment.job_title.title_name if assignment.job_title else None
-        if title == '管理者':
-            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'DELETE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF', 'CREATE_STAFF', 'EDIT_STAFF']:
-                return True
-        elif title == 'サービス管理責任者':
-            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'APPROVE', 'VIEW_PII', 'EDIT_PII', 'VIEW_STAFF']:
-                return True
-        elif title in ['生活支援員', '職業指導員', '就労支援員', '事務員']:
-            if permission_name in ['VIEW', 'CREATE', 'EDIT', 'VIEW_PII']:
-                return True
+        if assignment.job_title:
+            for perm in assignment.job_title.permissions:
+                if perm.name == permission_name:
+                    return True
 
     # 職員が持つ全てのロールから、権限セットを収集
     for role in supporter.roles:
@@ -311,7 +305,7 @@ def validate_last_admin_protection(staff, data):
     is_new_valid_system = False
     is_new_valid_corporate = False
     
-    if new_is_active and new_ret_date is None:
+    if new_is_active and (new_ret_date is None or new_ret_date > today):
         new_roles = RoleMaster.query.filter(RoleMaster.id.in_(new_role_ids)).all()
         is_new_valid_system = any(
             r.role_scope == 'SYSTEM' and r.is_admin
