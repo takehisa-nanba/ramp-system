@@ -70,13 +70,13 @@ export const DailyScheduleActualPage: React.FC = () => {
       title: '利用者名',
       dataIndex: 'user_name',
       key: 'user_name',
-      render: (text: string) => <Text weight="medium">{text}</Text>
+      render: (text: string) => <Text className="font-medium">{text}</Text>
     },
     {
       title: '予定',
       key: 'schedule',
       render: (_: any, record: DailyScheduleActualItem) => {
-        if (!record.is_scheduled) return <Text color="text-gray-400">予定なし</Text>;
+        if (!record.is_scheduled) return <Text className="text-gray-400">予定なし</Text>;
         const start = record.scheduled_start_time ? record.scheduled_start_time.slice(0, 5) : '';
         const end = record.scheduled_end_time ? record.scheduled_end_time.slice(0, 5) : '';
         return <Text>{`${start} - ${end}`}</Text>;
@@ -86,7 +86,7 @@ export const DailyScheduleActualPage: React.FC = () => {
       title: '実績（打刻）',
       key: 'actual',
       render: (_: any, record: DailyScheduleActualItem) => {
-        if (!record.check_in_at) return <Text color="text-gray-400">未打刻</Text>;
+        if (!record.check_in_at) return <Text className="text-gray-400">未打刻</Text>;
         const start = dayjs(record.check_in_at).format('HH:mm');
         const end = record.check_out_at ? dayjs(record.check_out_at).format('HH:mm') : '未退所';
         return <Text>{`${start} - ${end}`}</Text>;
@@ -113,7 +113,7 @@ export const DailyScheduleActualPage: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-gray-50">
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <Heading level={2} className="!mb-0 text-gray-800">日別予定・実績</Heading>
+        <Heading variant="h2" className="!mb-0 text-gray-800">日別予定・実績</Heading>
         <Space>
           <Select value={filterType} onChange={setFilterType} style={{ width: 150 }}>
             <Option value="all">全員</Option>
