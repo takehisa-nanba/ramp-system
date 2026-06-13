@@ -895,6 +895,7 @@ export interface DailyScheduleActualItem {
   check_out_at: string | null;
   effective_status: string;
   daily_log_status: 'missing' | 'draft' | 'completed';
+  decision_reason?: string | null;
 }
 
 export const fetchDailyScheduleActuals = async (date?: string): Promise<{ items: DailyScheduleActualItem[] }> => {

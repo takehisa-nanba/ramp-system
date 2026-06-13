@@ -83,7 +83,7 @@ def get_daily_actuals():
                 # 来所しているが支援記録が未完了
                 effective_status = "MISSING_SUPPORT_RECORD"
         else:
-            if schedule_status == 'CANCELLED':
+            if sched and (sched.approval_status == 'CANCELLED' or (not sched.is_scheduled and sched.decision_reason)):
                 effective_status = "CANCELLED"
             elif is_scheduled:
                 effective_status = "SCHEDULED_NOT_ARRIVED"
@@ -100,7 +100,8 @@ def get_daily_actuals():
             "check_in_at": check_in.isoformat() if check_in else None,
             "check_out_at": check_out.isoformat() if check_out else None,
             "effective_status": effective_status,
-            "daily_log_status": log.log_status if log else "missing"
+            "daily_log_status": log.log_status if log else "missing",
+            "decision_reason": sched.decision_reason if sched else None
         })
 
     # effective_status でソート（例えば MISSING_SUPPORT_RECORD を上に）

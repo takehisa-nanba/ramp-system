@@ -100,6 +100,12 @@ export const DailyScheduleActualPage: React.FC = () => {
       render: (val: string) => getStatusTag(val)
     },
     {
+      title: '変更理由',
+      dataIndex: 'decision_reason',
+      key: 'decision_reason',
+      render: (val: string | null) => val ? <Text className="text-gray-600 text-sm">{val}</Text> : <Text className="text-gray-300">-</Text>
+    },
+    {
       title: '日報状態',
       dataIndex: 'daily_log_status',
       key: 'daily_log_status',
