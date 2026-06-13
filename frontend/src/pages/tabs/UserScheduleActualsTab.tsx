@@ -120,7 +120,7 @@ export const UserScheduleActualsTab: React.FC<Props> = ({ userId }) => {
           </Space>
         </div>
         <Table
-          dataSource={dailySchedules.map((d) => ({ ...d, key: d.id }))}
+          dataSource={dailySchedules.map((d) => ({ ...d, key: d.id || d.date }))}
           loading={loading}
           bordered
           pagination={false}

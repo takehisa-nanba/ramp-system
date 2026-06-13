@@ -3,7 +3,7 @@ import { Search } from 'lucide-react';
 import { usePostalLookup } from '../../hooks/usePostalLookup';
 
 interface UXFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
-  label: string;
+  label?: string;
   className?: string;
   error?: string;
 }
@@ -22,7 +22,7 @@ export const UXField: React.FC<UXFieldProps> = ({
 }) => {
   return (
     <label className={`block ${className}`}>
-      <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>
+      {label && <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>}
       <input
         type={type}
         className={`w-full h-10 px-3 rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all ${
@@ -130,7 +130,7 @@ export const PostalAddressField: React.FC<PostalAddressFieldProps> = ({
 };
 
 interface TimeDurationInputProps {
-  label: string;
+  label?: string;
   totalSeconds: number;
   onChange: (totalSeconds: number) => void;
   className?: string;
@@ -171,7 +171,7 @@ export const TimeDurationInput: React.FC<TimeDurationInputProps> = ({
 
   return (
     <div className={`block ${className}`}>
-      <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>
+      {label && <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>}
       <div className="flex items-center gap-2">
         {/* 時間 */}
         <div className="flex items-center gap-1">
@@ -213,5 +213,54 @@ export const TimeDurationInput: React.FC<TimeDurationInputProps> = ({
       </div>
       {error && <span className="block text-xs font-bold text-rose-500 mt-1">{error}</span>}
     </div>
+  );
+};
+
+interface TextAreaWithCounterProps extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
+  label?: string;
+  className?: string;
+  error?: string;
+  maxLength?: number;
+}
+
+/**
+ * 文字数カウント付きの共通テキストエリア。
+ */
+export const TextAreaWithCounter: React.FC<TextAreaWithCounterProps> = ({
+  label,
+  className = '',
+  error,
+  maxLength,
+  value,
+  onChange,
+  ...props
+}) => {
+  const [isFocused, setIsFocused] = useState(false);
+  const textValue = String(value || '');
+  const count = textValue.length;
+
+  return (
+    <label className={`block ${className}`}>
+      {label && <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>}
+      <div className={`relative rounded-xl border transition-all bg-white ${
+        error ? 'border-rose-300 ring-rose-500' : isFocused ? 'border-indigo-500 ring-2 ring-indigo-500/20' : 'border-slate-200'
+      }`}>
+        <textarea
+          value={value}
+          onChange={onChange}
+          onFocus={(e) => { setIsFocused(true); props.onFocus?.(e); }}
+          onBlur={(e) => { setIsFocused(false); props.onBlur?.(e); }}
+          maxLength={maxLength}
+          className="w-full min-h-[80px] p-3 rounded-xl focus:outline-none text-sm resize-y bg-transparent"
+          {...props}
+        />
+        {maxLength !== undefined && (
+          <div className="absolute bottom-2 right-3 text-[10px] font-bold text-slate-400 select-none bg-white/80 px-1 rounded">
+            {count} / {maxLength}
+          </div>
+        )}
+      </div>
+      {error && <span className="block text-xs font-bold text-rose-500 mt-1">{error}</span>}
+    </label>
   );
 };

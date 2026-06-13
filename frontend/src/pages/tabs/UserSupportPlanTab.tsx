@@ -28,6 +28,7 @@ import {
   type UserPiiResponse,
 } from '../../services/userService';
 import { X } from 'lucide-react';
+import { UXField, TextAreaWithCounter } from '../../components/common/UXFields';
 
 const statusLabel: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: '有効 (ACTIVE)', color: 'bg-emerald-100 text-emerald-700' },
@@ -748,12 +749,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <div className="mt-3 bg-white p-4 rounded-2xl border border-rose-200/60">
                   <p className="text-xs font-black text-rose-900 mb-2">遡及対応・計画遅延の理由を記録してください（監査必須要件）</p>
                   <form onSubmit={handleDeviationReasonSubmit} className="space-y-3">
-                    <textarea
-                      value={deviationReasonText}
-                      onChange={(e) => setDeviationReasonText(e.target.value)}
-                      placeholder="例：体調不良による入院のため説明・同意手続きが遅延。事前のアセスメント及び支援方針は本人の合意を得ていたため、開始日より遡及して計画を適用する。"
-                      className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden focus:ring-2 focus:ring-rose-500/20 focus:border-rose-400 font-medium min-h-[70px] text-slate-800"
-                    />
+                    <TextAreaWithCounter value={deviationReasonText} onChange={(e) => setDeviationReasonText(e.target.value)} placeholder="例：体調不良による入院のため説明・同意手続きが遅延。事前のアセスメント及び支援方針は本人の合意を得ていたため、開始日より遡及して計画を適用する。" />
                     {deviationError && (
                       <p className="text-[10px] text-rose-600 font-bold">{deviationError}</p>
                     )}
@@ -1470,13 +1466,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 mb-1">開催日時 (必須)</label>
-                  <input
-                    type="datetime-local"
-                    required
-                    value={formConfDatetime}
-                    onChange={(e) => setFormConfDatetime(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                  />
+                  <UXField type="datetime-local" required value={formConfDatetime} onChange={(e) => setFormConfDatetime(e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-[10px] font-black text-slate-400 mb-1">会議の種別</label>
@@ -1498,23 +1488,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                   <p className="text-xs font-black text-amber-900">⚠️ 本人不在に伴う遅延例外必須入力項目</p>
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 mb-1">1. 本人不在のやむを得ない事由 (必須)</label>
-                    <textarea
-                      required
-                      placeholder="例：本人が急病により長期入院中であり、モニタリング期限内に面談を実施することが物理的に困難なため。"
-                      value={formReasonForAbsence}
-                      onChange={(e) => setFormReasonForAbsence(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 font-medium min-h-[50px] text-slate-800"
-                    />
+                    <TextAreaWithCounter required placeholder="例：本人が急病により長期入院中であり、モニタリング期限内に面談を実施することが物理的に困難なため。" value={formReasonForAbsence} onChange={(e) => setFormReasonForAbsence(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-[9px] font-black text-slate-500 mb-1">2. 不在時の状況モニタリング（10文字以上必須）</label>
-                    <textarea
-                      required
-                      placeholder="例：入院先の病院の看護師と電話連絡をとり、本人の回復状況および退院見込みについて週1回確認を行い、支援の連続性を担保している。"
-                      value={formAbsenceMonitoringSummary}
-                      onChange={(e) => setFormAbsenceMonitoringSummary(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 font-medium min-h-[50px] text-slate-800"
-                    />
+                    <TextAreaWithCounter required placeholder="例：入院先の病院の看護師と電話連絡をとり、本人の回復状況および退院見込みについて週1回確認を行い、支援の連続性を担保している。" value={formAbsenceMonitoringSummary} onChange={(e) => setFormAbsenceMonitoringSummary(e.target.value)} />
                   </div>
                   <div className="flex items-start gap-2 pt-1">
                     <input
@@ -1564,35 +1542,14 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                         <label className="block text-[9px] font-black text-slate-500 mb-1">
                           課題・相談事項 {index + 1} (必須)
                         </label>
-                        <input
-                          type="text"
-                          required
-                          placeholder="例：就労に向けた体調管理や規則正しい生活リズムの維持について"
-                          value={topic.concern}
-                          onChange={(e) => {
-                            const next = [...formTopics];
-                            next[index].concern = e.target.value;
-                            setFormTopics(next);
-                          }}
-                          className="w-full border border-slate-200 rounded-xl px-3 py-1.5 text-xs focus:outline-hidden font-bold text-slate-700"
-                        />
+                        <UXField type="text" required placeholder="例：就労に向けた体調管理や規則正しい生活リズムの維持について" value={topic.concern} onChange={(e) => { const next = [...formTopics]; next[index].concern = e.target.value; setFormTopics(next); }} />
                       </div>
 
                       <div>
                         <label className="block text-[9px] font-black text-slate-500 mb-1">
                           それに対する決定事項・検討内容 {index + 1} (必須)
                         </label>
-                        <textarea
-                          required
-                          placeholder="例：就寝・起床時間を記録するセルフモニタリングシートを作成し、毎朝の面談時に支援員と確認し合うことで合意。"
-                          value={topic.action}
-                          onChange={(e) => {
-                            const next = [...formTopics];
-                            next[index].action = e.target.value;
-                            setFormTopics(next);
-                          }}
-                          className="w-full border border-slate-200 rounded-xl p-2.5 text-xs focus:outline-hidden font-medium min-h-[50px] text-slate-700"
-                        />
+                        <TextAreaWithCounter required placeholder="例：就寝・起床時間を記録するセルフモニタリングシートを作成し、毎朝の面談時に支援員と確認し合うことで合意。" value={topic.action} onChange={(e) => { const next = [...formTopics]; next[index].action = e.target.value; setFormTopics(next); }} />
                       </div>
                     </div>
                   ))}
@@ -1608,19 +1565,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1">決定事項・検討内容 (必須)</label>
-                    <textarea
-                      required
-                      placeholder="例：期限内に本人同席の会議ができないやむを得ない事由について確認し、不在中の代替モニタリング状況について合意した。"
-                      value={formTopics[0]?.action || ''}
-                      onChange={(e) => {
-                        const next = [...formTopics];
-                        if (next[0]) {
-                          next[0].action = e.target.value;
-                          setFormTopics(next);
-                        }
-                      }}
-                      className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden font-medium min-h-[80px]"
-                    />
+                    <TextAreaWithCounter required placeholder="例：期限内に本人同席の会議ができないやむを得ない事由について確認し、不在中の代替モニタリング状況について合意した。" value={formTopics[0]?.action || ''} onChange={(e) => { const next = [...formTopics]; if (next[0]) { next[0].action = e.target.value; setFormTopics(next); } }} />
                   </div>
                 </div>
               )}
@@ -1759,44 +1704,22 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1">実施日 (必須)</label>
-                <input
-                  type="date"
-                  required
-                  value={formMonDate}
-                  onChange={(e) => setFormMonDate(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                />
+                <UXField type="date" required value={formMonDate} onChange={(e) => setFormMonDate(e.target.value)} />
               </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1">総合評価・評価概要 (必須)</label>
-                <textarea
-                  required
-                  placeholder="例：第2期計画の目標に対して、軽作業の集中力と指示受けの面で順調な進捗が見られます。一部、ミス発生時のパニックについて対応方法の確認を継続中。"
-                  value={formMonSummary}
-                  onChange={(e) => setFormMonSummary(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden font-medium min-h-[85px]"
-                />
+                <TextAreaWithCounter required placeholder="例：第2期計画の目標に対して、軽作業の集中力と指示受けの面で順調な進捗が見られます。一部、ミス発生時のパニックについて対応方法の確認を継続中。" value={formMonSummary} onChange={(e) => setFormMonSummary(e.target.value)} />
               </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1">目標ごとの進捗詳細 (任意)</label>
-                <textarea
-                  placeholder="例：長期目標「作業の集中」: 本人の工夫(タイマー使用)により、45分間の持続的な作業が7割の確率で可能になっている。"
-                  value={formMonGoalNotes}
-                  onChange={(e) => setFormMonGoalNotes(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden font-medium min-h-[60px]"
-                />
+                <TextAreaWithCounter placeholder="例：長期目標「作業の集中」: 本人の工夫(タイマー使用)により、45分間の持続的な作業が7割の確率で可能になっている。" value={formMonGoalNotes} onChange={(e) => setFormMonGoalNotes(e.target.value)} />
               </div>
 
               <div>
                 <label className="block text-[10px] font-black text-slate-400 mb-1">背景分析・本人の変化 (任意)</label>
-                <textarea
-                  placeholder="例：家庭内の生活習慣が整ったことで、通所時の疲労感が軽減され、情緒的にも非常に安定した日々を送るようになっています。"
-                  value={formMonContext}
-                  onChange={(e) => setFormMonContext(e.target.value)}
-                  className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden font-medium min-h-[60px]"
-                />
+                <TextAreaWithCounter placeholder="例：家庭内の生活習慣が整ったことで、通所時の疲労感が軽減され、情緒的にも非常に安定した日々を送るようになっています。" value={formMonContext} onChange={(e) => setFormMonContext(e.target.value)} />
               </div>
             </form>
 
@@ -1876,15 +1799,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <label htmlFor="signerName" className="block text-xs font-black text-slate-500 mb-1">
                   {consentProofType === 'DIGITAL_SIGNATURE' ? '署名者氏名' : '受領者氏名'} (本人またはご家族)
                 </label>
-                <input
-                  type="text"
-                  id="signerName"
-                  value={signerName}
-                  onChange={(e) => setSignerName(e.target.value)}
-                  placeholder="例：山田 太郎"
-                  className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-sm focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                  disabled={consentSubmitting}
-                />
+                <UXField type="text" id="signerName" value={signerName} onChange={(e) => setSignerName(e.target.value)} placeholder="例：山田 太郎" disabled={consentSubmitting} />
               </div>
 
               <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 text-[10px] leading-relaxed text-slate-500 font-medium">
@@ -1960,23 +1875,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1">開始日 (必須)</label>
-                    <input 
-                      type="date"
-                      required
-                      value={formPlanStartDate}
-                      onChange={(e) => setFormPlanStartDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                    />
+                    <UXField type="date" required value={formPlanStartDate} onChange={(e) => setFormPlanStartDate(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1">終了日 (必須)</label>
-                    <input 
-                      type="date"
-                      required
-                      value={formPlanEndDate}
-                      onChange={(e) => setFormPlanEndDate(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                    />
+                    <UXField type="date" required value={formPlanEndDate} onChange={(e) => setFormPlanEndDate(e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -1990,21 +1893,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <div className="space-y-3">
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1">本人の意向・希望</label>
-                    <textarea 
-                      placeholder="例：自立した生活に向けて、就労のトレーニングを積みたい。"
-                      value={formUserIntentionContent}
-                      onChange={(e) => setFormUserIntentionContent(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium min-h-[60px]"
-                    />
+                    <TextAreaWithCounter placeholder="例：自立した生活に向けて、就労のトレーニングを積みたい。" value={formUserIntentionContent} onChange={(e) => setFormUserIntentionContent(e.target.value)} />
                   </div>
                   <div>
                     <label className="block text-[10px] font-black text-slate-400 mb-1">総合的な支援方針</label>
-                    <textarea 
-                      placeholder="例：本人の希望に配慮し、作業スキルの向上と情緒の安定を目指した支援を行う。"
-                      value={formSupportPolicyContent}
-                      onChange={(e) => setFormSupportPolicyContent(e.target.value)}
-                      className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium min-h-[60px]"
-                    />
+                    <TextAreaWithCounter placeholder="例：本人の希望に配慮し、作業スキルの向上と情緒の安定を目指した支援を行う。" value={formSupportPolicyContent} onChange={(e) => setFormSupportPolicyContent(e.target.value)} />
                   </div>
                 </div>
               </div>
@@ -2040,32 +1933,12 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                     <div className="space-y-3">
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 mb-1">【課題・相談内容 {ltgIdx + 1}】（次の目標を達成するための課題・ニーズ）</label>
-                        <textarea 
-                          placeholder="例：就労に向けた意欲はあるが、体調不良による欠席や遅刻が目立ち、自己管理の面で課題がある。"
-                          value={ltg.challenges || ''}
-                          onChange={(e) => {
-                            const next = [...formLongTermGoals];
-                            next[ltgIdx].challenges = e.target.value;
-                            setFormLongTermGoals(next);
-                          }}
-                          className="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium min-h-[60px]"
-                        />
+                        <TextAreaWithCounter placeholder="例：就労に向けた意欲はあるが、体調不良による欠席や遅刻が目立ち、自己管理の面で課題がある。" value={ltg.challenges || ''} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].challenges = e.target.value; setFormLongTermGoals(next); }} />
                       </div>
                       
                       <div>
                         <label className="block text-[10px] font-black text-slate-500 mb-1">【長期目標 {ltgIdx + 1}】目標記述</label>
-                        <input 
-                          type="text"
-                          required
-                          placeholder="例：毎日休まずに通所し、作業に集中できるようになる"
-                          value={ltg.description}
-                          onChange={(e) => {
-                            const next = [...formLongTermGoals];
-                            next[ltgIdx].description = e.target.value;
-                            setFormLongTermGoals(next);
-                          }}
-                          className="w-full border border-slate-200 rounded-xl px-3.5 py-2 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-bold"
-                        />
+                        <UXField type="text" required placeholder="例：毎日休まずに通所し、作業に集中できるようになる" value={ltg.description} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].description = e.target.value; setFormLongTermGoals(next); }} />
                       </div>
                     </div>
 
@@ -2096,18 +1969,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
                           <div>
                             <label className="block text-[9px] font-black text-slate-500 mb-1">短期目標 {stgIdx + 1} の内容</label>
-                            <input 
-                              type="text"
-                              required
-                              placeholder="例：作業開始時に課題を確認し、自己判断で進められる"
-                              value={stg.description}
-                              onChange={(e) => {
-                                const next = [...formLongTermGoals];
-                                next[ltgIdx].short_term_goals[stgIdx].description = e.target.value;
-                                setFormLongTermGoals(next);
-                              }}
-                              className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-xs focus:outline-hidden focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 font-medium"
-                            />
+                            <UXField type="text" required placeholder="例：作業開始時に課題を確認し、自己判断で進められる" value={stg.description} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].short_term_goals[stgIdx].description = e.target.value; setFormLongTermGoals(next); }} />
                           </div>
 
                           {/* 個別支援内容ループ */}
@@ -2138,46 +2000,15 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
                                   <div>
                                     <label className="block text-[8px] font-bold text-slate-400 mb-0.5">具体的な目標</label>
-                                    <input 
-                                      type="text"
-                                      required
-                                      placeholder="例：手順書を見ながら進める"
-                                      value={ig.concrete_goal}
-                                      onChange={(e) => {
-                                        const next = [...formLongTermGoals];
-                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].concrete_goal = e.target.value;
-                                        setFormLongTermGoals(next);
-                                      }}
-                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
-                                    />
+                                    <UXField type="text" required placeholder="例：手順書を見ながら進める" value={ig.concrete_goal} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].concrete_goal = e.target.value; setFormLongTermGoals(next); }} />
                                   </div>
                                   <div>
                                     <label className="block text-[8px] font-bold text-slate-400 mb-0.5">本人の取り組み</label>
-                                    <input 
-                                      type="text"
-                                      placeholder="例：分からない時は支援員に確認する"
-                                      value={ig.user_commitment}
-                                      onChange={(e) => {
-                                        const next = [...formLongTermGoals];
-                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].user_commitment = e.target.value;
-                                        setFormLongTermGoals(next);
-                                      }}
-                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
-                                    />
+                                    <UXField type="text" placeholder="例：分からない時は支援員に確認する" value={ig.user_commitment} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].user_commitment = e.target.value; setFormLongTermGoals(next); }} />
                                   </div>
                                   <div>
                                     <label className="block text-[8px] font-bold text-slate-400 mb-0.5">主な支援内容</label>
-                                    <input 
-                                      type="text"
-                                      placeholder="例：視覚的支援ツール(手順書)の整備"
-                                      value={ig.support_actions}
-                                      onChange={(e) => {
-                                        const next = [...formLongTermGoals];
-                                        next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].support_actions = e.target.value;
-                                        setFormLongTermGoals(next);
-                                      }}
-                                      className="w-full border border-slate-200 rounded-md px-2 py-1 text-[11px] focus:outline-hidden font-medium"
-                                    />
+                                    <UXField type="text" placeholder="例：視覚的支援ツール(手順書)の整備" value={ig.support_actions} onChange={(e) => { const next = [...formLongTermGoals]; next[ltgIdx].short_term_goals[stgIdx].individual_goals[igIdx].support_actions = e.target.value; setFormLongTermGoals(next); }} />
                                   </div>
                                 </div>
 

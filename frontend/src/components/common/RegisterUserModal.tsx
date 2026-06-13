@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { X, UserPlus, Calendar, MapPin, Phone, Award, Type, Loader2, Mail, Check, Plus, Trash2, Heart, FileText } from 'lucide-react';
 import { registerUser, saveDraft, loadDraft, clearDraft, type CreateUserData } from '../../services/userService.ts';
 import { toKatakana, isKanaOrHira, fetchAddressByZip } from '../../utils/inputHelpers.ts';
+import { UXField, TextAreaWithCounter } from './UXFields';
 
 interface RegisterUserModalProps {
   isOpen: boolean;
@@ -354,14 +355,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">表示名 (氏名から自動合成)</label>
                   <div className="flex items-center gap-2 bg-slate-100 border border-slate-200/50 rounded-2xl px-4 py-3 shadow-inner">
-                    <input
-                      type="text"
-                      placeholder="姓・名を入力すると自動生成されます"
-                      value={form.display_name}
-                      className="bg-transparent border-0 outline-none w-full text-xs font-black text-slate-550 placeholder-slate-400 cursor-not-allowed"
-                      readOnly
-                      required
-                    />
+                    <UXField type="text" placeholder="姓・名を入力すると自動生成されます" value={form.display_name} readOnly required />
                   </div>
                 </div>
               </div>
@@ -378,25 +372,13 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">姓 (漢字)</label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="text"
-                        placeholder="例: 佐藤"
-                        value={form.last_name}
-                        onChange={(e) => handleLastNameChange(e.target.value)}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: 佐藤" value={form.last_name} onChange={(e) => handleLastNameChange(e.target.value)} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">名 (漢字)</label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="text"
-                        placeholder="例: 健太"
-                        value={form.first_name}
-                        onChange={(e) => handleFirstNameChange(e.target.value)}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: 健太" value={form.first_name} onChange={(e) => handleFirstNameChange(e.target.value)} />
                     </div>
                   </div>
                 </div>
@@ -406,25 +388,13 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">セイ (フリガナ)</label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="text"
-                        placeholder="例: サトウ"
-                        value={form.last_name_kana}
-                        onChange={(e) => setForm({ ...form, last_name_kana: toKatakana(e.target.value) })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: サトウ" value={form.last_name_kana} onChange={(e) => setForm({ ...form, last_name_kana: toKatakana(e.target.value) })} />
                     </div>
                   </div>
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">メイ (フリガナ)</label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="text"
-                        placeholder="例: ケンタ"
-                        value={form.first_name_kana}
-                        onChange={(e) => setForm({ ...form, first_name_kana: toKatakana(e.target.value) })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: ケンタ" value={form.first_name_kana} onChange={(e) => setForm({ ...form, first_name_kana: toKatakana(e.target.value) })} />
                     </div>
                   </div>
                 </div>
@@ -437,13 +407,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <span>電話番号</span>
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="tel"
-                        placeholder="例: 090-1234-5678"
-                        value={form.phone_number}
-                        onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800 font-mono"
-                      />
+                      <UXField type="tel" placeholder="例: 090-1234-5678" value={form.phone_number} onChange={(e) => setForm({ ...form, phone_number: e.target.value })} />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -452,13 +416,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <span>メールアドレス</span>
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="email"
-                        placeholder="例: client@example.com"
-                        value={form.email}
-                        onChange={(e) => setForm({ ...form, email: e.target.value })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="email" placeholder="例: client@example.com" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
                     </div>
                   </div>
                 </div>
@@ -472,20 +430,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                         <span>郵便番号 (住所自動入力用)</span>
                       </label>
                       <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                        <input
-                          type="text"
-                          placeholder="例: 100-0001"
-                          value={zipCode}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setZipCode(val);
-                            const clean = val.replace(/-/g, '').trim();
-                            if (clean.length === 7) {
-                              fetchAddress(clean);
-                            }
-                          }}
-                          className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800 font-mono"
-                        />
+                        <UXField type="text" placeholder="例: 100-0001" value={zipCode} onChange={(e) => { const val = e.target.value; setZipCode(val); const clean = val.replace(/-/g, '').trim(); if (clean.length === 7) { fetchAddress(clean); } }} />
                       </div>
                     </div>
                     <button
@@ -511,13 +456,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <span>現住所</span>
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner">
-                      <input
-                        type="text"
-                        placeholder="例: 東京都千代田区麹町1-1-1"
-                        value={form.address}
-                        onChange={(e) => setForm({ ...form, address: e.target.value })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: 東京都千代田区麹町1-1-1" value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} />
                     </div>
                   </div>
                 </div>
@@ -530,12 +469,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <span>生年月日</span>
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 cursor-pointer">
-                      <input
-                        type="date"
-                        value={form.birth_date}
-                        onChange={(e) => setForm({ ...form, birth_date: e.target.value })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800 cursor-pointer"
-                      />
+                      <UXField type="date" value={form.birth_date} onChange={(e) => setForm({ ...form, birth_date: e.target.value })} />
                     </div>
                   </div>
                   <div className="space-y-2">
@@ -544,13 +478,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <span>受給者証番号</span>
                     </label>
                     <div className="flex items-center gap-2 bg-slate-50 border border-slate-100 rounded-2xl px-4 py-3 focus-within:border-indigo-500 focus-within:bg-white transition-all shadow-inner font-mono">
-                      <input
-                        type="text"
-                        placeholder="例: 1310100000"
-                        value={form.certificate_number}
-                        onChange={(e) => setForm({ ...form, certificate_number: e.target.value })}
-                        className="bg-transparent border-0 outline-none w-full text-xs font-bold text-slate-800"
-                      />
+                      <UXField type="text" placeholder="例: 1310100000" value={form.certificate_number} onChange={(e) => setForm({ ...form, certificate_number: e.target.value })} />
                     </div>
                   </div>
                 </div>
@@ -597,33 +525,15 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-slate-400">氏名</label>
-                          <input
-                            type="text"
-                            placeholder="例: 佐藤 一郎"
-                            value={contact.name}
-                            onChange={(e) => handleContactChange(index, 'name', e.target.value)}
-                            className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-indigo-500 outline-none shadow-sm"
-                          />
+                          <UXField type="text" placeholder="例: 佐藤 一郎" value={contact.name} onChange={(e) => handleContactChange(index, 'name', e.target.value)} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-slate-400">関係 (続柄)</label>
-                          <input
-                            type="text"
-                            placeholder="例: 父、配偶者"
-                            value={contact.relation}
-                            onChange={(e) => handleContactChange(index, 'relation', e.target.value)}
-                            className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:border-indigo-500 outline-none shadow-sm"
-                          />
+                          <UXField type="text" placeholder="例: 父、配偶者" value={contact.relation} onChange={(e) => handleContactChange(index, 'relation', e.target.value)} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[9px] font-black text-slate-400">緊急電話番号</label>
-                          <input
-                            type="tel"
-                            placeholder="例: 090-9999-9999"
-                            value={contact.phone_number}
-                            onChange={(e) => handleContactChange(index, 'phone_number', e.target.value)}
-                            className="w-full bg-white border border-slate-100 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 focus:border-indigo-500 outline-none shadow-sm"
-                          />
+                          <UXField type="tel" placeholder="例: 090-9999-9999" value={contact.phone_number} onChange={(e) => handleContactChange(index, 'phone_number', e.target.value)} />
                         </div>
                       </div>
                     </div>
@@ -640,24 +550,12 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">成育歴・生活歴・支援上の特記事項</label>
-                  <textarea
-                    placeholder="幼少期の成育状況、就労経験、支援にあたって特に配慮すべき事項などを記入してください。"
-                    value={form.profile.emergency_contact_notes}
-                    onChange={(e) => handleProfileChange('emergency_contact_notes', e.target.value)}
-                    rows={4}
-                    className="w-full bg-slate-50/50 border border-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-850 placeholder-slate-355 focus:bg-white focus:border-indigo-500 outline-none shadow-inner transition-all resize-none"
-                  />
+                  <TextAreaWithCounter placeholder="幼少期の成育状況、就労経験、支援にあたって特に配慮すべき事項などを記入してください。" value={form.profile.emergency_contact_notes} onChange={(e) => handleProfileChange('emergency_contact_notes', e.target.value)} rows={4} />
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest font-bold">健康保険・受給特記事項</label>
-                  <textarea
-                    placeholder="加入している健康保険（社保、国保等）、または障害年金や生活保護の状況などを記入してください。"
-                    value={form.profile.insurance_details}
-                    onChange={(e) => handleProfileChange('insurance_details', e.target.value)}
-                    rows={3}
-                    className="w-full bg-slate-50/50 border border-slate-100 rounded-2xl p-4 text-xs font-bold text-slate-850 placeholder-slate-355 focus:bg-white focus:border-indigo-500 outline-none shadow-inner transition-all resize-none"
-                  />
+                  <TextAreaWithCounter placeholder="加入している健康保険（社保、国保等）、または障害年金や生活保護の状況などを記入してください。" value={form.profile.insurance_details} onChange={(e) => handleProfileChange('insurance_details', e.target.value)} rows={3} />
                 </div>
               </div>
 

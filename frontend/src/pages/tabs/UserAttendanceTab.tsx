@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Clock, CheckCircle, FileEdit, AlertTriangle, ArrowRight, Calendar, Link as LinkIcon, X, AlertCircle } from 'lucide-react';
 import { TimeDurationInput } from '../../components/common/UXFields';
+import { TextAreaWithCounter, UXField } from '../../components/common/UXFields';
 import { 
   fetchUserAttendanceRecords, 
   fetchUserDailyLogs, 
@@ -558,33 +559,18 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
               {/* 日付選択 */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1">支援日付</label>
-                <input
-                  type="date"
-                  value={logDate}
-                  onChange={(e) => setLogDate(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
-                />
+                <UXField type="date" value={logDate} onChange={(e) => setLogDate(e.target.value)} />
               </div>
 
               {/* 時間帯 */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1">開始時間</label>
-                  <input
-                    type="time"
-                    value={startTime}
-                    onChange={(e) => setStartTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                  <UXField type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-400 mb-1">終了時間</label>
-                  <input
-                    type="time"
-                    value={endTime}
-                    onChange={(e) => setEndTime(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
-                  />
+                  <UXField type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
                 </div>
               </div>
 
@@ -599,13 +585,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
               {/* 支援記録 */}
               <div>
                 <label className="block text-xs font-bold text-slate-400 mb-1">支援記録 (自由記述)</label>
-                <textarea
-                  placeholder="支援の具体的な内容や様子を入力してください"
-                  rows={4}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-colors resize-none"
-                />
+                <TextAreaWithCounter placeholder="支援の具体的な内容や様子を入力してください" rows={4} value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
             </div>
 

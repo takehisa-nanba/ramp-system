@@ -4,6 +4,7 @@ import { useMasters } from '../../hooks/useMasters';
 import { addServiceCertificate, updateServiceCertificate, submitServiceCertificate, reviewServiceCertificate, voidServiceCertificate, fetchUserPii, updateUserDetails, type ServiceCertificateData } from '../../services/userService';
 import { managementApi } from '../../services/managementApi';
 import { useAuth } from '../../context/AuthContext';
+import { UXField, TextAreaWithCounter } from './UXFields';
 
 interface UserCertificateTabProps {
   userId: number;
@@ -707,72 +708,32 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">氏名 (漢字)</span>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="姓"
-                    value={basicLastName}
-                    onChange={e => setBasicLastName(e.target.value)}
-                    className="w-1/2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                  />
-                  <input
-                    type="text"
-                    placeholder="名"
-                    value={basicFirstName}
-                    onChange={e => setBasicFirstName(e.target.value)}
-                    className="w-1/2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                  />
+                  <UXField type="text" placeholder="姓" value={basicLastName} onChange={e => setBasicLastName(e.target.value)} />
+                  <UXField type="text" placeholder="名" value={basicFirstName} onChange={e => setBasicFirstName(e.target.value)} />
                 </div>
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">氏名 (かな)</span>
                 <div className="flex gap-2">
-                  <input
-                    type="text"
-                    placeholder="せい"
-                    value={basicLastNameKana}
-                    onChange={e => setBasicLastNameKana(e.target.value)}
-                    className="w-1/2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                  />
-                  <input
-                    type="text"
-                    placeholder="めい"
-                    value={basicFirstNameKana}
-                    onChange={e => setBasicFirstNameKana(e.target.value)}
-                    className="w-1/2 bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                  />
+                  <UXField type="text" placeholder="せい" value={basicLastNameKana} onChange={e => setBasicLastNameKana(e.target.value)} />
+                  <UXField type="text" placeholder="めい" value={basicFirstNameKana} onChange={e => setBasicFirstNameKana(e.target.value)} />
                 </div>
               </div>
               <div className="space-y-1">
                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">生年月日</span>
-                <input
-                  type="date"
-                  value={basicBirthDate}
-                  onChange={e => setBasicBirthDate(e.target.value)}
-                  className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                />
+                <UXField type="date" value={basicBirthDate} onChange={e => setBasicBirthDate(e.target.value)} />
               </div>
             </div>
             <div className="space-y-1">
               <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">住所</span>
-              <input
-                type="text"
-                placeholder="住所を入力してください"
-                value={basicAddress}
-                onChange={e => setBasicAddress(e.target.value)}
-                className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-              />
+              <UXField type="text" placeholder="住所を入力してください" value={basicAddress} onChange={e => setBasicAddress(e.target.value)} />
             </div>
           </div>
           
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">交付年月日 *</label>
-              <input
-                type="date"
-                value={formData.certificate_issue_date}
-                onChange={e => setFormData({ ...formData, certificate_issue_date: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-              />
+              <UXField type="date" value={formData.certificate_issue_date} onChange={e => setFormData({ ...formData, certificate_issue_date: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">発行自治体</label>
@@ -788,12 +749,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">証の種別</label>
-              <input
-                type="text"
-                value={formData.certificate_type}
-                onChange={e => setFormData({ ...formData, certificate_type: e.target.value })}
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-              />
+              <UXField type="text" value={formData.certificate_type} onChange={e => setFormData({ ...formData, certificate_type: e.target.value })} />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">障害支援区分</label>
@@ -813,14 +769,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">受給者証番号 (10桁)</label>
-              <input
-                type="text"
-                maxLength={10}
-                value={formData.recipient_number || ''}
-                onChange={e => setFormData({ ...formData, recipient_number: e.target.value })}
-                placeholder="例: 1310100012"
-                className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-              />
+              <UXField type="text" maxLength={10} value={formData.recipient_number || ''} onChange={e => setFormData({ ...formData, recipient_number: e.target.value })} placeholder="例: 1310100012" />
             </div>
             <div className="space-y-1.5">
               <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">管理事業所サービス</label>
@@ -840,12 +789,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
           
           <div className="space-y-1.5">
             <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">特記事項</label>
-            <input
-              type="text"
-              value={formData.certificate_notes}
-              onChange={e => setFormData({ ...formData, certificate_notes: e.target.value })}
-              className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold"
-            />
+            <UXField type="text" value={formData.certificate_notes} onChange={e => setFormData({ ...formData, certificate_notes: e.target.value })} />
           </div>
 
           {/* 支給決定サービス内容 */}
@@ -875,21 +819,11 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                     </div>
                     <div className="w-full sm:w-1/3 space-y-1">
                       <label className="text-[10px] font-black text-slate-400">決定期間 開始日</label>
-                      <input
-                        type="date"
-                        value={g.granted_start_date}
-                        onChange={e => updateGrantedService(idx, 'granted_start_date', e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                      />
+                      <UXField type="date" value={g.granted_start_date} onChange={e => updateGrantedService(idx, 'granted_start_date', e.target.value)} />
                     </div>
                     <div className="w-full sm:w-1/3 space-y-1">
                       <label className="text-[10px] font-black text-slate-400">決定期間 終了日</label>
-                      <input
-                        type="date"
-                        value={g.granted_end_date}
-                        onChange={e => updateGrantedService(idx, 'granted_end_date', e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                      />
+                      <UXField type="date" value={g.granted_end_date} onChange={e => updateGrantedService(idx, 'granted_end_date', e.target.value)} />
                     </div>
                     <button onClick={() => removeGrantedService(idx)} className="h-[28px] w-[28px] shrink-0 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg mb-[2px]">
                       <Trash2 size={14} />
@@ -919,32 +853,14 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                       <label className="text-[10px] font-black text-slate-400">
                         支給量 上限日数 {g.max_service_days_type !== 'DYNAMIC_MONTH_MINUS_8' && <span className="text-rose-500 font-bold">*</span>}
                       </label>
-                      <input
-                        type="number"
-                        disabled={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8'}
-                        required={g.max_service_days_type !== 'DYNAMIC_MONTH_MINUS_8'}
-                        value={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8' ? '' : (g.max_service_days ?? '')}
-                        onChange={e => updateGrantedService(idx, 'max_service_days', e.target.value ? Number(e.target.value) : undefined)}
-                        placeholder={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8' ? '（自動計算）' : '例: 20'}
-                        className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold disabled:bg-slate-100 disabled:text-slate-400"
-                      />
+                      <UXField type="number" disabled={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8'} required={g.max_service_days_type !== 'DYNAMIC_MONTH_MINUS_8'} value={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8' ? '' : (g.max_service_days ?? '')} onChange={e => updateGrantedService(idx, 'max_service_days', e.target.value ? Number(e.target.value) : undefined)} placeholder={g.max_service_days_type === 'DYNAMIC_MONTH_MINUS_8' ? '（自動計算）' : '例: 20'} />
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-400">有効期間 開始〜終了</label>
                       <div className="flex items-center gap-1.5">
-                        <input
-                          type="date"
-                          value={g.granted_amount_start_date || ''}
-                          onChange={e => updateGrantedService(idx, 'granted_amount_start_date', e.target.value)}
-                          className="w-1/2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="date" value={g.granted_amount_start_date || ''} onChange={e => updateGrantedService(idx, 'granted_amount_start_date', e.target.value)} />
                         <span className="text-slate-400">〜</span>
-                        <input
-                          type="date"
-                          value={g.granted_amount_end_date || ''}
-                          onChange={e => updateGrantedService(idx, 'granted_amount_end_date', e.target.value)}
-                          className="w-1/2 bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="date" value={g.granted_amount_end_date || ''} onChange={e => updateGrantedService(idx, 'granted_amount_end_date', e.target.value)} />
                       </div>
                     </div>
                   </div>
@@ -974,79 +890,27 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400">契約日 <span className="text-rose-500 font-bold">*</span></label>
-                          <input
-                            type="date"
-                            required
-                            value={g.contract_detail.contract_date || ''}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, contract_date: e.target.value };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                          />
+                          <UXField type="date" required value={g.contract_detail.contract_date || ''} onChange={e => { const detail = { ...g.contract_detail, contract_date: e.target.value }; updateGrantedService(idx, 'contract_detail', detail); }} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400">契約終了日 (任意)</label>
-                          <input
-                            type="date"
-                            value={g.contract_detail.contract_end_date || ''}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, contract_end_date: e.target.value };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                          />
+                          <UXField type="date" value={g.contract_detail.contract_end_date || ''} onChange={e => { const detail = { ...g.contract_detail, contract_end_date: e.target.value }; updateGrantedService(idx, 'contract_detail', detail); }} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400">契約終了月既提供日数 (任意)</label>
-                          <input
-                            type="number"
-                            value={g.contract_detail.contract_end_used_days || 0}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, contract_end_used_days: e.target.value ? Number(e.target.value) : 0 };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                          />
+                          <UXField type="number" value={g.contract_detail.contract_end_used_days || 0} onChange={e => { const detail = { ...g.contract_detail, contract_end_used_days: e.target.value ? Number(e.target.value) : 0 }; updateGrantedService(idx, 'contract_detail', detail); }} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400">契約支給量 (原則の日数) <span className="text-rose-500 font-bold">*</span></label>
-                          <input
-                            type="number"
-                            required
-                            value={g.contract_detail.contract_granted_days || 23}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, contract_granted_days: e.target.value ? Number(e.target.value) : 23 };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                          />
+                          <UXField type="number" required value={g.contract_detail.contract_granted_days || 23} onChange={e => { const detail = { ...g.contract_detail, contract_granted_days: e.target.value ? Number(e.target.value) : 23 }; updateGrantedService(idx, 'contract_detail', detail); }} />
                         </div>
                         <div className="space-y-1">
                           <label className="text-[10px] font-black text-slate-400">契約書 URL</label>
-                          <input
-                            type="text"
-                            value={g.contract_detail.contract_document_url || ''}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, contract_document_url: e.target.value };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                            placeholder="https://..."
-                          />
+                          <UXField type="text" value={g.contract_detail.contract_document_url || ''} onChange={e => { const detail = { ...g.contract_detail, contract_document_url: e.target.value }; updateGrantedService(idx, 'contract_detail', detail); }} placeholder="https://..." />
                         </div>
                         <div className="space-y-1 col-span-1 sm:col-span-3">
                           <label className="text-[10px] font-black text-slate-400">重要事項説明書 URL</label>
-                          <input
-                            type="text"
-                            value={g.contract_detail.important_matters_url || ''}
-                            onChange={e => {
-                              const detail = { ...g.contract_detail, important_matters_url: e.target.value };
-                              updateGrantedService(idx, 'contract_detail', detail);
-                            }}
-                            className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                            placeholder="https://..."
-                          />
+                          <UXField type="text" value={g.contract_detail.important_matters_url || ''} onChange={e => { const detail = { ...g.contract_detail, important_matters_url: e.target.value }; updateGrantedService(idx, 'contract_detail', detail); }} placeholder="https://..." />
                         </div>
                       </div>
                     )}
@@ -1084,23 +948,11 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                     </div>
                     <div className="w-full sm:w-1/4 space-y-1">
                       <label className="text-[10px] font-black text-slate-400">適用開始日 <span className="text-rose-500 font-bold">*</span></label>
-                      <input
-                        type="date"
-                        required
-                        value={cl.limit_start_date}
-                        onChange={e => updateCopaymentLimit(idx, 'limit_start_date', e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                      />
+                      <UXField type="date" required value={cl.limit_start_date} onChange={e => updateCopaymentLimit(idx, 'limit_start_date', e.target.value)} />
                     </div>
                     <div className="w-full sm:w-1/4 space-y-1">
                       <label className="text-[10px] font-black text-slate-400">適用終了日 <span className="text-rose-500 font-bold">*</span></label>
-                      <input
-                        type="date"
-                        required
-                        value={cl.limit_end_date}
-                        onChange={e => updateCopaymentLimit(idx, 'limit_end_date', e.target.value)}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                      />
+                      <UXField type="date" required value={cl.limit_end_date} onChange={e => updateCopaymentLimit(idx, 'limit_end_date', e.target.value)} />
                     </div>
                     <div className="w-full sm:w-1/4 pb-[6px]">
                       <label className="flex items-center gap-2 text-xs font-bold text-slate-600 cursor-pointer">
@@ -1119,61 +971,19 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-lg border border-slate-100">
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400">管理事業所番号 <span className="text-rose-500 font-bold">*</span></label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.copayment_managements[idx].managing_office_number || ''}
-                          onChange={e => {
-                            const cmg = [...(formData.copayment_managements || [])];
-                            cmg[idx] = { ...cmg[idx], managing_office_number: e.target.value };
-                            setFormData({ ...formData, copayment_managements: cmg });
-                          }}
-                          placeholder="10桁の番号"
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="text" required value={formData.copayment_managements[idx].managing_office_number || ''} onChange={e => { const cmg = [...(formData.copayment_managements || [])]; cmg[idx] = { ...cmg[idx], managing_office_number: e.target.value }; setFormData({ ...formData, copayment_managements: cmg }); }} placeholder="10桁の番号" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400">管理事業所名 <span className="text-rose-500 font-bold">*</span></label>
-                        <input
-                          type="text"
-                          required
-                          value={formData.copayment_managements[idx].managing_office_name || ''}
-                          onChange={e => {
-                            const cmg = [...(formData.copayment_managements || [])];
-                            cmg[idx] = { ...cmg[idx], managing_office_name: e.target.value };
-                            setFormData({ ...formData, copayment_managements: cmg });
-                          }}
-                          placeholder="事業所名"
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="text" required value={formData.copayment_managements[idx].managing_office_name || ''} onChange={e => { const cmg = [...(formData.copayment_managements || [])]; cmg[idx] = { ...cmg[idx], managing_office_name: e.target.value }; setFormData({ ...formData, copayment_managements: cmg }); }} placeholder="事業所名" />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400">管理開始日 <span className="text-rose-500 font-bold">*</span></label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.copayment_managements[idx].management_start_date || ''}
-                          onChange={e => {
-                            const cmg = [...(formData.copayment_managements || [])];
-                            cmg[idx] = { ...cmg[idx], management_start_date: e.target.value };
-                            setFormData({ ...formData, copayment_managements: cmg });
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="date" required value={formData.copayment_managements[idx].management_start_date || ''} onChange={e => { const cmg = [...(formData.copayment_managements || [])]; cmg[idx] = { ...cmg[idx], management_start_date: e.target.value }; setFormData({ ...formData, copayment_managements: cmg }); }} />
                       </div>
                       <div className="space-y-1">
                         <label className="text-[10px] font-black text-slate-400">管理終了日 <span className="text-rose-500 font-bold">*</span></label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.copayment_managements[idx].management_end_date || ''}
-                          onChange={e => {
-                            const cmg = [...(formData.copayment_managements || [])];
-                            cmg[idx] = { ...cmg[idx], management_end_date: e.target.value };
-                            setFormData({ ...formData, copayment_managements: cmg });
-                          }}
-                          className="w-full bg-white border border-slate-200 rounded-lg px-2 py-1 text-xs font-bold"
-                        />
+                        <UXField type="date" required value={formData.copayment_managements[idx].management_end_date || ''} onChange={e => { const cmg = [...(formData.copayment_managements || [])]; cmg[idx] = { ...cmg[idx], management_end_date: e.target.value }; setFormData({ ...formData, copayment_managements: cmg }); }} />
                       </div>
                     </div>
                   )}
@@ -1211,21 +1021,11 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                   </div>
                   <div className="w-full sm:w-1/4 space-y-1">
                     <label className="text-[10px] font-black text-slate-400">適用開始日</label>
-                    <input
-                      type="date"
-                      value={ma.meal_addon_start_date}
-                      onChange={e => updateMealAddonStatus(idx, 'meal_addon_start_date', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                    />
+                    <UXField type="date" value={ma.meal_addon_start_date} onChange={e => updateMealAddonStatus(idx, 'meal_addon_start_date', e.target.value)} />
                   </div>
                   <div className="w-full sm:w-1/4 space-y-1">
                     <label className="text-[10px] font-black text-slate-400">適用終了日</label>
-                    <input
-                      type="date"
-                      value={ma.meal_addon_end_date}
-                      onChange={e => updateMealAddonStatus(idx, 'meal_addon_end_date', e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs font-bold"
-                    />
+                    <UXField type="date" value={ma.meal_addon_end_date} onChange={e => updateMealAddonStatus(idx, 'meal_addon_end_date', e.target.value)} />
                   </div>
                   <button type="button" onClick={() => removeMealAddonStatus(idx)} className="h-[28px] w-[28px] shrink-0 flex items-center justify-center text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg mb-[2px]">
                     <Trash2 size={14} />
@@ -1541,13 +1341,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
                           )}
                           <div className="space-y-1">
                             <span className="text-[10px] font-black text-slate-500 block">確認コメント（却下時は入力必須）</span>
-                            <input
-                              type="text"
-                              value={reviewComments[cert.id] || ''}
-                              onChange={e => setReviewComments(prev => ({ ...prev, [cert.id]: e.target.value }))}
-                              placeholder="確認事項や却下理由を入力してください"
-                              className="w-full bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold"
-                            />
+                            <UXField type="text" value={reviewComments[cert.id] || ''} onChange={e => setReviewComments(prev => ({ ...prev, [cert.id]: e.target.value }))} placeholder="確認事項や却下理由を入力してください" />
                           </div>
                           <div className="flex gap-2">
                             <button
@@ -1597,14 +1391,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
             )}
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">更新理由 (任意)</label>
-              <textarea
-                value={updateReasonText}
-                onChange={e => {
-                  setUpdateReasonText(e.target.value);
-                }}
-                placeholder="例: 受給者証の更新に伴う修正"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold h-24 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
-              />
+              <TextAreaWithCounter value={updateReasonText} onChange={e => { setUpdateReasonText(e.target.value); }} placeholder="例: 受給者証の更新に伴う修正" />
             </div>
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
@@ -1649,14 +1436,7 @@ export const UserCertificateTab: React.FC<UserCertificateTabProps> = ({ userId, 
             )}
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">無効化理由 (必須)</label>
-              <textarea
-                value={voidReasonText}
-                onChange={e => {
-                  setVoidReasonText(e.target.value);
-                }}
-                placeholder="例: 有効期間の入力を誤って確定してしまったため無効化し、再登録します。"
-                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold h-24 focus:outline-none focus:ring-2 focus:ring-rose-500/20 focus:border-rose-500"
-              />
+              <TextAreaWithCounter value={voidReasonText} onChange={e => { setVoidReasonText(e.target.value); }} placeholder="例: 有効期間の入力を誤って確定してしまったため無効化し、再登録します。" />
             </div>
             <div className="flex items-center justify-end gap-3 pt-2">
               <button
