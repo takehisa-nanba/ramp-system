@@ -25,7 +25,7 @@ def get_daily_actuals():
         }), 400
 
     # アクティブな全利用者
-    users = User.query.filter_by(is_active=True).all()
+    users = User.query.filter(User.deleted_at.is_(None)).all()
     user_ids = [u.id for u in users]
 
     if not user_ids:
