@@ -7,6 +7,16 @@ from backend.app.models import (
 )
 from backend.app.utils.errors import ValidationError
 
+def get_legacy_schedule_status(schedule) -> str:
+    """
+    [Legacy互換用フィールド]
+    元の schedule_status は schedule_kind と approval_status に分割されました。
+    フロントエンドとの互換性を保つため、古い schedule_status の値 (NORMAL, CANCELLED, SUBSTITUTED, EXTRA) を生成して返します。
+    """
+    if not schedule:
+        return None
+    return "CANCELLED" if schedule.approval_status == "CANCELLED" else schedule.schedule_kind
+
 class UserScheduleService:
     def generate_daily_schedules_for_month(self, user_id: int, target_month: date, force_overwrite: bool = False) -> int:
         """

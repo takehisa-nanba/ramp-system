@@ -8,7 +8,52 @@ from backend.app import db
 from backend.app.models import User, UserDailyLog
 from backend.app.models.support.attendance_workflow import AttendanceRecord
 from sqlalchemy import func
+from backend.app.services.user_schedule_service import get_legacy_schedule_status
 from . import users_bp
+
+from flask import request
+from datetime import datetime
+from backend.app.utils.timezone import JST
+
+@users_bp.route('/<int:user_id>/attendance-records', methods=['POST'])
+@jwt_required()
+def create_user_attendance_record(user_id: int):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"success": False, "error": {"code": "NOT_FOUND", "message": "利用者が見つかりません。"}}), 404
+
+    data = request.get_json() or {}
+    record_type = data.get('type') # 'CHECK_IN' or 'CHECK_OUT'
+    
+    if record_type not in ['CHECK_IN', 'CHECK_OUT']:
+        return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Invalid record type"}}), 400
+        
+    timestamp_str = data.get('timestamp')
+    if timestamp_str:
+        try:
+            record_timestamp = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+        except ValueError:
+            return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "Invalid timestamp format"}}), 400
+    else:
+        record_timestamp = datetime.now(JST)
+
+    new_record = AttendanceRecord(
+        user_id=user_id,
+        record_type=record_type,
+        timestamp=record_timestamp,
+        location_data=data.get('location')
+    )
+    db.session.add(new_record)
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "item": {
+            "id": new_record.id,
+            "type": new_record.record_type,
+            "timestamp": new_record.timestamp.isoformat()
+        }
+    }), 201
 
 @users_bp.route('/<int:user_id>/attendance-records', methods=['GET'])
 @jwt_required()
@@ -68,7 +113,7 @@ def get_user_attendance_records(user_id: int):
             info["scheduled_start_time"] = sched.start_time
             info["scheduled_end_time"] = sched.end_time
             info["is_scheduled"] = sched.is_scheduled
-            info["schedule_status"] = sched.schedule_status
+            info["schedule_status"] = get_legacy_schedule_status(sched)
             info["approval_status"] = sched.approval_status
         else:
             info["scheduled_location_type"] = None

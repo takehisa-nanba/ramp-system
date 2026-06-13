@@ -11,7 +11,7 @@ import {
   ArrowRight,
   Calendar
 } from 'lucide-react';
-import { fetchDailyScheduleActuals, type DailyScheduleActualItem } from '../services/userService';
+import { fetchDailyScheduleActuals, recordUserAttendance, type DailyScheduleActualItem } from '../services/userService';
 import { Heading, Text, Label } from '../components/common/Typography';
 
 export const DailyScheduleActualPage: React.FC = () => {
@@ -187,6 +187,20 @@ export const DailyScheduleActualPage: React.FC = () => {
     }
   };
 
+  const handleRecordAttendance = async (userId: number, type: 'CHECK_IN' | 'CHECK_OUT') => {
+    try {
+      let timestamp = dayjs().toISOString();
+      if (!targetDate.isSame(dayjs(), 'day')) {
+        timestamp = targetDate.set('hour', type === 'CHECK_IN' ? 9 : 16).set('minute', 0).set('second', 0).toISOString();
+      }
+      await recordUserAttendance(userId, type, timestamp);
+      await loadData(targetDate);
+    } catch (err) {
+      console.error(err);
+      alert('打刻に失敗しました');
+    }
+  };
+
   // PC向けテーブル用カラム定義
   const columns = [
     {
@@ -229,21 +243,39 @@ export const DailyScheduleActualPage: React.FC = () => {
       title: 'アクション',
       key: 'action',
       render: (_: any, record: DailyScheduleActualItem) => (
-        <button
-          onClick={(e) => { e.stopPropagation(); handleAction(record); }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
-            record.daily_log_status === 'missing' && record.check_in_at
-              ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm'
-              : record.daily_log_status === 'draft'
-              ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
-          }`}
-        >
-          {record.daily_log_status === 'missing' && record.check_in_at ? '記録する' : 
-           record.daily_log_status === 'draft' ? '続きから記録' : 
-           record.check_in_at ? '支援記録' : '予定詳細'}
-          <ArrowRight className="w-3.5 h-3.5" />
-        </button>
+        <div className="flex items-center gap-2">
+          {!record.check_in_at && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleRecordAttendance(record.user_id, 'CHECK_IN'); }}
+              className="px-3 py-1.5 rounded-lg font-bold text-xs bg-indigo-50 text-indigo-600 hover:bg-indigo-100 border border-indigo-200"
+            >
+              来所打刻
+            </button>
+          )}
+          {record.check_in_at && !record.check_out_at && (
+            <button
+              onClick={(e) => { e.stopPropagation(); handleRecordAttendance(record.user_id, 'CHECK_OUT'); }}
+              className="px-3 py-1.5 rounded-lg font-bold text-xs bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-200"
+            >
+              退所打刻
+            </button>
+          )}
+          <button
+            onClick={(e) => { e.stopPropagation(); handleAction(record); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-bold text-xs transition-all ${
+              record.daily_log_status === 'missing' && record.check_in_at
+                ? 'bg-amber-600 text-white hover:bg-amber-700 shadow-sm'
+                : record.daily_log_status === 'draft'
+                ? 'bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200 border border-slate-200'
+            }`}
+          >
+            {record.daily_log_status === 'missing' && record.check_in_at ? '記録する' : 
+             record.daily_log_status === 'draft' ? '続きから記録' : 
+             record.check_in_at ? '支援記録' : '予定詳細'}
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
       )
     }
   ];
@@ -463,10 +495,26 @@ export const DailyScheduleActualPage: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex justify-end mt-1">
+                  <div className="flex justify-end mt-1 gap-2">
+                    {!item.check_in_at && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRecordAttendance(item.user_id, 'CHECK_IN'); }}
+                        className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-indigo-50 text-indigo-600 border border-indigo-200 active:bg-indigo-100"
+                      >
+                        来所打刻
+                      </button>
+                    )}
+                    {item.check_in_at && !item.check_out_at && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleRecordAttendance(item.user_id, 'CHECK_OUT'); }}
+                        className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-slate-50 text-slate-600 border border-slate-200 active:bg-slate-100"
+                      >
+                        退所打刻
+                      </button>
+                    )}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleAction(item); }}
-                      className={`flex items-center justify-center gap-2 w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
+                      className={`flex items-center justify-center gap-2 flex-1 py-2.5 rounded-xl font-bold text-sm transition-all ${
                         item.daily_log_status === 'missing' && item.check_in_at
                           ? 'bg-amber-600 text-white shadow-sm'
                           : item.daily_log_status === 'draft'
@@ -474,9 +522,9 @@ export const DailyScheduleActualPage: React.FC = () => {
                           : 'bg-slate-100 text-slate-600 border border-slate-200'
                       }`}
                     >
-                      {item.daily_log_status === 'missing' && item.check_in_at ? '記録する' : 
-                       item.daily_log_status === 'draft' ? '続きから記録' : 
-                       item.check_in_at ? '支援記録' : '予定詳細'}
+                      {item.daily_log_status === 'missing' && item.check_in_at ? '記録' : 
+                       item.daily_log_status === 'draft' ? '続き' : 
+                       item.check_in_at ? '記録' : '詳細'}
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

@@ -6,12 +6,13 @@ from backend.app.models.support.attendance_workflow import AttendanceRecord
 from sqlalchemy import func
 from datetime import datetime
 from backend.app.utils.timezone import get_jst_today
+from backend.app.services.user_schedule_service import get_legacy_schedule_status
 
 schedules_bp = Blueprint('schedules', __name__, url_prefix='/api/schedules')
 
 @schedules_bp.route('/daily-actuals', methods=['GET'])
 @jwt_required()
-def get_daily_actuals():
+def get_daily_schedule_actuals():
     target_date_str = request.args.get('date')
     try:
         if target_date_str:
@@ -36,7 +37,7 @@ def get_daily_actuals():
         UserDailySchedule.user_id.in_(user_ids),
         UserDailySchedule.date == target_date
     ).all()
-    sched_map = {s.user_id: s for s in schedules}
+    schedule_map = {s.user_id: s for s in schedules}
 
     # 実績（打刻）を取得
     attendances = AttendanceRecord.query.filter(
@@ -44,28 +45,31 @@ def get_daily_actuals():
         func.date(AttendanceRecord.timestamp) == target_date
     ).all()
     
+    # ユーザーごとの打刻整理
     att_map = {}
     for att in attendances:
-        if att.user_id not in att_map:
-            att_map[att.user_id] = {"check_in": None, "check_out": None, "record_id": att.id}
+        uid = att.user_id
+        if uid not in att_map:
+            att_map[uid] = {"check_in": None, "check_out": None, "record_id": att.id}
+            
         if att.record_type == 'CHECK_IN':
-            if not att_map[att.user_id]["check_in"] or att.timestamp < att_map[att.user_id]["check_in"]:
-                att_map[att.user_id]["check_in"] = att.timestamp
-                att_map[att.user_id]["record_id"] = att.id
+            if not att_map[uid]["check_in"] or att.timestamp < att_map[uid]["check_in"]:
+                att_map[uid]["check_in"] = att.timestamp
+                att_map[uid]["record_id"] = att.id # 最初のINを代表とする
         elif att.record_type == 'CHECK_OUT':
-            if not att_map[att.user_id]["check_out"] or att.timestamp > att_map[att.user_id]["check_out"]:
-                att_map[att.user_id]["check_out"] = att.timestamp
+            if not att_map[uid]["check_out"] or att.timestamp > att_map[uid]["check_out"]:
+                att_map[uid]["check_out"] = att.timestamp
 
-    # 支援記録（日報）を取得
-    logs = UserDailyLog.query.filter(
+    # 日報データを取得
+    daily_logs = UserDailyLog.query.filter(
         UserDailyLog.user_id.in_(user_ids),
         UserDailyLog.log_date == target_date
     ).all()
-    log_map = {log.user_id: log for log in logs}
+    log_map = {l.user_id: l for l in daily_logs}
 
     items = []
     for u in users:
-        sched = sched_map.get(u.id)
+        sched = schedule_map.get(u.id)
         att = att_map.get(u.id)
         log = log_map.get(u.id)
 
@@ -73,7 +77,7 @@ def get_daily_actuals():
         check_out = att["check_out"] if att else None
         
         is_scheduled = sched.is_scheduled if sched else False
-        schedule_status = sched.schedule_status if sched else None
+        schedule_status = get_legacy_schedule_status(sched)
         
         # effective_status の判定
         effective_status = "NONE"

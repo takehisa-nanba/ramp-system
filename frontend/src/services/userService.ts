@@ -761,8 +761,13 @@ export interface UserAttendanceResponse {
   items: UserAttendanceItem[];
 }
 
-export const fetchUserAttendanceRecords = async (userId: number): Promise<UserAttendanceResponse> => {
+export const fetchUserAttendanceRecords = async (userId: string | number): Promise<UserAttendanceResponse> => {
   const response = await apiClient.get<UserAttendanceResponse>(`/users/${userId}/attendance-records`);
+  return response.data;
+};
+
+export const recordUserAttendance = async (userId: string | number, type: 'CHECK_IN' | 'CHECK_OUT', timestamp?: string): Promise<{ success: boolean; item: { id: number; type: string; timestamp: string } }> => {
+  const response = await apiClient.post<{ success: boolean; item: { id: number; type: string; timestamp: string } }>(`/users/${userId}/attendance-records`, { type, timestamp });
   return response.data;
 };
 

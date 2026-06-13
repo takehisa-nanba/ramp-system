@@ -6,7 +6,7 @@ from backend.app.extensions import db
 from backend.app.models import (
     UserScheduleTemplate, UserDailySchedule, UserScheduleRequest, User
 )
-from backend.app.services.user_schedule_service import UserScheduleService
+from backend.app.services.user_schedule_service import UserScheduleService, get_legacy_schedule_status
 from backend.app.utils.errors import ValidationError
 from backend.app.utils.timezone import get_jst_today
 from . import users_bp
@@ -327,7 +327,7 @@ def get_daily_schedules(user_id):
                     "start_time": s.start_time,
                     "end_time": s.end_time,
                     "is_scheduled": s.is_scheduled,
-                    "schedule_status": s.schedule_kind,
+                    "schedule_status": get_legacy_schedule_status(s),
                     "status": s.approval_status,
                     "approval_status": s.approval_status,
                     "location_type": s.location_type,
@@ -366,7 +366,7 @@ def get_daily_schedules(user_id):
                 "start_time": s.start_time,
                 "end_time": s.end_time,
                 "is_scheduled": s.is_scheduled,
-                "schedule_status": s.schedule_kind,
+                "schedule_status": get_legacy_schedule_status(s),
                 "status": s.approval_status,
                 "approval_status": s.approval_status,
                 "location_type": s.location_type,
