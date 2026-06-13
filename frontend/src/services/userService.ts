@@ -895,6 +895,7 @@ export interface DailyScheduleActualItem {
   check_out_at: string | null;
   effective_status: string;
   daily_log_status: 'missing' | 'draft' | 'completed';
+  attendance_record_id?: number | null;
   decision_reason?: string | null;
 }
 

@@ -84,19 +84,9 @@ def save_schedule_templates(user_id):
             
         db.session.commit()
         
-        # テンプレート更新後、今月と来月の予定を自動生成/同期する
-        service = UserScheduleService()
-        today = get_jst_today()
-        service.generate_daily_schedules_for_month(user_id, today)
-        if today.month == 12:
-            next_month = date(today.year + 1, 1, 1)
-        else:
-            next_month = date(today.year, today.month + 1, 1)
-        service.generate_daily_schedules_for_month(user_id, next_month)
-        
         return jsonify({
             "success": True,
-            "message": "曜日別予定テンプレートを保存し、日別予定を更新しました。"
+            "message": "曜日別予定テンプレートを保存しました。月間予定への反映は「一括適用」から行ってください。"
         }), 200
         
     except ValidationError as e:
@@ -320,27 +310,72 @@ def get_daily_schedules(user_id):
     att_in_map = {att.timestamp.date(): att for att in attendances_in}
     att_out_map = {att.timestamp.date(): att for att in attendances_out}
     
+    # パディング処理
     result = []
-    for s in schedules:
-        d = s.date
-        check_in = att_in_map.get(d)
-        check_out = att_out_map.get(d)
-        
-        result.append({
-            "id": s.id,
-            "date": s.date.strftime('%Y-%m-%d'),
-            "start_time": s.start_time,
-            "end_time": s.end_time,
-            "is_scheduled": s.is_scheduled,
-            "schedule_status": s.schedule_status,
-            "status": s.approval_status,
-            "approval_status": s.approval_status,
-            "location_type": s.location_type,
-            "schedule_request_id": s.schedule_request_id,
-            "decision_reason": s.decision_reason,
-            "actual_check_in": check_in.timestamp.strftime('%H:%M') if check_in else None,
-            "actual_check_out": check_out.timestamp.strftime('%H:%M') if check_out else None,
-        })
+    if start_date_str and end_date_str:
+        sched_map = {s.date: s for s in schedules}
+        curr = start_date
+        while curr <= end_date:
+            check_in = att_in_map.get(curr)
+            check_out = att_out_map.get(curr)
+            s = sched_map.get(curr)
+            
+            if s:
+                result.append({
+                    "id": s.id,
+                    "date": s.date.strftime('%Y-%m-%d'),
+                    "start_time": s.start_time,
+                    "end_time": s.end_time,
+                    "is_scheduled": s.is_scheduled,
+                    "schedule_status": s.schedule_kind,
+                    "status": s.approval_status,
+                    "approval_status": s.approval_status,
+                    "location_type": s.location_type,
+                    "schedule_request_id": s.schedule_request_id,
+                    "decision_reason": s.decision_reason,
+                    "actual_check_in": check_in.timestamp.strftime('%H:%M') if check_in else None,
+                    "actual_check_out": check_out.timestamp.strftime('%H:%M') if check_out else None,
+                })
+            else:
+                result.append({
+                    "id": None,
+                    "date": curr.strftime('%Y-%m-%d'),
+                    "start_time": None,
+                    "end_time": None,
+                    "is_scheduled": False,
+                    "schedule_status": "NORMAL",
+                    "status": "NONE",
+                    "approval_status": "NONE",
+                    "location_type": None,
+                    "schedule_request_id": None,
+                    "decision_reason": None,
+                    "actual_check_in": check_in.timestamp.strftime('%H:%M') if check_in else None,
+                    "actual_check_out": check_out.timestamp.strftime('%H:%M') if check_out else None,
+                })
+            curr += timedelta(days=1)
+    else:
+        # パディングなし（通常はstart, endが指定される想定）
+        for s in schedules:
+            d = s.date
+            check_in = att_in_map.get(d)
+            check_out = att_out_map.get(d)
+            
+            result.append({
+                "id": s.id,
+                "date": s.date.strftime('%Y-%m-%d'),
+                "start_time": s.start_time,
+                "end_time": s.end_time,
+                "is_scheduled": s.is_scheduled,
+                "schedule_status": s.schedule_kind,
+                "status": s.approval_status,
+                "approval_status": s.approval_status,
+                "location_type": s.location_type,
+                "schedule_request_id": s.schedule_request_id,
+                "decision_reason": s.decision_reason,
+                "actual_check_in": check_in.timestamp.strftime('%H:%M') if check_in else None,
+                "actual_check_out": check_out.timestamp.strftime('%H:%M') if check_out else None,
+            })
+            
     return jsonify({"items": result}), 200
 
 @users_bp.route('/<int:user_id>/daily-schedules/<date_str>', methods=['PUT'])
@@ -360,6 +395,9 @@ def update_daily_schedule(user_id, date_str):
     if not user:
         return jsonify({"success": False, "error": {"code": "NOT_FOUND", "message": "利用者が見つかりません。"}}), 404
         
+    from backend.app.models.core.audit_log import AuditActionLog
+    import json
+    
     try:
         target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
     except ValueError:
@@ -368,8 +406,18 @@ def update_daily_schedule(user_id, date_str):
     data = request.get_json() or {}
     
     schedule = UserDailySchedule.query.filter_by(user_id=user_id, date=target_date).first()
-    if not schedule:
-        schedule = UserDailySchedule(user_id=user_id, date=target_date)
+    
+    before_state = None
+    if schedule:
+        before_state = {
+            "is_scheduled": schedule.is_scheduled,
+            "start_time": schedule.start_time,
+            "end_time": schedule.end_time,
+            "location_type": schedule.location_type,
+            "decision_reason": schedule.decision_reason
+        }
+    else:
+        schedule = UserDailySchedule(user_id=user_id, date=target_date, schedule_kind='NORMAL', approval_status='APPROVED')
         db.session.add(schedule)
         
     is_scheduled = data.get('is_scheduled')
@@ -379,7 +427,12 @@ def update_daily_schedule(user_id, date_str):
     decision_reason = data.get('decision_reason')
     
     if is_scheduled is not None:
-        schedule.is_scheduled = is_scheduled
+        if is_scheduled:
+            schedule.approval_status = 'APPROVED'
+        else:
+            schedule.start_time = None
+            schedule.end_time = None
+            
     if start_time is not None:
         schedule.start_time = start_time
     if end_time is not None:
@@ -389,7 +442,7 @@ def update_daily_schedule(user_id, date_str):
     if decision_reason is not None:
         schedule.decision_reason = decision_reason
         
-    if schedule.is_scheduled and (not schedule.start_time or not schedule.end_time):
+    if is_scheduled and (not schedule.start_time or not schedule.end_time):
         return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "通所予定の場合、開始時間と終了時間は必須です。"}}), 400
         
     if schedule.is_scheduled and schedule.start_time and schedule.end_time:
@@ -403,6 +456,28 @@ def update_daily_schedule(user_id, date_str):
         return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "通所なしに変更する場合は理由（decision_reason）を入力してください。"}}), 400
         
     try:
+        db.session.flush()
+        
+        after_state = {
+            "is_scheduled": schedule.is_scheduled,
+            "start_time": schedule.start_time,
+            "end_time": schedule.end_time,
+            "location_type": schedule.location_type,
+            "decision_reason": schedule.decision_reason
+        }
+        
+        supporter_id_int = int(identity.split(':')[1])
+        audit_log = AuditActionLog(
+            actor_supporter_id=supporter_id_int,
+            action='UPDATE_DAILY_SCHEDULE',
+            entity_type='user_daily_schedule',
+            entity_id=schedule.id,
+            before_value=json.dumps(before_state, ensure_ascii=False) if before_state else None,
+            after_value=json.dumps(after_state, ensure_ascii=False),
+            reason=decision_reason or "日別予定の直接編集"
+        )
+        db.session.add(audit_log)
+        
         db.session.commit()
         return jsonify({
             "success": True,

@@ -47,10 +47,11 @@ def get_daily_actuals():
     att_map = {}
     for att in attendances:
         if att.user_id not in att_map:
-            att_map[att.user_id] = {"check_in": None, "check_out": None}
+            att_map[att.user_id] = {"check_in": None, "check_out": None, "record_id": att.id}
         if att.record_type == 'CHECK_IN':
             if not att_map[att.user_id]["check_in"] or att.timestamp < att_map[att.user_id]["check_in"]:
                 att_map[att.user_id]["check_in"] = att.timestamp
+                att_map[att.user_id]["record_id"] = att.id
         elif att.record_type == 'CHECK_OUT':
             if not att_map[att.user_id]["check_out"] or att.timestamp > att_map[att.user_id]["check_out"]:
                 att_map[att.user_id]["check_out"] = att.timestamp
@@ -97,10 +98,11 @@ def get_daily_actuals():
             "scheduled_start_time": sched.start_time if sched else None,
             "scheduled_end_time": sched.end_time if sched else None,
             "schedule_status": schedule_status,
+            "attendance_record_id": att.get("record_id") if att else None,
             "check_in_at": check_in.isoformat() if check_in else None,
             "check_out_at": check_out.isoformat() if check_out else None,
             "effective_status": effective_status,
-            "daily_log_status": log.log_status if log else "missing",
+            "daily_log_status": log.log_status.lower() if log else "missing",
             "decision_reason": sched.decision_reason if sched else None
         })
 

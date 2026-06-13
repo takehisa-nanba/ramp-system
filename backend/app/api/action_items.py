@@ -66,12 +66,12 @@ def get_action_items():
             # 日報自体が未作成
             items.append({
                 "type": "daily_log",
-                "category_label": "日報",
+                "category_label": "作業日報",
                 "severity": "medium",
                 "user_id": user_id,
                 "user_name": user_name,
-                "title": f"{user_name}さんの利用実績に対する支援記録が未作成です",
-                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、支援記録（日報）が作成されていません。",
+                "title": f"{user_name}さんの利用実績に対する作業日報が未作成です",
+                "description": f"{att_date.strftime('%Y-%m-%d')}に来所実績がありますが、利用者作業日報が作成されていません。",
                 "target_date": att_date.strftime('%Y-%m-%d'),
                 "attendance_record_id": att.id,
                 "check_in_at": check_in_at,
@@ -81,12 +81,12 @@ def get_action_items():
             # 日報はあるが下書き状態
             items.append({
                 "type": "daily_log",
-                "category_label": "日報",
+                "category_label": "作業日報",
                 "severity": "medium",
                 "user_id": user_id,
                 "user_name": user_name,
-                "title": f"{user_name}さんの利用実績に対する支援記録が未完了（下書き）です",
-                "description": f"{att_date.strftime('%Y-%m-%d')}の支援記録（日報）が下書き状態のままになっています。完了させてください。",
+                "title": f"{user_name}さんの利用実績に対する作業日報が未完了（下書き）です",
+                "description": f"{att_date.strftime('%Y-%m-%d')}の作業日報が下書き状態のままになっています。完了させてください。",
                 "target_date": att_date.strftime('%Y-%m-%d'),
                 "attendance_record_id": att.id,
                 "check_in_at": check_in_at,
@@ -234,7 +234,8 @@ def get_action_items():
     scheduled_days = UserDailySchedule.query.filter(
         UserDailySchedule.date >= start_date_limit,
         UserDailySchedule.date <= today,
-        UserDailySchedule.is_scheduled == True,
+        UserDailySchedule.start_time.isnot(None),
+        UserDailySchedule.end_time.isnot(None),
         UserDailySchedule.approval_status == 'APPROVED'
     ).all()
     

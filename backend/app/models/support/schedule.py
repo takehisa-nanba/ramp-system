@@ -145,11 +145,14 @@ class UserDailySchedule(db.Model):
     start_time = Column(String(5), nullable=True)
     end_time = Column(String(5), nullable=True)
     
-    is_scheduled = Column(Boolean, default=True, nullable=False) # 確定予定が有効か
-    schedule_status = Column(String(30), default='NORMAL', nullable=False) # 予定の種別: 'NORMAL', 'EXTRA', 'SUBSTITUTED'
+    schedule_kind = Column(String(30), default='NORMAL', nullable=False) # 予定の種別: 'NORMAL', 'EXTRA', 'SUBSTITUTED'
     
     # 承認状態: 'APPROVED' (承認済/確定/有効), 'CANCELLED' (キャンセル/欠席), 'REQUESTED' (申請中), 'REJECTED' (却下)
     approval_status = Column(String(30), default='APPROVED', nullable=False)
+
+    @property
+    def is_scheduled(self) -> bool:
+        return self.approval_status == 'APPROVED' and self.start_time is not None and self.end_time is not None
     
     # 支援区分 (ON_SITE, OFF_SITE_SUPPORT, TRANSITION_PREP, OFF_SITE_WORK, AT_HOME)
     location_type = Column(String(50), nullable=True, default='ON_SITE')

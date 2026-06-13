@@ -11,7 +11,23 @@ from datetime import datetime
 import json
 from . import users_bp
 
-def serialize_cert(cert):
+def check_cbac_cert(supporter_id_int, office_config_id=None, cert=None):
+    supporter = db.session.get(Supporter, supporter_id_int)
+    if not supporter or not supporter.office:
+        return False
+    
+    if cert:
+        if not cert.managing_service or not cert.managing_service.office:
+            return False
+        return supporter.office.corporation_id == cert.managing_service.office.corporation_id
+    elif office_config_id:
+        office_config = db.session.get(OfficeServiceConfiguration, office_config_id)
+        if not office_config or not office_config.office:
+            return False
+        return supporter.office.corporation_id == office_config.office.corporation_id
+    return False
+
+def serialize_cert(cert, mask_pii=False):
     granted = []
     for g in cert.granted_services:
         cd_info = None
@@ -70,6 +86,12 @@ def serialize_cert(cert):
             "managing_office_name": cm.managing_office_name
         })
 
+    recipient_num = cert.recipient_number
+    if mask_pii and recipient_num and len(recipient_num) > 2:
+        recipient_num = recipient_num[0] + "*" * (len(recipient_num) - 2) + recipient_num[-1]
+    elif mask_pii and recipient_num:
+        recipient_num = "***"
+
     return {
         "id": cert.id,
         "certificate_issue_date": cert.certificate_issue_date.isoformat() if cert.certificate_issue_date else None,
@@ -77,7 +99,7 @@ def serialize_cert(cert):
         "certificate_type": cert.certificate_type,
         "disability_support_classification": cert.disability_support_classification,
         "certificate_notes": cert.certificate_notes,
-        "recipient_number": cert.recipient_number,
+        "recipient_number": recipient_num,
         "office_service_configuration_id": cert.office_service_configuration_id,
         "granted_services": granted,
         "copayment_limits": copayments,
@@ -114,11 +136,13 @@ def add_service_certificate(user_id):
 
     try:
         office_config_id = data.get('office_service_configuration_id')
-        if not office_config_id:
-            office_config = OfficeServiceConfiguration.query.first()
-            office_config_id = office_config.id if office_config else 1
-
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+
+        if not office_config_id:
+            return jsonify({"msg": "office_service_configuration_id is required"}), 400
+
+        if not check_cbac_cert(supporter_id_int, office_config_id=office_config_id):
+            return jsonify({"msg": "CBAC: この事業所コンテキストでの受給者証作成権限がありません"}), 403
         
         status = data.get('status', 'DRAFT')
         if status not in ('DRAFT', 'PENDING_REVIEW'):
@@ -227,7 +251,7 @@ def add_service_certificate(user_id):
 
         db.session.flush()
 
-        after_serialized = json.dumps(serialize_cert(cert), ensure_ascii=False)
+        after_serialized = json.dumps(serialize_cert(cert, mask_pii=True), ensure_ascii=False)
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
         audit_log = AuditActionLog(
             actor_supporter_id=supporter_id_int,
@@ -264,6 +288,10 @@ def update_service_certificate(user_id, cert_id):
     if not user or not cert or cert.user_id != user.id:
         return jsonify({"msg": "Certificate not found"}), 404
 
+    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+    if not check_cbac_cert(supporter_id_int, cert=cert):
+        return jsonify({"msg": "CBAC: この受給者証を編集する権限がありません"}), 403
+
     if cert.status not in ('DRAFT', 'REJECTED'):
         return jsonify({"msg": "下書きまたは却下状態の受給者証のみ編集可能です。"}), 400
 
@@ -277,7 +305,7 @@ def update_service_certificate(user_id, cert_id):
         update_reason = "受給者証の更新"
 
     try:
-        before_serialized = json.dumps(serialize_cert(cert), ensure_ascii=False)
+        before_serialized = json.dumps(serialize_cert(cert, mask_pii=True), ensure_ascii=False)
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
 
         # Update status and submitted_by if PENDING_REVIEW is selected
@@ -398,7 +426,7 @@ def update_service_certificate(user_id, cert_id):
 
         db.session.flush()
 
-        after_serialized = json.dumps(serialize_cert(cert), ensure_ascii=False)
+        after_serialized = json.dumps(serialize_cert(cert, mask_pii=True), ensure_ascii=False)
         _, supporter_id_int = parse_jwt_identity(current_supporter_id)
 
         audit_log = AuditActionLog(
@@ -437,11 +465,13 @@ def submit_service_certificate(user_id, cert_id):
     if not user or not cert or cert.user_id != user.id:
         return jsonify({"msg": "Certificate not found"}), 404
 
+    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+    if not check_cbac_cert(supporter_id_int, cert=cert):
+        return jsonify({"msg": "CBAC: この受給者証の提出権限がありません"}), 403
+
     if cert.status not in ('DRAFT', 'REJECTED'):
         return jsonify({"msg": "下書きまたは却下状態の受給者証のみ提出可能です。"}), 400
 
-    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
-    
     cert.status = 'PENDING_REVIEW'
     cert.submitted_by_supporter_id = supporter_id_int
     
@@ -464,6 +494,10 @@ def review_service_certificate(user_id, cert_id):
     if not user or not cert or cert.user_id != user.id:
         return jsonify({"msg": "Certificate not found"}), 404
 
+    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
+    if not check_cbac_cert(supporter_id_int, cert=cert):
+        return jsonify({"msg": "CBAC: この受給者証の確認権限がありません"}), 403
+
     if cert.status != 'PENDING_REVIEW':
         return jsonify({"msg": "確認待ち状態の受給者証のみ承認・却下可能です。"}), 400
 
@@ -473,8 +507,6 @@ def review_service_certificate(user_id, cert_id):
 
     action = data['action']
     review_reason = data.get('review_reason')
-
-    _, supporter_id_int = parse_jwt_identity(current_supporter_id)
 
     # Guardrail: Separating applicant and reviewer
     if cert.submitted_by_supporter_id == supporter_id_int:
@@ -553,6 +585,9 @@ def void_service_certificate(user_id, cert_id):
     if not supporter:
         return jsonify({"msg": "Supporter not found"}), 404
 
+    if not check_cbac_cert(supporter_id_int, cert=cert):
+        return jsonify({"msg": "所属する法人以外の受給者証は無効化できません。"}), 403
+
     # Check permission strictly: role_scope in ("SYSTEM", "CORPORATE") and is_admin == true
     is_system_admin = any(r.role_scope == 'SYSTEM' and r.is_admin for r in supporter.roles)
     is_corporate_admin = any(r.role_scope == 'CORPORATE' and r.is_admin for r in supporter.roles)
@@ -560,12 +595,6 @@ def void_service_certificate(user_id, cert_id):
     if not (is_system_admin or is_corporate_admin):
         return jsonify({"msg": "無効化操作は管理者権限（SYSTEMまたはCORPORATE）が必要です。"}), 403
 
-    # If not system admin, must check same-corporation alignment
-    if not is_system_admin:
-        if not supporter.office or not cert.managing_service or not cert.managing_service.office:
-            return jsonify({"msg": "法人情報の照合ができません。"}), 403
-        if supporter.office.corporation_id != cert.managing_service.office.corporation_id:
-            return jsonify({"msg": "所属する法人以外の受給者証は無効化できません。"}), 403
 
     # Get and validate void_reason
     data = request.get_json()
@@ -576,7 +605,7 @@ def void_service_certificate(user_id, cert_id):
         return jsonify({"msg": "無効化の理由を入力してください。"}), 400
 
     try:
-        before_serialized = json.dumps(serialize_cert(cert), ensure_ascii=False)
+        before_serialized = json.dumps(serialize_cert(cert, mask_pii=True), ensure_ascii=False)
 
         cert.status = 'VOIDED'
         cert.voided_by_supporter_id = supporter_id_int
@@ -586,7 +615,7 @@ def void_service_certificate(user_id, cert_id):
         db.session.flush()
 
         # Write audit log
-        after_serialized = json.dumps(serialize_cert(cert), ensure_ascii=False)
+        after_serialized = json.dumps(serialize_cert(cert, mask_pii=True), ensure_ascii=False)
         audit_log = AuditActionLog(
             actor_supporter_id=supporter_id_int,
             action='VOID_CERTIFICATE',

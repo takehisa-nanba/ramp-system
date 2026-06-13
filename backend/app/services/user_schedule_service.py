@@ -72,15 +72,13 @@ class UserScheduleService:
                     if template and template.is_scheduled:
                         existing.start_time = template.start_time
                         existing.end_time = template.end_time
-                        existing.is_scheduled = True
-                        existing.schedule_status = 'NORMAL'
+                        existing.schedule_kind = 'NORMAL'
                         existing.approval_status = 'APPROVED'
                         existing.location_type = template.location_type or 'ON_SITE'
                     else:
-                        existing.is_scheduled = False
                         existing.start_time = None
                         existing.end_time = None
-                        existing.schedule_status = 'NORMAL'
+                        existing.schedule_kind = 'NORMAL'
                         existing.approval_status = 'APPROVED'
                         existing.location_type = None
                     created_count += 1
@@ -92,8 +90,7 @@ class UserScheduleService:
                         date=curr,
                         start_time=template.start_time,
                         end_time=template.end_time,
-                        is_scheduled=True,
-                        schedule_status='NORMAL',
+                        schedule_kind='NORMAL',
                         approval_status='APPROVED',
                         location_type=template.location_type or 'ON_SITE'
                     )
@@ -103,8 +100,7 @@ class UserScheduleService:
                     daily = UserDailySchedule(
                         user_id=user_id,
                         date=curr,
-                        is_scheduled=False,
-                        schedule_status='NORMAL',
+                        schedule_kind='NORMAL',
                         approval_status='APPROVED',
                         location_type=None
                     )
@@ -208,7 +204,6 @@ class UserScheduleService:
             daily.schedule_request_id = req.id
 
             if req.request_type == 'ABSENCE':
-                daily.is_scheduled = False
                 daily.approval_status = 'CANCELLED'
                 daily.start_time = None
                 daily.end_time = None
@@ -234,14 +229,12 @@ class UserScheduleService:
                     db.session.add(absence_record)
 
             elif req.request_type == 'EXTRA_DAY':
-                daily.is_scheduled = True
-                daily.schedule_status = 'EXTRA'
+                daily.schedule_kind = 'EXTRA'
                 daily.start_time = req.requested_start_time
                 daily.end_time = req.requested_end_time
 
             elif req.request_type == 'SHIFT_TIME':
-                daily.is_scheduled = True
-                daily.schedule_status = 'SUBSTITUTED'
+                daily.schedule_kind = 'SUBSTITUTED'
                 daily.start_time = req.requested_start_time
                 daily.end_time = req.requested_end_time
 
