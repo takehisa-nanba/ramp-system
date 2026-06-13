@@ -293,8 +293,39 @@ def get_daily_schedules(user_id):
             
     schedules = query.order_by(UserDailySchedule.date.asc()).all()
     
+    # 打刻実績を取得してマージ
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    from sqlalchemy import func
+    
+    attendances_in = AttendanceRecord.query.filter_by(
+        user_id=user_id,
+        record_type='CHECK_IN'
+    )
+    if start_date_str:
+        attendances_in = attendances_in.filter(func.date(AttendanceRecord.timestamp) >= start_date)
+    if end_date_str:
+        attendances_in = attendances_in.filter(func.date(AttendanceRecord.timestamp) <= end_date)
+    attendances_in = attendances_in.all()
+    
+    attendances_out = AttendanceRecord.query.filter_by(
+        user_id=user_id,
+        record_type='CHECK_OUT'
+    )
+    if start_date_str:
+        attendances_out = attendances_out.filter(func.date(AttendanceRecord.timestamp) >= start_date)
+    if end_date_str:
+        attendances_out = attendances_out.filter(func.date(AttendanceRecord.timestamp) <= end_date)
+    attendances_out = attendances_out.all()
+    
+    att_in_map = {att.timestamp.date(): att for att in attendances_in}
+    att_out_map = {att.timestamp.date(): att for att in attendances_out}
+    
     result = []
     for s in schedules:
+        d = s.date
+        check_in = att_in_map.get(d)
+        check_out = att_out_map.get(d)
+        
         result.append({
             "id": s.id,
             "date": s.date.strftime('%Y-%m-%d'),
@@ -305,9 +336,89 @@ def get_daily_schedules(user_id):
             "status": s.approval_status,
             "approval_status": s.approval_status,
             "location_type": s.location_type,
-            "schedule_request_id": s.schedule_request_id
+            "schedule_request_id": s.schedule_request_id,
+            "decision_reason": s.decision_reason,
+            "actual_check_in": check_in.timestamp.strftime('%H:%M') if check_in else None,
+            "actual_check_out": check_out.timestamp.strftime('%H:%M') if check_out else None,
         })
     return jsonify({"items": result}), 200
+
+@users_bp.route('/<int:user_id>/daily-schedules/<date_str>', methods=['PUT'])
+@jwt_required()
+def update_daily_schedule(user_id, date_str):
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "FORBIDDEN",
+                "message": "この操作には職員権限が必要です。"
+            }
+        }), 403
+
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"success": False, "error": {"code": "NOT_FOUND", "message": "利用者が見つかりません。"}}), 404
+        
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "日付フォーマットが不正です。"}}), 400
+        
+    data = request.get_json() or {}
+    
+    schedule = UserDailySchedule.query.filter_by(user_id=user_id, date=target_date).first()
+    if not schedule:
+        schedule = UserDailySchedule(user_id=user_id, date=target_date)
+        db.session.add(schedule)
+        
+    is_scheduled = data.get('is_scheduled')
+    start_time = data.get('start_time')
+    end_time = data.get('end_time')
+    location_type = data.get('location_type')
+    decision_reason = data.get('decision_reason')
+    
+    if is_scheduled is not None:
+        schedule.is_scheduled = is_scheduled
+    if start_time is not None:
+        schedule.start_time = start_time
+    if end_time is not None:
+        schedule.end_time = end_time
+    if location_type is not None:
+        schedule.location_type = location_type
+    if decision_reason is not None:
+        schedule.decision_reason = decision_reason
+        
+    if schedule.is_scheduled and (not schedule.start_time or not schedule.end_time):
+        return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "通所予定の場合、開始時間と終了時間は必須です。"}}), 400
+        
+    if schedule.is_scheduled and schedule.start_time and schedule.end_time:
+        sh, sm = map(int, schedule.start_time.split(':'))
+        eh, em = map(int, schedule.end_time.split(':'))
+        if (eh * 60 + em) <= (sh * 60 + sm):
+            return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "終了時間は開始時間より後の時間に設定してください。"}}), 400
+            
+    # キャンセル・臨時追加・大幅変更には decision_reason を残す
+    if not schedule.is_scheduled and not schedule.decision_reason:
+        return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "通所なしに変更する場合は理由（decision_reason）を入力してください。"}}), 400
+        
+    try:
+        db.session.commit()
+        return jsonify({
+            "success": True,
+            "item": {
+                "id": schedule.id,
+                "date": schedule.date.strftime('%Y-%m-%d'),
+                "start_time": schedule.start_time,
+                "end_time": schedule.end_time,
+                "is_scheduled": schedule.is_scheduled,
+                "location_type": schedule.location_type,
+                "decision_reason": schedule.decision_reason
+            }
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"success": False, "error": {"code": "SERVER_ERROR", "message": str(e)}}), 500
 
 @users_bp.route('/schedule-requests/<int:request_id>/decide', methods=['POST'])
 @jwt_required()

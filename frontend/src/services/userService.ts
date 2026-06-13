@@ -818,6 +818,9 @@ export interface UserDailyScheduleItem {
   approval_status?: 'APPROVED' | 'CANCELLED' | 'REQUESTED' | 'REJECTED';
   location_type?: string | null;
   schedule_request_id: number | null;
+  decision_reason?: string | null;
+  actual_check_in?: string | null;
+  actual_check_out?: string | null;
 }
 
 export const fetchUserScheduleTemplates = async (userId: number): Promise<{ items: UserScheduleTemplateItem[] }> => {
@@ -854,6 +857,21 @@ export const fetchUserDailySchedules = async (
   params?: { start_date?: string; end_date?: string }
 ): Promise<{ items: UserDailyScheduleItem[] }> => {
   const response = await apiClient.get<{ items: UserDailyScheduleItem[] }>(`/users/${userId}/daily-schedules`, { params });
+  return response.data;
+};
+
+export const updateUserDailySchedule = async (
+  userId: number,
+  dateStr: string,
+  data: {
+    is_scheduled?: boolean;
+    start_time?: string | null;
+    end_time?: string | null;
+    location_type?: string | null;
+    decision_reason?: string | null;
+  }
+): Promise<{ success: boolean, item: UserDailyScheduleItem }> => {
+  const response = await apiClient.put<{ success: boolean, item: UserDailyScheduleItem }>(`/users/${userId}/daily-schedules/${dateStr}`, data);
   return response.data;
 };
 

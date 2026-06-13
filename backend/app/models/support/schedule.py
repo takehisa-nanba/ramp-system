@@ -154,6 +154,9 @@ class UserDailySchedule(db.Model):
     # 支援区分 (ON_SITE, OFF_SITE_SUPPORT, TRANSITION_PREP, OFF_SITE_WORK, AT_HOME)
     location_type = Column(String(50), nullable=True, default='ON_SITE')
     
+    # 直接変更などの理由（欠席、臨時追加、変更などの場合）
+    decision_reason = Column(Text, nullable=True)
+    
     schedule_request_id = Column(Integer, ForeignKey('user_schedule_requests.id'), nullable=True)
     
     user = db.relationship('User', back_populates='daily_schedules', foreign_keys=[user_id])

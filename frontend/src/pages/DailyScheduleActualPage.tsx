@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DatePicker, Table, Tag, Select, Space, Button } from 'antd';
+import { DatePicker, Table, Tag, Select, Space } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { Heading, Text } from '../components/common/Typography';
-import { fetchDailyScheduleActuals, DailyScheduleActualItem } from '../services/userService';
+import { fetchDailyScheduleActuals } from '../services/userService';
+import type { DailyScheduleActualItem } from '../services/userService';
 
 const { Option } = Select;
 

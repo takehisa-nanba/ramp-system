@@ -153,7 +153,7 @@ const UserDetailPage: React.FC = () => {
         <NavLink to={`/users/${id}/history`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>履歴</NavLink>
         <NavLink to={`/users/${id}/schedule-templates`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定テンプレート</NavLink>
         <NavLink to={`/users/${id}/schedule-requests`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定変更申請</NavLink>
-        <NavLink to={`/users/${id}/schedule-actuals`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>確定日別予定</NavLink>
+        <NavLink to={`/users/${id}/schedule-actuals`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定・実績</NavLink>
       </div>
 
       <div>
