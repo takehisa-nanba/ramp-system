@@ -29,7 +29,21 @@ class ServiceCertificate(db.Model):
     
     certificate_type = Column(String(50)) # 証の種別
     disability_support_classification = Column(String(20)) # 障害支援区分
+    recipient_number = Column(String(10), nullable=True) # 受給者証番号 (10桁, PII保護対象)
     certificate_notes = Column(Text) # 特記事項・予備欄など
+
+    # --- 承認ワークフロー / 二重チェック (原理1, 2) ---
+    status = Column(String(30), nullable=False, default='DRAFT')
+    created_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    submitted_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    reviewed_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    review_reason = Column(Text, nullable=True)
+    
+    # --- 誤登録無効化 ---
+    voided_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    voided_at = Column(DateTime, nullable=True)
+    void_reason = Column(Text, nullable=True)
 
     # --- タイムスタンプ ---
     created_at = Column(DateTime, nullable=False, default=func.now())
@@ -65,6 +79,12 @@ class GrantedService(db.Model):
     tentative_start_date = Column(Date)
     tentative_end_date = Column(Date)
     
+    # 支給決定日数 (支給量、例: 23日)
+    max_service_days = Column(Integer, nullable=True, default=23)
+    max_service_days_type = Column(String(30), default='FIXED', nullable=False) # 支給量の種別: 'FIXED' or 'DYNAMIC_MONTH_MINUS_8'
+    granted_amount_start_date = Column(Date, nullable=True) # 支給量の有効期間 開始
+    granted_amount_end_date = Column(Date, nullable=True) # 支給量の有効期間 終了
+    
     service_type_master_id = Column(Integer, ForeignKey('service_type_master.id'), nullable=False)
     
     certificate = db.relationship('ServiceCertificate', back_populates='granted_services')
@@ -84,6 +104,7 @@ class CopaymentLimit(db.Model):
     limit_start_date = Column(Date, nullable=False)
     limit_end_date = Column(Date, nullable=False) 
     limit_amount = Column(Numeric(precision=10, scale=2), nullable=False, default=0) 
+    is_management_required = Column(Boolean, default=False, nullable=False) # 0円以外の場合の上限管理有無
 
     certificate = db.relationship('ServiceCertificate', back_populates='copayment_limits')
 

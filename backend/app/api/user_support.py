@@ -4,12 +4,7 @@ from backend.app import db
 from backend.app.models import User, AttendanceRecord, UserDailyLog, IndividualSupportGoal, SupportPlan, UserDailyLogSetting
 
 from datetime import datetime
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    from backports.zoneinfo import ZoneInfo
-
-JST = ZoneInfo("Asia/Tokyo")
+from backend.app.utils.timezone import JST
 
 user_support_bp = Blueprint('user_support', __name__, url_prefix='/api/user')
 

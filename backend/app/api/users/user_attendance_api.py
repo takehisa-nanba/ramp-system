@@ -60,13 +60,34 @@ def get_user_attendance_records(user_id: int):
         from datetime import datetime
         att_date = datetime.strptime(date_str, '%Y-%m-%d').date()
         
+        # 予定を取得
+        from backend.app.models import UserDailySchedule
+        sched = UserDailySchedule.query.filter_by(user_id=user_id, date=att_date).first()
+        if sched:
+            info["scheduled_location_type"] = sched.location_type
+            info["scheduled_start_time"] = sched.start_time
+            info["scheduled_end_time"] = sched.end_time
+            info["is_scheduled"] = sched.is_scheduled
+            info["schedule_status"] = sched.schedule_status
+            info["approval_status"] = sched.approval_status
+        else:
+            info["scheduled_location_type"] = None
+            info["scheduled_start_time"] = None
+            info["scheduled_end_time"] = None
+            info["is_scheduled"] = False
+            info["schedule_status"] = None
+            info["approval_status"] = None
+
         # 同日の日報を探す
         log = UserDailyLog.query.filter_by(user_id=user_id, log_date=att_date).first()
         if log:
+            info["actual_location_type"] = log.location_type
             if log.log_status == 'COMPLETED':
                 info["daily_log_status"] = "completed"
             elif log.log_status == 'DRAFT':
                 info["daily_log_status"] = "draft"
+        else:
+            info["actual_location_type"] = None
         
         # 来所記録がない（CHECK_OUT単体など）場合のフォールバック
         if not info["attendance_record_id"]:

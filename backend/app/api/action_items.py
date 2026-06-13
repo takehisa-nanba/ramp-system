@@ -7,13 +7,15 @@ from backend.app.models import (
     User, SupportPlan, UserDailyLog, CaseConferenceLog, StatusMaster,
     UserScheduleTemplate, UserDailySchedule, UserScheduleRequest, SupportRecord
 )
+from backend.app.utils.timezone import get_jst_today
+from sqlalchemy import func
 
 action_items_bp = Blueprint('action_items', __name__, url_prefix='/api/action-items')
 
 @action_items_bp.route('', methods=['GET'])
 @jwt_required()
 def get_action_items():
-    today = date.today()
+    today = get_jst_today()
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
     
@@ -22,8 +24,12 @@ def get_action_items():
     # 1. 未完了日報の検出 (利用実績起点)
     from backend.app.models.support.attendance_workflow import AttendanceRecord
     
-    # CHECK_IN の実績を取得
-    attendances = AttendanceRecord.query.filter_by(record_type='CHECK_IN').all()
+    # 過去30日以内の CHECK_IN 実績を取得
+    from datetime import timedelta
+    start_date_limit = today - timedelta(days=30)
+    attendances = AttendanceRecord.query.filter_by(record_type='CHECK_IN').filter(
+        func.date(AttendanceRecord.timestamp) >= start_date_limit
+    ).all()
     
     # user_id + date (att_date) でユニーク化する
     # 重複するCHECK_INを排除するための辞書
@@ -39,8 +45,6 @@ def get_action_items():
     # MVP: CHECK_IN を利用実績ありとして扱う
     # MVPでは CHECK_IN のみ支援記録未作成チェックの対象
     # 欠席時対応記録は次フェーズで ABSENT / NO_SHOW を起点に実装
-    # TODO: cancellation / no-show / check-out consistency を考慮する
-    from sqlalchemy import func
     for (user_id, att_date), att in unique_attendances.items():
         user_name = att.user.display_name if att.user else "不明"
         
@@ -224,13 +228,44 @@ def get_action_items():
                     "target_date": plan.plan_start_date.strftime('%Y-%m-%d') if plan.plan_start_date else None
                 })
                 
-    # 7. 無断欠席の検出 (過去および今日で、確定予定があるのに打刻がない場合)
+    # 7. 無断欠席の検出 (過去30日以内で、確定予定があるのに打刻がない場合)
+    from datetime import timedelta
+    start_date_limit = today - timedelta(days=30)
     scheduled_days = UserDailySchedule.query.filter(
+        UserDailySchedule.date >= start_date_limit,
         UserDailySchedule.date <= today,
-        UserDailySchedule.is_scheduled == True
+        UserDailySchedule.is_scheduled == True,
+        UserDailySchedule.approval_status == 'APPROVED'
     ).all()
     
     for sched in scheduled_days:
+        # 同日に欠席対応記録 (ABSENCE_CONTACT) がすでに存在する場合は無断欠席から除外
+        absence_contact = SupportRecord.query.filter_by(
+            user_id=sched.user_id,
+            log_date=sched.date,
+            support_record_type='ABSENCE_CONTACT'
+        ).first()
+        if absence_contact:
+            continue
+
+        # 今日の日付の場合のフライング警告防止
+        if sched.date == today:
+            from backend.app.utils.timezone import get_jst_now
+            jst_now = get_jst_now()
+            if sched.start_time:
+                try:
+                    sh, sm = map(int, sched.start_time.split(':'))
+                    sched_start_dt = datetime.combine(today, datetime.min.time()).replace(hour=sh, minute=sm)
+                    sched_start_dt = sched_start_dt.replace(tzinfo=jst_now.tzinfo)
+                    
+                    # 現在時刻が予定開始時刻前であれば、警告を出さない
+                    if jst_now < sched_start_dt:
+                        continue
+                except Exception:
+                    continue
+            else:
+                continue
+
         att = AttendanceRecord.query.filter_by(
             user_id=sched.user_id,
             record_type='CHECK_IN'
@@ -239,6 +274,17 @@ def get_action_items():
         ).first()
         
         if not att:
+            # 補助実績チェック：打刻はないが、手動で日報が登録完了/下書きされている場合も「実績あり」とする
+            manual_log = UserDailyLog.query.filter_by(
+                user_id=sched.user_id,
+                log_date=sched.date,
+                auto_created=False
+            ).filter(
+                (UserDailyLog.morning_completed == True) | (UserDailyLog.evening_completed == True)
+            ).first()
+            if manual_log:
+                continue
+
             user_name = sched.user.display_name if sched.user else "不明"
             items.append({
                 "type": "unexcused_absence",

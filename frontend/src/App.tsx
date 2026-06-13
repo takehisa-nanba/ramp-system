@@ -15,6 +15,7 @@ import UserDetailPage from './pages/UserDetailPage';
 import ActionItemsPage from './pages/ActionItemsPage';
 import SettingsPage from './pages/SettingsPage';
 import TodayUsersPage from './pages/TodayUsersPage';
+import { DailyScheduleActualPage } from './pages/DailyScheduleActualPage';
 
 
 // =================================================================
@@ -50,6 +51,7 @@ const App: React.FC = () => {
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="today-users" element={<TodayUsersPage />} />
+          <Route path="daily-schedules" element={<DailyScheduleActualPage />} />
           
           <Route path="users" element={<UserListPage />} />
           <Route path="users/:id/*" element={<UserDetailPage />} />
@@ -65,4 +67,4 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+export default App;

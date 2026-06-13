@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Users, Clock, CheckCircle, FileEdit, AlertTriangle, ArrowRight } from 'lucide-react';
 import { fetchTodayUsers, type TodayUserItem } from '../services/userService';
+import { Heading, Text, Label } from '../components/common/Typography';
 
 const TodayUsersPage: React.FC = () => {
   const navigate = useNavigate();
@@ -83,37 +84,37 @@ const TodayUsersPage: React.FC = () => {
   const getStatusBadge = (item: TodayUserItem) => {
     if (item.daily_log_status === 'missing') {
       return (
-        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+        <Label variant="badge" className="flex items-center gap-1.5 text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full normal-case">
           <AlertTriangle className="w-3.5 h-3.5" /> 支援記録 未作成
-        </span>
+        </Label>
       );
     }
     if (item.daily_log_status === 'draft') {
       return (
-        <span className="flex items-center gap-1.5 text-xs font-bold text-amber-600 bg-amber-50/50 border border-amber-100 px-3 py-1.5 rounded-full">
+        <Label variant="badge" className="flex items-center gap-1.5 text-amber-600 bg-amber-50/50 border border-amber-100 px-3 py-1.5 rounded-full normal-case">
           <FileEdit className="w-3.5 h-3.5" /> 支援記録 下書き
-        </span>
+        </Label>
       );
     }
     return (
-      <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full">
+      <Label variant="badge" className="flex items-center gap-1.5 text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-full normal-case">
         <CheckCircle className="w-3.5 h-3.5" /> 支援記録 完了
-      </span>
+      </Label>
     );
   };
 
   const getAttendanceStatusBadge = (item: TodayUserItem) => {
     if (item.status === 'CHECKED_IN') {
       return (
-        <span className="text-[10px] font-black tracking-wider uppercase bg-sky-100 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md">
+        <Label variant="badge" className="bg-sky-100 text-sky-700 border border-sky-200 px-2 py-0.5 rounded-md">
           利用中 (来所)
-        </span>
+        </Label>
       );
     }
     return (
-      <span className="text-[10px] font-black tracking-wider uppercase bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-md">
+      <Label variant="badge" className="bg-slate-100 text-slate-500 border border-slate-200 px-2 py-0.5 rounded-md">
         退所済み
-      </span>
+      </Label>
     );
   };
 
@@ -132,15 +133,15 @@ const TodayUsersPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 animate-in fade-in duration-500 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          <Users className="text-indigo-600 w-8 h-8" />
+    <div className="px-4 pb-8 md:px-8 md:pb-12 animate-in fade-in duration-500 max-w-5xl mx-auto">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md pt-6 pb-4 md:pt-8 md:pb-4 mb-6 border-b border-slate-200">
+        <Heading variant="h1" className="flex items-center gap-3">
+          <Users className="text-indigo-600 w-8 h-8 md:w-10 md:h-10" />
           本日の利用状況
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">
+        </Heading>
+        <Text variant="small" className="mt-2">
           本日来所している利用者の打刻実績と、支援記録の登録状況です。未処理の記録から優先して表示されます。
-        </p>
+        </Text>
       </div>
 
       {/* 件数サマリー */}
@@ -278,7 +279,7 @@ const TodayUsersPage: React.FC = () => {
                 {/* 利用者プロフィール ＆ 打刻時間 */}
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-2 flex-wrap">
-                    <h2 className="text-lg font-black text-slate-800">{item.user_name}</h2>
+                    <Heading variant="h3">{item.user_name}</Heading>
                     {getAttendanceStatusBadge(item)}
                     {getStatusBadge(item)}
                   </div>

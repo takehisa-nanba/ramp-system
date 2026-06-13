@@ -6,6 +6,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMessage } from '../context/MessageContext';
 import { useAutoKana } from '../hooks/useAutoKana';
 import { UXField, PostalAddressField } from '../components/common/UXFields';
+import { Heading, Text, Label } from '../components/common/Typography';
 
 type TabKey = 'office' | 'staff';
 
@@ -424,12 +425,12 @@ const SettingsPage: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="px-4 pb-8 md:px-8 md:pb-12 space-y-6">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md pt-6 pb-4 md:pt-8 md:pb-4 mb-6 border-b border-slate-200 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-xs font-black tracking-[0.25em] text-indigo-500 uppercase">RAMP Skeleton Settings</p>
-          <h1 className="text-3xl font-black text-slate-900 mt-1">基本設定</h1>
-          <p className="text-sm text-slate-500 mt-2">法人・事業所・職員・職務を定義し、支援サイクルが乗る骨格を作ります。</p>
+          <p className="text-[10px] md:text-xs font-black tracking-[0.25em] text-indigo-500 uppercase">RAMP Skeleton Settings</p>
+          <Heading variant="h1" className="mt-1">基本設定</Heading>
+          <Text variant="small" className="mt-2">法人・事業所・職員・職務を定義し、支援サイクルが乗る骨格を作ります。</Text>
         </div>
         <button onClick={loadAll} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50">
           <RefreshCw size={16} /> 再読み込み
@@ -528,6 +529,10 @@ const SettingsPage: React.FC = () => {
                     <Field label="事業所番号" value={service.jigyosho_bango || ''} onChange={(v) => updateServiceItem(index, { jigyosho_bango: v })} placeholder="10桁の事業所番号" />
                     
                     <Field label="定員" type="number" value={service.capacity || 0} onChange={(v) => updateServiceItem(index, { capacity: Number(v) })} />
+                    
+                    <Field label="サービス提供開始時刻" type="time" value={service.default_start_time || ''} onChange={(v) => updateServiceItem(index, { default_start_time: v })} />
+                    
+                    <Field label="サービス提供終了時刻" type="time" value={service.default_end_time || ''} onChange={(v) => updateServiceItem(index, { default_end_time: v })} />
                     
                     <SelectField label="サービス管理責任者" value={service.manager_supporter_id || ''} onChange={(v) => updateServiceItem(index, { manager_supporter_id: Number(v) || null })}>
                       <option value="">未設定</option>
@@ -733,31 +738,31 @@ const SettingsPage: React.FC = () => {
 
 const SectionTitle: React.FC<{ title: string; description?: string }> = ({ title, description }) => (
   <div>
-    <h2 className="text-lg font-black text-slate-900">{title}</h2>
-    {description && <p className="text-xs text-slate-500 mt-1">{description}</p>}
+    <Heading variant="h2">{title}</Heading>
+    {description && <Text variant="small" className="mt-1">{description}</Text>}
   </div>
 );
 
 const Field: React.FC<{ label: string; value: string | number; onChange: (value: string) => void; type?: string; placeholder?: string; className?: string }> = ({ label, value, onChange, type = 'text', placeholder, className = '' }) => (
-  <label className={`block ${className}`}>
-    <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>
-    <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm" />
-  </label>
+  <div className={`block ${className}`}>
+    <Label variant="form" className="block text-slate-500 mb-1">{label}</Label>
+    <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm md:text-base" />
+  </div>
 );
 
 const SelectField: React.FC<{ label: string; value: string | number; onChange: (value: string) => void; children: React.ReactNode }> = ({ label, value, onChange, children }) => (
-  <label className="block">
-    <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>
-    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm">
+  <div className="block">
+    <Label variant="form" className="block text-slate-500 mb-1">{label}</Label>
+    <select value={value} onChange={(e) => onChange(e.target.value)} className="w-full h-10 px-3 rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm md:text-base">
       {children}
     </select>
-  </label>
+  </div>
 );
 
 const Toggle: React.FC<{ checked: boolean; label: string; onChange: (checked: boolean) => void }> = ({ checked, label, onChange }) => (
-  <label className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 cursor-pointer">
+  <label className="inline-flex items-center gap-2 cursor-pointer">
     <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-    {label}
+    <Text variant="small" className="!font-bold">{label}</Text>
   </label>
 );
 

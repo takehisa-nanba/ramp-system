@@ -12,7 +12,7 @@ from backend.app.models import (
     Supporter, SupporterPII, Corporation, OfficeSetting, 
     MunicipalityMaster, StaffActivityMaster, StatusMaster,
     User, UserPII, SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal,
-    RoleMaster, PermissionMaster, JobTitleMaster
+    RoleMaster, PermissionMaster, JobTitleMaster, UserScheduleTemplate, UserDailySchedule
 )
 
 
@@ -294,7 +294,32 @@ with app.app_context():
         user_pii.set_password("password123") # ★ パスワード設定
         db.session.add(user_pii)
 
-        db.session.commit()
+        # 受給者証のシード追加
+        from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService
+        
+        cert = ServiceCertificate.query.filter_by(user_id=user.id).first()
+        if not cert and service_config:
+            cert = ServiceCertificate(
+                user_id=user.id,
+                office_service_configuration_id=service_config.id,
+                certificate_issue_date=date(2024, 1, 1),
+                municipality_master_id=municipality.id,
+                certificate_type="受給者証",
+                disability_support_classification="区分3"
+            )
+            db.session.add(cert)
+            db.session.flush()
+            
+            # 支給上限を20日に設定してシード（超過テスト用）
+            gs = GrantedService(
+                certificate_id=cert.id,
+                granted_start_date=date(2024, 1, 1),
+                granted_end_date=date(2027, 12, 31),
+                max_service_days=20,
+                service_type_master_id=service_type.id
+            )
+            db.session.add(gs)
+            db.session.commit()
 
     plan = SupportPlan.query.filter_by(user_id=user.id).first()
     if not plan:
@@ -364,6 +389,29 @@ with app.app_context():
 
         db.session.commit()
 
+        # 鈴木花子の受給者証
+        from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService
+        cert2 = ServiceCertificate(
+            user_id=user2.id,
+            office_service_configuration_id=service_config.id,
+            certificate_issue_date=date(2024, 2, 1),
+            municipality_master_id=municipality.id,
+            certificate_type="受給者証",
+            disability_support_classification="区分2"
+        )
+        db.session.add(cert2)
+        db.session.flush()
+        
+        gs2 = GrantedService(
+            certificate_id=cert2.id,
+            granted_start_date=date(2024, 2, 1),
+            granted_end_date=date(2027, 12, 31),
+            max_service_days=23,
+            service_type_master_id=service_type.id
+        )
+        db.session.add(gs2)
+        db.session.commit()
+
         # 個別支援計画 (鈴木 花子)
         plan2 = SupportPlan(
             user_id=user2.id,
@@ -396,6 +444,29 @@ with app.app_context():
 
         db.session.commit()
 
+        # 高橋一郎の受給者証
+        from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService
+        cert3 = ServiceCertificate(
+            user_id=user3.id,
+            office_service_configuration_id=service_config.id,
+            certificate_issue_date=date(2024, 3, 1),
+            municipality_master_id=municipality.id,
+            certificate_type="受給者証",
+            disability_support_classification="区分4"
+        )
+        db.session.add(cert3)
+        db.session.flush()
+        
+        gs3 = GrantedService(
+            certificate_id=cert3.id,
+            granted_start_date=date(2024, 3, 1),
+            granted_end_date=date(2027, 12, 31),
+            max_service_days=23,
+            service_type_master_id=service_type.id
+        )
+        db.session.add(gs3)
+        db.session.commit()
+
         # 個別支援計画 (高橋 一郎)
         plan3 = SupportPlan(
             user_id=user3.id,
@@ -406,39 +477,116 @@ with app.app_context():
         db.session.add(plan3)
         db.session.commit()
 
-    # 4. 来所実績 (AttendanceRecord) のシード追加
-    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    # (来所実績シードは、予定の自動生成完了後に最後尾で行います)
+    # 5. 予定テンプレートと日別予定のシード追加
+    from backend.app.services.user_schedule_service import UserScheduleService
+    from backend.app.utils.timezone import get_jst_today
     
-    # 佐藤 健太 (user.id=1) の本日および昨日の来所実績
-    att1 = AttendanceRecord.query.filter_by(user_id=1, record_type='CHECK_IN').first()
-    if not att1:
-        # 本日
-        db.session.add(AttendanceRecord(
-            user_id=1,
-            record_type='CHECK_IN',
-            timestamp=datetime.datetime.now(),
-            location_data='GPS: 35.6812, 139.7671',
-            is_confirmed=True
-        ))
-        # 昨日 (テスト用)
-        db.session.add(AttendanceRecord(
-            user_id=1,
-            record_type='CHECK_IN',
-            timestamp=datetime.datetime.now() - datetime.timedelta(days=1),
-            location_data='GPS: 35.6812, 139.7671',
-            is_confirmed=True
-        ))
+    # ユーザーインスタンスを再ロードして NameError を防ぐ
+    user = User.query.filter_by(display_name='佐藤 健太').first()
+    user2 = User.query.filter_by(display_name='鈴木 花子').first()
+    user3 = User.query.filter_by(display_name='高橋 一郎').first()
+    
+    all_users = [user, user2, user3]
+    days_list = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    sched_service = UserScheduleService()
+    
+    for u in all_users:
+        existing_tmpl = UserScheduleTemplate.query.filter_by(user_id=u.id).first()
+        if not existing_tmpl:
+            for day_name in days_list:
+                is_sch = day_name not in ['Saturday', 'Sunday']
+                db.session.add(UserScheduleTemplate(
+                    user_id=u.id,
+                    day_of_week=day_name,
+                    is_scheduled=is_sch,
+                    start_time='10:00' if is_sch else None,
+                    end_time='16:00' if is_sch else None
+                ))
+            db.session.flush()
+            
+            # 実績が存在する2026年6月と、本日の日付の月に対して予定を自動生成
+            sched_service.generate_daily_schedules_for_month(u.id, datetime.date(2026, 6, 1))
+            sched_service.generate_daily_schedules_for_month(u.id, get_jst_today())
+
+    # 6. 固定日付の打刻 (AttendanceRecord) と支援記録のシード追加
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    from backend.app.models import SupportRecord, UserDailyLog
+    
+    # 既存の打刻・日報・支援記録を一旦全削除
+    AttendanceRecord.query.delete()
+    SupportRecord.query.delete()
+    UserDailyLog.query.delete()
+    db.session.commit()
+    
+    dt_6_10 = datetime.datetime(2026, 6, 10)
+    dt_6_11 = datetime.datetime(2026, 6, 11)
+    
+    # 佐藤 健太 (user_id=1) 
+    # 6/10 打刻と支援記録あり（正常）
+    db.session.add(AttendanceRecord(
+        user_id=user.id,
+        record_type='CHECK_IN',
+        timestamp=dt_6_10.replace(hour=9, minute=55),
+        location_data='GPS: 35.6812, 139.7671',
+        is_confirmed=True
+    ))
+    db.session.add(AttendanceRecord(
+        user_id=user.id,
+        record_type='CHECK_OUT',
+        timestamp=dt_6_10.replace(hour=16, minute=5),
+        location_data='GPS: 35.6812, 139.7671',
+        is_confirmed=True
+    ))
+    db.session.add(UserDailyLog(
+        user_id=user.id,
+        log_date=date(2026, 6, 10),
+        location_type='ON_SITE',
+        log_status='COMPLETED',
+        support_content_notes='施設内での個別PC訓練実施。手順通りに作業が進められました。',
+        morning_completed=True,
+        evening_completed=True,
+        auto_created=False
+    ))
+    db.session.add(SupportRecord(
+        user_id=user.id,
+        log_date=date(2026, 6, 10),
+        supporter_id=admin.id,
+        support_record_type='DIRECT_SUPPORT',
+        support_content='[PC訓練] Excel基本操作の指導。意欲的に取り組まれていました。',
+        observation_note='体調は良好。'
+    ))
+    
+    # 6/11 CHECK_IN のみ（日報なし、支援記録なし＝退所打刻漏れ、支援記録漏れ警告発生）
+    db.session.add(AttendanceRecord(
+        user_id=user.id,
+        record_type='CHECK_IN',
+        timestamp=dt_6_11.replace(hour=10, minute=2),
+        location_data='GPS: 35.6812, 139.7671',
+        is_confirmed=True
+    ))
+    # 6/12 (金) は予定あり・打刻なし（無断欠席警告発生）
+    
+    # 鈴木 花子 (user_id=2)
+    # 6/10 欠席申請が承認されてキャンセル済み (対応済み欠席、警告なし)
+    # 鈴木花子の6/10予定をキャンセル状態に更新
+    daily_hanako = UserDailySchedule.query.filter_by(user_id=user2.id, date=date(2026, 6, 10)).first()
+    if daily_hanako:
+        daily_hanako.is_scheduled = False
+        daily_hanako.status = 'CANCELLED'
+        daily_hanako.start_time = None
+        daily_hanako.end_time = None
         
-    # 高橋 一郎 (user3.id=3) の本日の来所実績
-    att3 = AttendanceRecord.query.filter_by(user_id=user3.id, record_type='CHECK_IN').first()
-    if not att3:
-        db.session.add(AttendanceRecord(
-            user_id=user3.id,
-            record_type='CHECK_IN',
-            timestamp=datetime.datetime.now(),
-            location_data='GPS: 35.6812, 139.7671',
-            is_confirmed=True
-        ))
+    db.session.add(SupportRecord(
+        user_id=user2.id,
+        log_date=date(2026, 6, 10),
+        supporter_id=admin.id,
+        support_record_type='ABSENCE_CONTACT',
+        support_content='[欠席対応連絡] 欠席理由: 風邪のため自宅療養します。',
+        decision_reason='本日お休みを了承しました。ゆっくり休むようお伝えしました。',
+        observation_note='熱は37.5度とのこと。安否確認済み。'
+    ))
+
     db.session.commit()
 
     print("Demo data seeded successfully.")

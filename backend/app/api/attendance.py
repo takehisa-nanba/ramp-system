@@ -3,12 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import Supporter, SupporterTimecard, OfficeServiceConfiguration
 from datetime import datetime
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    from backports.zoneinfo import ZoneInfo
-
-JST = ZoneInfo("Asia/Tokyo")
+from backend.app.utils.timezone import JST
 
 attendance_bp = Blueprint('attendance', __name__, url_prefix='/api/attendance')
 

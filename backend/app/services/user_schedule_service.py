@@ -1,5 +1,5 @@
 # backend/app/services/user_schedule_service.py
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, UTC
 from backend.app.extensions import db
 from backend.app.models import (
     UserScheduleTemplate, UserDailySchedule, UserScheduleRequest, 
@@ -8,7 +8,7 @@ from backend.app.models import (
 from backend.app.utils.errors import ValidationError
 
 class UserScheduleService:
-    def generate_daily_schedules_for_month(self, user_id: int, target_month: date) -> int:
+    def generate_daily_schedules_for_month(self, user_id: int, target_month: date, force_overwrite: bool = False) -> int:
         """
         指定された利用者の、指定月に対応する日別予定をテンプレートから自動生成する。
         """
@@ -38,16 +38,54 @@ class UserScheduleService:
         templates = UserScheduleTemplate.query.filter_by(user_id=user_id).all()
         template_dict = {t.day_of_week: t for t in templates}
 
+        from backend.app.models.support.attendance_workflow import AttendanceRecord
+        from sqlalchemy import func
+
         created_count = 0
         curr = start_date
         while curr <= end_date:
+            day_name = weekday_map[curr.weekday()]
+            template = template_dict.get(day_name)
+            
             # 既存予定のチェック
             existing = UserDailySchedule.query.filter_by(user_id=user_id, date=curr).first()
-            if not existing:
-                day_name = weekday_map[curr.weekday()]
-                template = template_dict.get(day_name)
-                
-                # テンプレートが存在し、かつ通所予定日の場合のみ予定を作成
+            
+            # 実績打刻 (CHECK_IN) が存在するかチェック
+            has_attendance = AttendanceRecord.query.filter_by(
+                user_id=user_id,
+                record_type='CHECK_IN'
+            ).filter(
+                func.date(AttendanceRecord.timestamp) == curr
+            ).first() is not None
+
+            # 承認された申請があるかチェック
+            has_approved_request = UserScheduleRequest.query.filter_by(
+                user_id=user_id,
+                target_date=curr,
+                request_status='APPROVED'
+            ).first() is not None
+
+            # 既存レコードがあり、上書きが要求されている場合
+            if existing and force_overwrite:
+                # 実績や承認された申請がある日は、予定を上書きしない（維持する）
+                if not has_attendance and not has_approved_request:
+                    if template and template.is_scheduled:
+                        existing.start_time = template.start_time
+                        existing.end_time = template.end_time
+                        existing.is_scheduled = True
+                        existing.schedule_status = 'NORMAL'
+                        existing.approval_status = 'APPROVED'
+                        existing.location_type = template.location_type or 'ON_SITE'
+                    else:
+                        existing.is_scheduled = False
+                        existing.start_time = None
+                        existing.end_time = None
+                        existing.schedule_status = 'NORMAL'
+                        existing.approval_status = 'APPROVED'
+                        existing.location_type = None
+                    created_count += 1
+            # 新規作成の場合
+            elif not existing:
                 if template and template.is_scheduled:
                     daily = UserDailySchedule(
                         user_id=user_id,
@@ -55,7 +93,20 @@ class UserScheduleService:
                         start_time=template.start_time,
                         end_time=template.end_time,
                         is_scheduled=True,
-                        schedule_status='NORMAL'
+                        schedule_status='NORMAL',
+                        approval_status='APPROVED',
+                        location_type=template.location_type or 'ON_SITE'
+                    )
+                    db.session.add(daily)
+                    created_count += 1
+                else:
+                    daily = UserDailySchedule(
+                        user_id=user_id,
+                        date=curr,
+                        is_scheduled=False,
+                        schedule_status='NORMAL',
+                        approval_status='APPROVED',
+                        location_type=None
                     )
                     db.session.add(daily)
                     created_count += 1
@@ -141,7 +192,7 @@ class UserScheduleService:
 
         req.request_status = status
         req.decided_by_supporter_id = supporter_id
-        req.decided_at = datetime.utcnow()
+        req.decided_at = datetime.now(tz=UTC)
         req.decision_reason = decision_reason
 
         if status == 'APPROVED':
@@ -158,7 +209,7 @@ class UserScheduleService:
 
             if req.request_type == 'ABSENCE':
                 daily.is_scheduled = False
-                daily.schedule_status = 'CANCELLED'
+                daily.approval_status = 'CANCELLED'
                 daily.start_time = None
                 daily.end_time = None
 

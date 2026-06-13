@@ -7,6 +7,7 @@ from flask_jwt_extended import jwt_required
 from backend.app import db
 from backend.app.models import UserDailyLog, SupportPlan, CaseConferenceLog
 from datetime import date, datetime
+from backend.app.utils.timezone import get_jst_today
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
@@ -24,7 +25,7 @@ def get_dashboard_summary():
     - action_items: pending_daily_logs + pending_approvals + monitoring_due_count の合計
     - today_case_conferences: 本日開催のケース会議数
     """
-    today = date.today()
+    today = get_jst_today()
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
 
@@ -84,7 +85,7 @@ def get_today_users():
     from backend.app.models.support.attendance_workflow import AttendanceRecord
     from sqlalchemy import func
     
-    today = date.today()
+    today = get_jst_today()
     
     # 本日のCHECK_IN実績を取得
     check_ins = AttendanceRecord.query.filter(

@@ -44,9 +44,6 @@ from backend.app.models.core.service_certificate import (
 from backend.app.models.core.audit_log import (
     SystemLog, AuditActionLog
 )
-from backend.app.models.core.user_documents import (
-    UserSkill, UserDocument
-)
 from backend.app.models.core.holistic_support_policy import (
     HolisticSupportPolicy
 )
@@ -119,9 +116,6 @@ from backend.app.models.comms.client_relations import (
 )
 from backend.app.models.comms.acquisition_activities import (
     AcquisitionActivityLog
-)
-from backend.app.models.comms.communication_channels import (
-    SupportThread, ChatMessage, UserRequest
 )
 from backend.app.models.comms.shared_note import (
     SharedNote, NoteVersion # ★ NEW: 共同編集ノート

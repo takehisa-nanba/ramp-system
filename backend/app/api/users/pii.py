@@ -80,13 +80,65 @@ def get_user_pii(user_id):
     for cert in certs:
         granted = []
         for g in cert.granted_services:
+            cd_info = None
+            if g.contract_detail:
+                cd_info = {
+                    "office_service_configuration_id": g.contract_detail.office_service_configuration_id,
+                    "contract_office_name": g.contract_detail.contract_office_name,
+                    "contract_corporation_name": g.contract_detail.contract_corporation_name,
+                    "contract_service_type": g.contract_detail.contract_service_type,
+                    "contract_date": g.contract_detail.contract_date.isoformat() if g.contract_detail.contract_date else None,
+                    "contract_end_date": g.contract_detail.contract_end_date.isoformat() if g.contract_detail.contract_end_date else None,
+                    "contract_end_used_days": g.contract_detail.contract_end_used_days
+                }
             granted.append({
                 "id": g.id,
                 "service_type_master_id": g.service_type_master_id,
                 "granted_start_date": g.granted_start_date.isoformat() if g.granted_start_date else None,
                 "granted_end_date": g.granted_end_date.isoformat() if g.granted_end_date else None,
-                "granted_amount_description": g.granted_amount_description
+                "granted_amount_description": g.granted_amount_description,
+                "max_service_days": g.max_service_days,
+                "max_service_days_type": g.max_service_days_type,
+                "granted_amount_start_date": g.granted_amount_start_date.isoformat() if g.granted_amount_start_date else None,
+                "granted_amount_end_date": g.granted_amount_end_date.isoformat() if g.granted_amount_end_date else None,
+                "contract_detail": cd_info
             })
+            
+        copayments = []
+        for cl in cert.copayment_limits:
+            copayments.append({
+                "id": cl.id,
+                "limit_start_date": cl.limit_start_date.isoformat() if cl.limit_start_date else None,
+                "limit_end_date": cl.limit_end_date.isoformat() if cl.limit_end_date else None,
+                "limit_amount": float(cl.limit_amount) if cl.limit_amount is not None else 0.0,
+                "is_management_required": cl.is_management_required
+            })
+
+        meal_addons = []
+        for ma in cert.meal_addon_statuses:
+            meal_addons.append({
+                "id": ma.id,
+                "meal_addon_start_date": ma.meal_addon_start_date.isoformat() if ma.meal_addon_start_date else None,
+                "meal_addon_end_date": ma.meal_addon_end_date.isoformat() if ma.meal_addon_end_date else None,
+                "is_applicable": ma.is_applicable
+            })
+
+        managements = []
+        for cm in cert.copayment_management:
+            managements.append({
+                "id": cm.id,
+                "management_start_date": cm.management_start_date.isoformat() if cm.management_start_date else None,
+                "management_end_date": cm.management_end_date.isoformat() if cm.management_end_date else None,
+                "is_applicable": cm.is_applicable,
+                "managing_office_number": cm.managing_office_number,
+                "managing_office_name": cm.managing_office_name
+            })
+
+        # Mask recipient_number if VIEW_PII is missing
+        masked_recipient = None
+        if cert.recipient_number:
+            masked_recipient = cert.recipient_number if can_view_pii else "**********"
+
         certificates_data.append({
             "id": cert.id,
             "certificate_issue_date": cert.certificate_issue_date.isoformat() if cert.certificate_issue_date else None,
@@ -94,7 +146,17 @@ def get_user_pii(user_id):
             "certificate_type": cert.certificate_type,
             "disability_support_classification": cert.disability_support_classification,
             "certificate_notes": cert.certificate_notes,
-            "granted_services": granted
+            "recipient_number": masked_recipient,
+            "granted_services": granted,
+            "copayment_limits": copayments,
+            "meal_addon_statuses": meal_addons,
+            "copayment_managements": managements,
+            "status": cert.status,
+            "created_by_supporter_id": cert.created_by_supporter_id,
+            "submitted_by_supporter_id": cert.submitted_by_supporter_id,
+            "reviewed_by_supporter_id": cert.reviewed_by_supporter_id,
+            "reviewed_at": cert.reviewed_at.isoformat() if cert.reviewed_at else None,
+            "review_reason": cert.review_reason
         })
 
     pii_response = {}

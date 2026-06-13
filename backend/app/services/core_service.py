@@ -31,7 +31,7 @@ def get_corporation_id_for_user(user: User) -> int:
         logger.debug(f"🔍 Resolving Corporation ID for User {user.id}...")
 
         # 1. 直近の受給者証を探す
-        latest_cert = ServiceCertificate.query.filter_by(user_id=user.id)\
+        latest_cert = ServiceCertificate.query.filter_by(user_id=user.id, status='ACTIVE')\
             .order_by(ServiceCertificate.certificate_issue_date.desc()).first()
             
         if not latest_cert:
@@ -102,18 +102,22 @@ def get_system_pii_key() -> bytes:
 # 2. 認証・権限サービス (Auth & RBAC)
 # ====================================================================
 
-def authenticate_supporter(email, password):
-    """職員のログイン認証"""
-    logger.info(f"🔐 Auth attempt for: {email}")
-    # Supporter -> SupporterPII を結合して検索
-    # (SupporterPIIをインポート済みなので直接フィルタ可能)
-    supporter = Supporter.query.join(Supporter.pii).filter(SupporterPII.email == email).first()
+def authenticate_supporter(email_or_code, password):
+    """職員のログイン認証（メールアドレスまたは職員コード）"""
+    logger.info(f"🔐 Auth attempt for: {email_or_code}")
+    
+    # 1. メールアドレスで検索
+    supporter = Supporter.query.join(Supporter.pii).filter(SupporterPII.email == email_or_code).first()
+    
+    # 2. 職員コードで検索
+    if not supporter:
+        supporter = Supporter.query.filter_by(staff_code=email_or_code).first()
     
     if supporter and supporter.pii and supporter.pii.check_password(password):
         logger.info(f"✅ Auth success: Supporter {supporter.id}")
         return supporter
     
-    logger.warning(f"⛔ Auth failed for: {email}")
+    logger.warning(f"⛔ Auth failed for: {email_or_code}")
     return None
 
 def authenticate_user(login_id, password):

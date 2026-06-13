@@ -1,5 +1,5 @@
 # backend/app/api/users/user_schedule_api.py
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from flask import request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app.extensions import db
@@ -8,6 +8,7 @@ from backend.app.models import (
 )
 from backend.app.services.user_schedule_service import UserScheduleService
 from backend.app.utils.errors import ValidationError
+from backend.app.utils.timezone import get_jst_today
 from . import users_bp
 
 @users_bp.route('/<int:user_id>/schedule-templates', methods=['GET'])
@@ -34,7 +35,8 @@ def get_schedule_templates(user_id):
             "day_of_week": day,
             "is_scheduled": t.is_scheduled if t else False,
             "start_time": t.start_time if t else None,
-            "end_time": t.end_time if t else None
+            "end_time": t.end_time if t else None,
+            "location_type": t.location_type if t else "ON_SITE"
         })
     return jsonify({"items": result}), 200
 
@@ -62,6 +64,7 @@ def save_schedule_templates(user_id):
             is_sch = item.get('is_scheduled', False)
             start = item.get('start_time')
             end = item.get('end_time')
+            location_type = item.get('location_type', 'ON_SITE')
             
             if is_sch and start and end:
                 sh, sm = map(int, start.split(':'))
@@ -74,7 +77,8 @@ def save_schedule_templates(user_id):
                 day_of_week=day,
                 is_scheduled=is_sch,
                 start_time=start if is_sch else None,
-                end_time=end if is_sch else None
+                end_time=end if is_sch else None,
+                location_type=location_type if is_sch else None
             )
             db.session.add(template)
             
@@ -82,7 +86,7 @@ def save_schedule_templates(user_id):
         
         # テンプレート更新後、今月と来月の予定を自動生成/同期する
         service = UserScheduleService()
-        today = date.today()
+        today = get_jst_today()
         service.generate_daily_schedules_for_month(user_id, today)
         if today.month == 12:
             next_month = date(today.year + 1, 1, 1)
@@ -298,6 +302,9 @@ def get_daily_schedules(user_id):
             "end_time": s.end_time,
             "is_scheduled": s.is_scheduled,
             "schedule_status": s.schedule_status,
+            "status": s.approval_status,
+            "approval_status": s.approval_status,
+            "location_type": s.location_type,
             "schedule_request_id": s.schedule_request_id
         })
     return jsonify({"items": result}), 200
@@ -362,3 +369,195 @@ def decide_schedule_request(request_id):
                 "message": str(e)
             }
         }), 500
+
+@users_bp.route('/<int:user_id>/schedule-templates/apply', methods=['POST'])
+@jwt_required()
+def apply_schedule_template(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "NOT_FOUND",
+                "message": "利用者が見つかりません。"
+            }
+        }), 404
+        
+    data = request.get_json() or {}
+    year = data.get('year')
+    month = data.get('month')
+    
+    if not year or not month:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "年と月は必須です。"
+            }
+        }), 400
+        
+    try:
+        target_month_date = date(int(year), int(month), 1)
+        service = UserScheduleService()
+        created_count = service.generate_daily_schedules_for_month(user_id, target_month_date, force_overwrite=True)
+        return jsonify({
+            "success": True,
+            "message": f"{year}年{month}月の基本曜日予定を一括適用しました（更新件数: {created_count}件）。"
+        }), 200
+    except ValidationError as e:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": str(e)
+            }
+        }), 400
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "SERVER_ERROR",
+                "message": str(e)
+            }
+        }), 500
+
+@users_bp.route('/<int:user_id>/monthly-usage-summary', methods=['GET'])
+@jwt_required()
+def get_monthly_usage_summary(user_id):
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "NOT_FOUND",
+                "message": "利用者が見つかりません。"
+            }
+        }), 404
+        
+    year_str = request.args.get('year')
+    month_str = request.args.get('month')
+    
+    if not year_str or not month_str:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "year と month は必須です。"
+            }
+        }), 400
+        
+    try:
+        year = int(year_str)
+        month = int(month_str)
+    except ValueError:
+        return jsonify({
+            "success": False,
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "日付パラメータが不正です。"
+            }
+        }), 400
+        
+    start_date = date(year, month, 1)
+    if month == 12:
+        end_date = date(year + 1, 1, 1) - timedelta(days=1)
+    else:
+        end_date = date(year, month + 1, 1) - timedelta(days=1)
+
+    from backend.app.models.core.service_certificate import GrantedService, ServiceCertificate
+    
+    granted_services = GrantedService.query.join(
+        ServiceCertificate, GrantedService.certificate_id == ServiceCertificate.id
+    ).filter(
+        ServiceCertificate.user_id == user_id,
+        ServiceCertificate.status == 'ACTIVE',
+        GrantedService.granted_start_date <= end_date,
+        GrantedService.granted_end_date >= start_date
+    ).all()
+    
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    from backend.app.models import UserDailyLog
+    from sqlalchemy import func
+    
+    attendances = AttendanceRecord.query.filter_by(
+        user_id=user_id,
+        record_type='CHECK_IN'
+    ).filter(
+        func.date(AttendanceRecord.timestamp) >= start_date,
+        func.date(AttendanceRecord.timestamp) <= end_date
+    ).all()
+    
+    attendance_dates = {att.timestamp.date() for att in attendances}
+    
+    daily_logs = UserDailyLog.query.filter_by(user_id=user_id).filter(
+        UserDailyLog.log_date >= start_date,
+        UserDailyLog.log_date <= end_date,
+        UserDailyLog.auto_created == False
+    ).filter(
+        (UserDailyLog.morning_completed == True) | (UserDailyLog.evening_completed == True)
+    ).all()
+    
+    log_dates = {log.log_date for log in daily_logs}
+    
+    actual_dates = attendance_dates.union(log_dates)
+    
+    daily_schedules = UserDailySchedule.query.filter_by(
+        user_id=user_id
+    ).filter(
+        UserDailySchedule.date >= start_date,
+        UserDailySchedule.date <= end_date
+    ).all()
+    
+    scheduled_dates = {
+        s.date for s in daily_schedules 
+        if s.is_scheduled and s.approval_status == 'APPROVED'
+    }
+    
+    total_usage_dates = actual_dates.union(scheduled_dates)
+    
+    summaries = []
+    
+    if not granted_services:
+        summaries.append({
+            "granted_service_id": None,
+            "service_name": "未設定のサービス",
+            "service_code": "UNKNOWN",
+            "max_service_days": 23,
+            "scheduled_days_count": len(scheduled_dates),
+            "actual_days_count": len(actual_dates),
+            "total_days_count": len(total_usage_dates),
+            "is_exceeded": len(total_usage_dates) > 23,
+            "exceeded_days": max(0, len(total_usage_dates) - 23)
+        })
+    else:
+        for gs in granted_services:
+            if gs.max_service_days_type == 'DYNAMIC_MONTH_MINUS_8':
+                max_days = end_date.day - 8
+            else:
+                max_days = gs.max_service_days if gs.max_service_days is not None else 23
+            
+            gs_start = max(start_date, gs.granted_start_date)
+            gs_end = min(end_date, gs.granted_end_date)
+            
+            gs_scheduled = {d for d in scheduled_dates if gs_start <= d <= gs_end}
+            gs_actual = {d for d in actual_dates if gs_start <= d <= gs_end}
+            gs_total = {d for d in total_usage_dates if gs_start <= d <= gs_end}
+            
+            summaries.append({
+                "granted_service_id": gs.id,
+                "service_name": gs.service_type.name if gs.service_type else "不明なサービス",
+                "service_code": gs.service_type.service_code if gs.service_type else "UNKNOWN",
+                "max_service_days": max_days,
+                "scheduled_days_count": len(gs_scheduled),
+                "actual_days_count": len(gs_actual),
+                "total_days_count": len(gs_total),
+                "is_exceeded": len(gs_total) > max_days,
+                "exceeded_days": max(0, len(gs_total) - max_days)
+            })
+            
+    return jsonify({
+        "year": year,
+        "month": month,
+        "items": summaries
+    }), 200
+

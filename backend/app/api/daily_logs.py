@@ -1,15 +1,9 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
-from backend.app.models import StaffActivityMaster, UserDailyLog, SupportRecord, StaffActivityAllocationLog, User
 from datetime import datetime, date, timedelta, timezone
-try:
-    from zoneinfo import ZoneInfo
-except ImportError:
-    # Python < 3.9 fallback (though the user has 3.12)
-    from backports.zoneinfo import ZoneInfo
-
-JST = ZoneInfo("Asia/Tokyo")
+from backend.app.models import StaffActivityMaster, UserDailyLog, SupportRecord, StaffActivityAllocationLog, User
+from backend.app.utils.timezone import JST
 
 daily_logs_bp = Blueprint('daily_logs', __name__, url_prefix='/api/daily-logs')
 

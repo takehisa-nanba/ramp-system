@@ -37,6 +37,8 @@ class ContractReportDetail(db.Model):
     
     # 契約日
     contract_date = Column(Date)
+    contract_end_date = Column(Date, nullable=True) # 契約終了日
+    contract_end_used_days = Column(Integer, nullable=True) # 契約終了月の既サービス提供量
     
     # --- 証憑（原理1） ---
     # 利用者と締結した契約書・重要事項説明書のURL

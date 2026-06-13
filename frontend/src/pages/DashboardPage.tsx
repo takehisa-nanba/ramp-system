@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Users, FileText, AlertCircle, Search, CheckSquare, MessageSquare } from 'lucide-react';
 import apiClient from '../services/apiClient';
+import { Heading, Text } from '../components/common/Typography';
 
 interface DashboardSummary {
   today_users: number;
@@ -82,10 +83,10 @@ const DashboardPage: React.FC = () => {
   ] : [];
 
   return (
-    <div className="p-6 md:p-8 animate-in fade-in duration-500">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight">ホーム</h1>
-        <p className="text-slate-500 mt-2 font-medium">今日の状況と、確認が必要な項目です。</p>
+    <div className="px-4 pb-8 md:px-8 md:pb-12 animate-in fade-in duration-500">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md pt-6 pb-4 md:pt-8 md:pb-4 mb-6 border-b border-slate-200">
+        <Heading variant="h1">ホーム</Heading>
+        <Text variant="small" className="mt-2">今日の状況と、確認が必要な項目です。</Text>
       </div>
 
       {loading ? (
@@ -113,8 +114,8 @@ const DashboardPage: React.FC = () => {
                 </span>
               </div>
               <div>
-                <h2 className="text-lg font-bold text-slate-800">{item.title}</h2>
-                <p className="text-sm font-bold text-slate-500 mt-1">{item.detail}</p>
+                <Heading variant="h3">{item.title}</Heading>
+                <Text variant="small" className="mt-1 font-bold">{item.detail}</Text>
               </div>
             </div>
           ))}

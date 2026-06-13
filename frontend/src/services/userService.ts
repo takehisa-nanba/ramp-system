@@ -54,13 +54,60 @@ export interface UserPiiResponse {
     certificate_type: string | null;
     disability_support_classification: string | null;
     certificate_notes: string | null;
+    recipient_number: string | null;
     granted_services: {
       id: number;
       service_type_master_id: number;
       granted_start_date: string | null;
       granted_end_date: string | null;
       granted_amount_description: string | null;
+      max_service_days: number | null;
+      max_service_days_type: string;
+      granted_amount_start_date: string | null;
+      granted_amount_end_date: string | null;
+      contract_detail: {
+        office_service_configuration_id: number;
+        contract_office_name: string | null;
+        contract_corporation_name: string | null;
+        contract_service_type: string | null;
+        contract_date: string | null;
+        contract_end_date: string | null;
+        contract_end_used_days: number | null;
+        contract_granted_days: number | null;
+        contract_document_url?: string | null;
+        important_matters_url?: string | null;
+      } | null;
     }[];
+    copayment_limits: {
+      id: number;
+      limit_start_date: string | null;
+      limit_end_date: string | null;
+      limit_amount: number;
+      is_management_required: boolean;
+    }[];
+    meal_addon_statuses: {
+      id: number;
+      meal_addon_start_date: string | null;
+      meal_addon_end_date: string | null;
+      is_applicable: boolean;
+    }[];
+    copayment_managements: {
+      id: number;
+      management_start_date: string | null;
+      management_end_date: string | null;
+      is_applicable: boolean;
+      managing_office_number: string | null;
+      managing_office_name: string | null;
+    }[];
+    status?: string;
+    created_by_supporter_id?: number | null;
+    submitted_by_supporter_id?: number | null;
+    reviewed_by_supporter_id?: number | null;
+    reviewed_at?: string | null;
+    review_reason?: string | null;
+    voided_by_supporter_id?: number | null;
+    voided_at?: string | null;
+    void_reason?: string | null;
   }[];
 }
 
@@ -202,13 +249,56 @@ export interface ServiceCertificateData {
   municipality_master_id: number;
   certificate_type: string;
   disability_support_classification: string;
+  recipient_number?: string | null;
   certificate_notes?: string;
+  office_service_configuration_id?: number | null;
+  update_reason?: string;
   granted_services: {
     service_type_master_id: number;
     granted_start_date: string;
     granted_end_date: string;
     granted_amount_description: string;
+    max_service_days: number | null;
+    max_service_days_type: string;
+    granted_amount_start_date: string | null;
+    granted_amount_end_date: string | null;
+    contract_detail: {
+      office_service_configuration_id: number;
+      contract_date: string | null;
+      contract_end_date: string | null;
+      contract_end_used_days: number | null;
+      contract_granted_days: number | null;
+      contract_document_url?: string | null;
+      important_matters_url?: string | null;
+    } | null;
   }[];
+  copayment_limits?: {
+    limit_start_date: string;
+    limit_end_date: string;
+    limit_amount: number;
+    is_management_required: boolean;
+  }[];
+  meal_addon_statuses?: {
+    meal_addon_start_date: string;
+    meal_addon_end_date: string;
+    is_applicable: boolean;
+  }[];
+  copayment_managements?: {
+    management_start_date: string;
+    management_end_date: string;
+    is_applicable: boolean;
+    managing_office_number: string | null;
+    managing_office_name: string | null;
+  }[];
+  status?: string;
+  created_by_supporter_id?: number | null;
+  submitted_by_supporter_id?: number | null;
+  reviewed_by_supporter_id?: number | null;
+  reviewed_at?: string | null;
+  review_reason?: string | null;
+  voided_by_supporter_id?: number | null;
+  voided_at?: string | null;
+  void_reason?: string | null;
 }
 
 export const addServiceCertificate = async (userId: number, data: ServiceCertificateData): Promise<{ msg: string, id: number }> => {
@@ -218,6 +308,21 @@ export const addServiceCertificate = async (userId: number, data: ServiceCertifi
 
 export const updateServiceCertificate = async (userId: number, certId: number, data: ServiceCertificateData): Promise<{ msg: string, id: number }> => {
   const response = await apiClient.put<{ msg: string, id: number }>(`/users/${userId}/certificates/${certId}`, data);
+  return response.data;
+};
+
+export const submitServiceCertificate = async (userId: number, certId: number): Promise<{ msg: string, status: string }> => {
+  const response = await apiClient.post<{ msg: string, status: string }>(`/users/${userId}/certificates/${certId}/submit`);
+  return response.data;
+};
+
+export const reviewServiceCertificate = async (userId: number, certId: number, action: 'approve' | 'reject', reviewReason?: string): Promise<{ msg: string, status: string }> => {
+  const response = await apiClient.post<{ msg: string, status: string }>(`/users/${userId}/certificates/${certId}/review`, { action, review_reason: reviewReason });
+  return response.data;
+};
+
+export const voidServiceCertificate = async (userId: number, certId: number, voidReason: string): Promise<{ msg: string, status: string }> => {
+  const response = await apiClient.post<{ msg: string, status: string }>(`/users/${userId}/certificates/${certId}/void`, { void_reason: voidReason });
   return response.data;
 };
 
@@ -643,6 +748,13 @@ export interface UserAttendanceItem {
   check_out_at: string | null;
   status: 'IDLE' | 'CHECKED_IN' | 'CHECKED_OUT';
   daily_log_status: 'missing' | 'draft' | 'completed';
+  scheduled_location_type?: string | null;
+  actual_location_type?: string | null;
+  scheduled_start_time?: string | null;
+  scheduled_end_time?: string | null;
+  is_scheduled?: boolean;
+  schedule_status?: string | null;
+  approval_status?: string | null;
 }
 
 export interface UserAttendanceResponse {
@@ -703,6 +815,8 @@ export interface UserDailyScheduleItem {
   end_time: string | null;
   is_scheduled: boolean;
   schedule_status: 'NORMAL' | 'CANCELLED' | 'SUBSTITUTED' | 'EXTRA';
+  approval_status?: 'APPROVED' | 'CANCELLED' | 'REQUESTED' | 'REJECTED';
+  location_type?: string | null;
   schedule_request_id: number | null;
 }
 
@@ -747,6 +861,26 @@ export const decideUserScheduleRequest = async (
   requestId: number,
   data: { status: 'APPROVED' | 'REJECTED'; decision_reason: string }
 ): Promise<{ success: boolean, item: { id: number, request_status: string, decision_reason: string } }> => {
-  const response = await apiClient.post<{ success: boolean, item: { id: number, request_status: string, decision_reason: string } }>(`/schedule-requests/${requestId}/decide`, data);
+  const response = await apiClient.post<{ success: boolean, item: { id: number, request_status: string, decision_reason: string } }>(`/users/schedule-requests/${requestId}/decide`, data);
   return response.data;
-};
+};
+
+// --- 日別予定・実績一覧 ---
+export interface DailyScheduleActualItem {
+  user_id: number;
+  user_name: string;
+  is_scheduled: boolean;
+  scheduled_start_time: string | null;
+  scheduled_end_time: string | null;
+  schedule_status: string | null;
+  check_in_at: string | null;
+  check_out_at: string | null;
+  effective_status: string;
+  daily_log_status: 'missing' | 'draft' | 'completed';
+}
+
+export const fetchDailyScheduleActuals = async (date?: string): Promise<{ items: DailyScheduleActualItem[] }> => {
+  const params = date ? { date } : {};
+  const response = await apiClient.get<{ items: DailyScheduleActualItem[] }>('/schedules/daily-actuals', { params });
+  return response.data;
+};

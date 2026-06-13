@@ -108,7 +108,7 @@ def test_decide_schedule_request_absence(app, setup_active_user):
     # 確定予定がCANCELLEDに更新されていること
     daily_updated = UserDailySchedule.query.filter_by(user_id=user.id, date=target_date).first()
     assert daily_updated.is_scheduled is False
-    assert daily_updated.schedule_status == 'CANCELLED'
+    assert daily_updated.approval_status == 'CANCELLED'
     assert daily_updated.start_time is None
     
     # 欠席対応記録が自動生成されていること
@@ -275,3 +275,236 @@ def test_api_endpoints_schedule(app, setup_active_user, client):
     assert res.status_code == 200
     assert res.json.get('success') is True
     assert res.json.get('item', {}).get('request_status') == 'APPROVED'
+
+def test_apply_schedule_template_and_usage_summary(app, setup_active_user, client):
+    """基本曜日予定の一括適用、および支給量チェックAPIのテスト"""
+    user, staff, manager = setup_active_user
+    
+    # テストデータをクリア
+    UserScheduleTemplate.query.filter_by(user_id=user.id).delete()
+    UserDailySchedule.query.filter_by(user_id=user.id).delete()
+    from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService
+    g_services = GrantedService.query.join(ServiceCertificate).filter(ServiceCertificate.user_id == user.id).all()
+    for gs in g_services:
+        db.session.delete(gs)
+    db.session.commit()
+    ServiceCertificate.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    
+    # JWT トークン生成
+    token = create_access_token(identity=f"staff:{staff.id}", additional_claims={
+        "role_name": "STAFF",
+        "full_name": f"{staff.last_name} {staff.first_name}",
+        "role_scopes": []
+    })
+    headers = {'Authorization': f'Bearer {token}'}
+    
+    # 1. テンプレートの保存 (月・水・金を通所とする)
+    template_data = [
+        {"day_of_week": "Monday", "is_scheduled": True, "start_time": "10:00", "end_time": "16:00", "location_type": "ON_SITE"},
+        {"day_of_week": "Wednesday", "is_scheduled": True, "start_time": "10:00", "end_time": "16:00", "location_type": "AT_HOME"},
+        {"day_of_week": "Friday", "is_scheduled": True, "start_time": "10:00", "end_time": "16:00", "location_type": "OFF_SITE_SUPPORT"},
+    ]
+    client.post(f'/api/users/{user.id}/schedule-templates', json=template_data, headers=headers)
+    
+    # 2. 受給者証・支給量のシード (上限を5日に設定)
+    from backend.app.models import OfficeServiceConfiguration, ServiceTypeMaster, OfficeSetting
+    service_type = ServiceTypeMaster.query.filter_by(service_code='TRANSITION').first()
+    if not service_type:
+        service_type = ServiceTypeMaster(
+            name="就労移行支援",
+            service_code="TRANSITION",
+            required_review_months=6
+        )
+        db.session.add(service_type)
+        db.session.flush()
+        
+    office_config = OfficeServiceConfiguration.query.first()
+    if not office_config:
+        office = OfficeSetting.query.first()
+        office_config = OfficeServiceConfiguration(
+            office_id=office.id,
+            service_type_master_id=service_type.id,
+            jigyosho_bango='1310100001',
+            capacity=20,
+            initial_designation_date=date(2023, 4, 1)
+        )
+        db.session.add(office_config)
+        db.session.flush()
+    cert = ServiceCertificate(
+        user_id=user.id,
+        office_service_configuration_id=office_config.id,
+        certificate_issue_date=date(2026, 6, 1),
+        municipality_master_id=1, # デフォルト
+        certificate_type="受給者証",
+        status='ACTIVE'
+    )
+    db.session.add(cert)
+    db.session.flush()
+    
+    gs = GrantedService(
+        certificate_id=cert.id,
+        granted_start_date=date(2026, 6, 1),
+        granted_end_date=date(2026, 6, 30),
+        max_service_days=5,
+        service_type_master_id=office_config.service_type_master_id
+    )
+    db.session.add(gs)
+    db.session.commit()
+    
+    # 3. 2026年6月の予定を一括適用する (POST)
+    apply_payload = {"year": 2026, "month": 6}
+    res = client.post(f'/api/users/{user.id}/schedule-templates/apply', json=apply_payload, headers=headers)
+    assert res.status_code == 200
+    assert res.json.get('success') is True
+    
+    schedules = UserDailySchedule.query.filter_by(user_id=user.id).filter(
+        UserDailySchedule.date >= date(2026, 6, 1),
+        UserDailySchedule.date <= date(2026, 6, 30)
+    ).all()
+    assert len(schedules) == 30 # 6月は30日
+    # 月曜日は予定あり、水曜日は在宅予定
+    mon_sched = next(s for s in schedules if s.date == date(2026, 6, 1)) # 2026/06/01 は月曜日
+    assert mon_sched.is_scheduled is True
+    assert mon_sched.location_type == 'ON_SITE'
+    assert mon_sched.approval_status == 'APPROVED'
+    
+    wed_sched = next(s for s in schedules if s.date == date(2026, 6, 3)) # 2026/06/03 は水曜日
+    assert wed_sched.is_scheduled is True
+    assert wed_sched.location_type == 'AT_HOME'
+    
+    # 4. 支給量チェックの確認 (GET /api/users/<user_id>/monthly-usage-summary)
+    # 2026年6月の予定日数は 13日間 (月・水・金が30日中13日ある)
+    # 支給量が5日なので、超過しているはず
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    assert res.status_code == 200
+    summary = res.json.get('items', [])[0]
+    assert summary['max_service_days'] == 5
+    assert summary['scheduled_days_count'] == 13
+    assert summary['total_days_count'] == 13 # 打刻がないので予定日数と同じ
+    assert summary['is_exceeded'] is True
+    assert summary['exceeded_days'] == 8
+    
+    # 5. 実績優先カウントの確認
+    # 予定がない日 (2026/06/02 火曜日) に打刻 (CHECK_IN) を追加する
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    db.session.add(AttendanceRecord(
+        user_id=user.id,
+        record_type='CHECK_IN',
+        timestamp=datetime(2026, 6, 2, 10, 0)
+    ))
+    db.session.commit()
+    
+    # 火曜日は予定なしだが、打刻があるため合計利用日数（実績優先）が14日になるはず
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    summary = res.json.get('items', [])[0]
+    assert summary['total_days_count'] == 14
+    assert summary['actual_days_count'] == 1
+    
+    # 6. auto_created の UserDailyLog がカウントから除外されることの確認
+    from backend.app.models import UserDailyLog
+    # 自動生成されただけの日報を登録 (実績としては除外されるはず)
+    db.session.add(UserDailyLog(
+        user_id=user.id,
+        log_date=date(2026, 6, 4), # 木曜日 (予定なし)
+        location_type='ON_SITE',
+        auto_created=True,
+        morning_completed=False,
+        evening_completed=False,
+        support_content_notes='自動作成日報'
+    ))
+    db.session.commit()
+    
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    summary = res.json.get('items', [])[0]
+    assert summary['total_days_count'] == 14 # 変化なし（14日のまま）
+    
+    # 手動保存された日報 (auto_created=False, completed) の場合は実績としてカウントされる
+    db.session.add(UserDailyLog(
+        user_id=user.id,
+        log_date=date(2026, 6, 4), # 木曜日
+        location_type='ON_SITE',
+        auto_created=False,
+        morning_completed=True,
+        evening_completed=True,
+        support_content_notes='手動日報'
+    ))
+    db.session.commit()
+    
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    summary = res.json.get('items', [])[0]
+    assert summary['total_days_count'] == 15 # 15日に増加する
+
+    # 7. 契約期間が月中の場合（契約サービス単位での集計範囲制限の検証）
+    gs.granted_end_date = date(2026, 6, 15)
+    db.session.commit()
+
+    res2 = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    summary2 = res2.json.get('items', [])[0]
+    # 6/1〜6/15の範囲での集計結果:
+    # 予定: 月(6/1, 6/8, 6/15), 水(6/3, 6/10), 金(6/5, 6/12) -> 7日
+    # 実績: 6/2(打刻), 6/4(日報) -> 2日
+    # 合計: 9日
+    assert summary2['scheduled_days_count'] == 7
+    assert summary2['actual_days_count'] == 2
+    assert summary2['total_days_count'] == 9
+
+def test_dynamic_month_minus_8_usage_limit(app, setup_active_user, client):
+    """
+    DYNAMIC_MONTH_MINUS_8 タイプの支給上限日の動的計算を検証する。
+    """
+    from flask_jwt_extended import create_access_token
+    from backend.app.models.core.service_certificate import ServiceCertificate, GrantedService
+    from datetime import date
+    
+    user, staff, manager = setup_active_user
+    token = create_access_token(identity=f"staff:{staff.id}", additional_claims={
+        "roles": ['admin']
+    })
+    headers = {"Authorization": f"Bearer {token}"}
+    
+    # 既存の受給者証と支給サービスをクリーンアップ
+    ServiceCertificate.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    
+    # 動的計算方式の受給者証を追加
+    cert = ServiceCertificate(
+        user_id=user.id,
+        office_service_configuration_id=1,
+        certificate_issue_date=date(2026, 6, 1),
+        municipality_master_id=1,
+        certificate_type="就労移行",
+        status='ACTIVE'
+    )
+    db.session.add(cert)
+    db.session.flush()
+    
+    gs = GrantedService(
+        certificate_id=cert.id,
+        service_type_master_id=1,
+        granted_start_date=date(2026, 6, 1),
+        granted_end_date=date(2026, 6, 30),
+        max_service_days_type='DYNAMIC_MONTH_MINUS_8',
+        max_service_days=23
+    )
+    db.session.add(gs)
+    db.session.commit()
+    
+    # 2026年6月の予定実績サマリーを取得
+    # 6月は30日あるので、上限は 30 - 8 = 22日になるはず。
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=6', headers=headers)
+    assert res.status_code == 200
+    summary = res.json.get('items', [])[0]
+    assert summary['max_service_days'] == 22
+
+    # 2026年2月の予定実績サマリーを取得 (閏年ではないので 28日)
+    # 28 - 8 = 20日
+    gs.granted_start_date = date(2026, 2, 1)
+    gs.granted_end_date = date(2026, 2, 28)
+    db.session.commit()
+    
+    res = client.get(f'/api/users/{user.id}/monthly-usage-summary?year=2026&month=2', headers=headers)
+    assert res.status_code == 200
+    summary = res.json.get('items', [])[0]
+    assert summary['max_service_days'] == 20
+

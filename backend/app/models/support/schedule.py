@@ -87,6 +87,9 @@ class UserScheduleTemplate(db.Model):
     start_time = Column(String(5), nullable=True) # 例: '10:00'
     end_time = Column(String(5), nullable=True)   # 例: '16:00'
     
+    # 支援区分 (ON_SITE, OFF_SITE_SUPPORT, TRANSITION_PREP, OFF_SITE_WORK, AT_HOME)
+    location_type = Column(String(50), nullable=True, default='ON_SITE')
+    
     user = db.relationship('User', back_populates='schedule_templates', foreign_keys=[user_id])
     
     # 複合ユニーク制約（1人の利用者に対して曜日ごとに1件）
@@ -143,7 +146,13 @@ class UserDailySchedule(db.Model):
     end_time = Column(String(5), nullable=True)
     
     is_scheduled = Column(Boolean, default=True, nullable=False) # 確定予定が有効か
-    schedule_status = Column(String(30), default='NORMAL', nullable=False) # 'NORMAL', 'CANCELLED', 'SUBSTITUTED', 'EXTRA'
+    schedule_status = Column(String(30), default='NORMAL', nullable=False) # 予定の種別: 'NORMAL', 'EXTRA', 'SUBSTITUTED'
+    
+    # 承認状態: 'APPROVED' (承認済/確定/有効), 'CANCELLED' (キャンセル/欠席), 'REQUESTED' (申請中), 'REJECTED' (却下)
+    approval_status = Column(String(30), default='APPROVED', nullable=False)
+    
+    # 支援区分 (ON_SITE, OFF_SITE_SUPPORT, TRANSITION_PREP, OFF_SITE_WORK, AT_HOME)
+    location_type = Column(String(50), nullable=True, default='ON_SITE')
     
     schedule_request_id = Column(Integer, ForeignKey('user_schedule_requests.id'), nullable=True)
     

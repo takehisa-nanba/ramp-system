@@ -12,6 +12,14 @@ import {
   type ActivityTag 
 } from '../../services/userService';
 
+const LOCATION_TYPE_JA: Record<string, string> = {
+  ON_SITE: '施設内支援',
+  OFF_SITE_SUPPORT: '施設外支援',
+  TRANSITION_PREP: '移行準備',
+  OFF_SITE_WORK: '施設外就労',
+  AT_HOME: '在宅支援',
+};
+
 const statusBadge = (status: string) => {
   switch (status) {
     case 'COMPLETED':
@@ -368,6 +376,33 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
                       <Clock className="w-4 h-4 text-slate-400" />
                       <span>退所:</span>
                       <span className="font-bold text-slate-700">{formatTime(item.check_out_at)}</span>
+                    </div>
+                  </div>
+                  {/* 予定と実績の支援区分の比較 */}
+                  <div className="mt-3 flex flex-wrap gap-4 text-xs font-semibold text-slate-500 border-t border-slate-100 pt-3">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">予定支援区分:</span>
+                      <span className={`px-2 py-0.5 rounded-md font-bold ${
+                        item.is_scheduled 
+                          ? 'bg-slate-100 text-slate-700' 
+                          : 'bg-slate-50 text-slate-400'
+                      }`}>
+                        {item.is_scheduled 
+                          ? (LOCATION_TYPE_JA[item.scheduled_location_type || ''] || item.scheduled_location_type || '施設内支援') 
+                          : '予定なし'}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-slate-400 font-medium">実績支援区分:</span>
+                      <span className={`px-2 py-0.5 rounded-md font-bold ${
+                        item.actual_location_type 
+                          ? 'bg-indigo-50 text-indigo-700' 
+                          : 'bg-rose-50 text-rose-600'
+                      }`}>
+                        {item.actual_location_type 
+                          ? (LOCATION_TYPE_JA[item.actual_location_type] || item.actual_location_type) 
+                          : '実績未確定（日報未完了）'}
+                      </span>
                     </div>
                   </div>
                 </div>

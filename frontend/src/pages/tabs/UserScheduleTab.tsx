@@ -1,6 +1,6 @@
 // frontend/src/pages/tabs/UserScheduleTab.tsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, forwardRef, useImperativeHandle } from 'react';
 import {
   fetchUserScheduleTemplates,
   saveUserScheduleTemplates,
@@ -15,7 +15,9 @@ import type {
   UserScheduleRequestItem,
   UserDailyScheduleItem,
 } from '../../services/userService';
-import { Button, Input, Select, Table, message, Modal, Form, Radio } from 'antd';
+import { Button, Input, Select, Table, message, Modal, Form, Radio, DatePicker, Space } from 'antd';
+import type { FormInstance } from 'antd';
+import dayjs, { Dayjs } from 'dayjs';
 
 
 /**
@@ -34,6 +36,44 @@ import { Button, Input, Select, Table, message, Modal, Form, Radio } from 'antd'
 const { Option } = Select;
 const { TextArea } = Input;
 
+const DAY_OF_WEEK_JA: Record<string, string> = {
+  Monday: '月曜日',
+  Tuesday: '火曜日',
+  Wednesday: '水曜日',
+  Thursday: '木曜日',
+  Friday: '金曜日',
+  Saturday: '土曜日',
+  Sunday: '日曜日',
+};
+
+const LOCATION_TYPE_JA: Record<string, string> = {
+  ON_SITE: '施設内支援',
+  OFF_SITE_SUPPORT: '施設外支援',
+  TRANSITION_PREP: '移行準備',
+  OFF_SITE_WORK: '施設外就労',
+  AT_HOME: '在宅支援',
+};
+
+const REQUEST_TYPE_JA: Record<string, string> = {
+  ABSENCE: '欠席',
+  EXTRA_DAY: '臨時追加',
+  SHIFT_TIME: '時間変更',
+};
+
+const SCHEDULE_STATUS_JA: Record<string, string> = {
+  NORMAL: '通常',
+  EXTRA: '臨時追加',
+  SUBSTITUTED: '時間変更',
+};
+
+const APPROVAL_STATUS_JA: Record<string, string> = {
+  APPROVED: '承認済',
+  CANCELLED: 'キャンセル',
+  REQUESTED: '申請中',
+  REJECTED: '却下',
+  PENDING: '保留中',
+};
+
 
 
 interface Props {
@@ -45,6 +85,7 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
   const [templates, setTemplates] = useState<UserScheduleTemplateItem[]>([]);
   const [requests, setRequests] = useState<UserScheduleRequestItem[]>([]);
   const [dailySchedules, setDailySchedules] = useState<UserDailyScheduleItem[]>([]);
+  const [currentMonth, setCurrentMonth] = useState<Dayjs>(dayjs().startOf('month'));
   
   const [loading, setLoading] = useState(false);
 
@@ -57,10 +98,13 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
   const loadAll = async () => {
     setLoading(true);
     try {
+      const start_date = currentMonth.format('YYYY-MM-DD');
+      const end_date = currentMonth.endOf('month').format('YYYY-MM-DD');
+
       const [tmplRes, reqRes, dailyRes, officeRes] = await Promise.all([
         fetchUserScheduleTemplates(userId),
         fetchUserScheduleRequests(userId),
-        fetchUserDailySchedules(userId),
+        fetchUserDailySchedules(userId, { start_date, end_date }),
         managementApi.getOfficeSettings(),
       ]);
       
@@ -81,6 +125,11 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
     setLoading(false);
   };
 
+  useEffect(() => {
+    loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentMonth]);
+
   // --- Template Handlers ---
   const handleTemplateChange = (index: number, field: keyof UserScheduleTemplateItem, value: any) => {
     const newTemplates = [...templates];
@@ -96,7 +145,7 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
         const [sh, sm] = t.start_time.split(':').map(Number);
         const [eh, em] = t.end_time.split(':').map(Number);
         if (eh * 60 + em <= sh * 60 + sm) {
-          message.error(`${t.day_of_week} の終了時間は開始時間より後にしてください`);
+          message.error(`${DAY_OF_WEEK_JA[t.day_of_week] || t.day_of_week} の終了時間は開始時間より後にしてください`);
           return;
         }
       }
@@ -112,20 +161,34 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
 
   // --- Request Handlers ---
   const openCreateRequestModal = () => {
+    let formRef: { submit: () => Promise<void> } | null = null;
+
     Modal.confirm({
       title: '予定変更・欠席・追加の申請',
       icon: null,
       okText: '作成',
       cancelText: 'キャンセル',
-      content: <CreateRequestForm onCreated={loadAll} />, // defined below
+      content: <CreateRequestForm userId={userId} onCreated={loadAll} ref={(ref) => { formRef = ref; }} />,
+      onOk: async () => {
+        if (formRef) {
+          try {
+            await formRef.submit();
+          } catch {
+            // バリデーションエラー時は閉じない
+            return Promise.reject();
+          }
+        }
+      },
     });
   };
 
   const handleDecision = async (requestId: number, status: 'APPROVED' | 'REJECTED') => {
+    const decisionFormRef = React.createRef<FormInstance>();
+
     Modal.confirm({
       title: `${status === 'APPROVED' ? '承認' : '却下'}の確認`,
       content: (
-        <Form layout='vertical'>
+        <Form ref={decisionFormRef} layout='vertical'>
           <Form.Item
             label='判断理由 (10文字以上)'
             name='decision_reason'
@@ -136,12 +199,17 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
         </Form>
       ),
       onOk: async () => {
-        const decision_reason = (document.querySelector('textarea') as HTMLTextAreaElement).value;
+        if (!decisionFormRef.current) return;
         try {
-          await decideUserScheduleRequest(requestId, { status, decision_reason });
+          const values = await decisionFormRef.current.validateFields();
+          await decideUserScheduleRequest(requestId, { status, decision_reason: values.decision_reason });
           message.success('処理が完了しました');
           loadAll();
-        } catch (e) {
+        } catch (e: any) {
+          if (e?.errorFields) {
+            // バリデーションエラー時はモーダルを閉じない
+            return Promise.reject();
+          }
           console.error(e);
           message.error('処理に失敗しました');
         }
@@ -151,114 +219,157 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
 
   // --- Render ---
   return (
-    <div style={{ padding: '24px', background: 'linear-gradient(135deg, #f0f4ff, #e6f7ff)' }}>
-      <h2 style={{ color: '#0d47a1' }}>曜日別予定テンプレート</h2>
-      <Table
-        dataSource={templates.map((t, idx) => ({ ...t, key: idx }))}
-        pagination={false}
-        loading={loading}
-        bordered
-        columns={[
-          { title: '曜日', dataIndex: 'day_of_week', key: 'day' },
-          {
-            title: '通所',
-            dataIndex: 'is_scheduled',
-            key: 'is_scheduled',
-            render: (value: boolean, _: any, idx: number) => (
-              <Radio.Group
-                value={value ? true : false}
-                onChange={(e) => handleTemplateChange(idx, 'is_scheduled', e.target.value)}
-              >
-                <Radio.Button value={true}>はい</Radio.Button>
-                <Radio.Button value={false}>いいえ</Radio.Button>
-              </Radio.Group>
-            ),
-          },
-          {
-            title: '開始時刻',
-            dataIndex: 'start_time',
-            key: 'start_time',
-            render: (value: string | null, _: any, idx: number) => (
-              <Input
-                placeholder='HH:MM'
-                value={value ?? ''}
-                onChange={(e) => handleTemplateChange(idx, 'start_time', e.target.value)}
-                disabled={!templates[idx].is_scheduled}
-              />
-            ),
-          },
-          {
-            title: '終了時刻',
-            dataIndex: 'end_time',
-            key: 'end_time',
-            render: (value: string | null, _: any, idx: number) => (
-              <Input
-                placeholder='HH:MM'
-                value={value ?? ''}
-                onChange={(e) => handleTemplateChange(idx, 'end_time', e.target.value)}
-                disabled={!templates[idx].is_scheduled}
-              />
-            ),
-          },
-        ]}
-      />
-      <Button type='primary' style={{ marginTop: 12 }} onClick={saveTemplates}>
-        テンプレート保存
-      </Button>
+    <div className="space-y-8 animate-in fade-in duration-500">
+      {/* 曜日別テンプレート */}
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+        <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+          📅 曜日別予定テンプレート
+        </h2>
+        <Table
+          dataSource={templates.map((t, idx) => ({ ...t, key: idx }))}
+          pagination={false}
+          loading={loading}
+          bordered
+          size="middle"
+          columns={[
+            {
+              title: '曜日',
+              dataIndex: 'day_of_week',
+              key: 'day',
+              render: (value: string) => DAY_OF_WEEK_JA[value] || value,
+            },
+            {
+              title: '通所',
+              dataIndex: 'is_scheduled',
+              key: 'is_scheduled',
+              render: (value: boolean, _: any, idx: number) => (
+                <Radio.Group
+                  value={value ? true : false}
+                  onChange={(e) => handleTemplateChange(idx, 'is_scheduled', e.target.value)}
+                >
+                  <Radio.Button value={true}>はい</Radio.Button>
+                  <Radio.Button value={false}>いいえ</Radio.Button>
+                </Radio.Group>
+              ),
+            },
+            {
+              title: '開始時刻',
+              dataIndex: 'start_time',
+              key: 'start_time',
+              render: (value: string | null, _: any, idx: number) => (
+                <Input
+                  type="time"
+                  value={value ?? ''}
+                  onChange={(e) => handleTemplateChange(idx, 'start_time', e.target.value)}
+                  disabled={!templates[idx].is_scheduled}
+                />
+              ),
+            },
+            {
+              title: '終了時刻',
+              dataIndex: 'end_time',
+              key: 'end_time',
+              render: (value: string | null, _: any, idx: number) => (
+                <Input
+                  type="time"
+                  value={value ?? ''}
+                  onChange={(e) => handleTemplateChange(idx, 'end_time', e.target.value)}
+                  disabled={!templates[idx].is_scheduled}
+                />
+              ),
+            },
+          ]}
+        />
+        <Button type='primary' className="mt-3" onClick={saveTemplates}>
+          テンプレート保存
+        </Button>
+      </div>
 
-      <hr style={{ margin: '32px 0' }} />
+      {/* 予定変更・欠席・追加申請 */}
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+            📝 予定変更・欠席・追加申請
+          </h2>
+          <Button type='primary' onClick={openCreateRequestModal}>
+            申請作成
+          </Button>
+        </div>
+        <Table
+          dataSource={requests.map((r) => ({ ...r, key: r.id }))}
+          loading={loading}
+          bordered
+          size="middle"
+          columns={[
+            { title: '日付', dataIndex: 'target_date', key: 'date' },
+            { title: '種別', dataIndex: 'request_type', key: 'type', render: (v: string) => REQUEST_TYPE_JA[v] || v },
+            { title: '理由', dataIndex: 'request_reason', key: 'reason' },
+            { title: '状態', dataIndex: 'request_status', key: 'status', render: (v: string) => APPROVAL_STATUS_JA[v] || v },
+            {
+              title: '操作',
+              key: 'action',
+              render: (_, record) =>
+                record.request_status === 'PENDING' ? (
+                  <span className="flex gap-2">
+                    <Button
+                      size='small'
+                      type='primary'
+                      onClick={() => handleDecision(record.id, 'APPROVED')}
+                    >
+                      承認
+                    </Button>
+                    <Button size='small' danger onClick={() => handleDecision(record.id, 'REJECTED')}>
+                      却下
+                    </Button>
+                  </span>
+                ) : null,
+            },
+          ]}
+        />
+      </div>
 
-      <h2 style={{ color: '#0d47a1' }}>予定変更・欠席・追加申請</h2>
-      <Button type='primary' onClick={openCreateRequestModal} style={{ marginBottom: 12 }}>
-        申請作成
-      </Button>
-      <Table
-        dataSource={requests.map((r) => ({ ...r, key: r.id }))}
-        loading={loading}
-        bordered
-        columns={[
-          { title: '日付', dataIndex: 'target_date', key: 'date' },
-          { title: '種別', dataIndex: 'request_type', key: 'type' },
-          { title: '理由', dataIndex: 'request_reason', key: 'reason' },
-          { title: '状態', dataIndex: 'request_status', key: 'status' },
-          {
-            title: '操作',
-            key: 'action',
-            render: (_, record) =>
-              record.request_status === 'PENDING' ? (
-                <span>
-                  <Button
-                    size='small'
-                    type='primary'
-                    onClick={() => handleDecision(record.id, 'APPROVED')}
-                    style={{ marginRight: 8 }}
-                  >
-                    承認
-                  </Button>
-                  <Button size='small' danger onClick={() => handleDecision(record.id, 'REJECTED')}>
-                    却下
-                  </Button>
-                </span>
-              ) : null,
-          },
-        ]}
-      />
-
-      <hr style={{ margin: '32px 0' }} />
-
-      <h2 style={{ color: '#0d47a1' }}>確定日別スケジュール</h2>
-      <Table
-        dataSource={dailySchedules.map((d) => ({ ...d, key: d.id }))}
-        loading={loading}
-        bordered
-        columns={[
-          { title: '日付', dataIndex: 'date', key: 'date' },
-          { title: '開始', dataIndex: 'start_time', key: 'start' },
-          { title: '終了', dataIndex: 'end_time', key: 'end' },
-          { title: '予定有無', dataIndex: 'is_scheduled', key: 'scheduled', render: (v: boolean) => (v ? 'あり' : 'なし') },
-          { title: 'ステータス', dataIndex: 'schedule_status', key: 'status' },
-        ]}
-      />
+      {/* 確定日別スケジュール */}
+      <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-black text-slate-800 flex items-center gap-2">
+            🗓️ 確定日別スケジュール
+          </h2>
+          <Space>
+            <Button onClick={() => setCurrentMonth(currentMonth.subtract(1, 'month'))}>前月</Button>
+            <DatePicker 
+              picker="month" 
+              value={currentMonth} 
+              onChange={(d) => d && setCurrentMonth(d.startOf('month'))} 
+              allowClear={false} 
+            />
+            <Button onClick={() => setCurrentMonth(currentMonth.add(1, 'month'))}>翌月</Button>
+          </Space>
+        </div>
+        <Table
+          dataSource={dailySchedules.map((d) => ({ ...d, key: d.id }))}
+          loading={loading}
+          bordered
+          pagination={false}
+          size="small"
+          columns={[
+            { 
+              title: '日付', 
+              dataIndex: 'date', 
+              key: 'date',
+              render: (v: string) => {
+                const d = dayjs(v);
+                return `${d.format('MM/DD')} (${DAY_OF_WEEK_JA[d.format('dddd')] || d.format('ddd')})`;
+              }
+            },
+            { title: '開始', dataIndex: 'start_time', key: 'start', render: (v: string | null) => v?.slice(0,5) || '-' },
+            { title: '終了', dataIndex: 'end_time', key: 'end', render: (v: string | null) => v?.slice(0,5) || '-' },
+            { title: '予定', dataIndex: 'is_scheduled', key: 'scheduled', render: (v: boolean) => (v ? 'あり' : 'なし') },
+            { title: '支援区分', dataIndex: 'location_type', key: 'location_type', render: (v: string) => LOCATION_TYPE_JA[v] || v || '-' },
+            { title: '状態', dataIndex: 'schedule_status', key: 'schedule_status', render: (v: string) => SCHEDULE_STATUS_JA[v] || v || '-' },
+            { title: '承認', dataIndex: 'approval_status', key: 'approval_status', render: (v: string) => APPROVAL_STATUS_JA[v] || v || '-' },
+          ]}
+        />
+      </div>
     </div>
   );
 };
@@ -266,68 +377,79 @@ const UserScheduleTab: React.FC<Props> = ({ userId }) => {
 /**
  * 申請作成用のサブコンポーネント（モーダル内で使用）
  */
-const CreateRequestForm: React.FC<{ onCreated: () => void }> = ({ onCreated }) => {
-  const [form] = Form.useForm();
+interface CreateRequestFormProps {
+  userId: number;
+  onCreated: () => void;
+}
 
-  const submit = async () => {
-    try {
-      const values = await form.validateFields();
-      await createUserScheduleRequest(values.userId, {
-        target_date: values.target_date.format('YYYY-MM-DD'),
-        request_type: values.request_type,
-        request_reason: values.request_reason,
-        requested_start_time: values.requested_start_time?.format('HH:mm') ?? null,
-        requested_end_time: values.requested_end_time?.format('HH:mm') ?? null,
-      });
-      message.success('申請が作成されました');
-      onCreated();
-      Modal.destroyAll();
-    } catch (e) {
-      console.error(e);
-    }
-  };
+interface CreateRequestFormRef {
+  submit: () => Promise<void>;
+}
 
-  return (
-    <Form form={form} layout='vertical'>
-      <Form.Item name='userId' initialValue={0} hidden />
-      <Form.Item
-        name='target_date'
-        label='対象日付'
-        rules={[{ required: true, message: '日付を選択してください' }]}
-      >
-        <Input type='date' />
-      </Form.Item>
-      <Form.Item
-        name='request_type'
-        label='種別'
-        rules={[{ required: true }]}
-      >
-        <Select placeholder='選択'>
-          <Option value='ABSENCE'>欠席</Option>
-          <Option value='EXTRA_DAY'>臨時追加</Option>
-          <Option value='SHIFT_TIME'>時間変更</Option>
-        </Select>
-      </Form.Item>
-      <Form.Item
-        name='request_reason'
-        label='理由 (10文字以上)'
-        rules={[{ required: true, min: 10, message: '10文字以上入力してください' }]}
-      >
-        <TextArea rows={3} />
-      </Form.Item>
-      <Form.Item name='requested_start_time' label='開始時刻'>
-        <Input placeholder='HH:MM' />
-      </Form.Item>
-      <Form.Item name='requested_end_time' label='終了時刻'>
-        <Input placeholder='HH:MM' />
-      </Form.Item>
-      <Form.Item>
-        <Button type='primary' onClick={submit}>
-          作成
-        </Button>
-      </Form.Item>
-    </Form>
-  );
-};
+const CreateRequestForm = forwardRef<CreateRequestFormRef, CreateRequestFormProps>(
+  ({ userId, onCreated }, ref) => {
+    const [form] = Form.useForm();
+
+    const submit = async () => {
+      try {
+        const values = await form.validateFields();
+        await createUserScheduleRequest(userId, {
+          target_date: values.target_date,
+          request_type: values.request_type,
+          request_reason: values.request_reason,
+          requested_start_time: values.requested_start_time ?? null,
+          requested_end_time: values.requested_end_time ?? null,
+        });
+        message.success('申請が作成されました');
+        onCreated();
+        Modal.destroyAll();
+      } catch (e) {
+        console.error(e);
+        throw e;
+      }
+    };
+
+    useImperativeHandle(ref, () => ({
+      submit,
+    }));
+
+    return (
+      <Form form={form} layout='vertical'>
+        <Form.Item name='userId' initialValue={userId} hidden />
+        <Form.Item
+          name='target_date'
+          label='対象日付'
+          rules={[{ required: true, message: '日付を選択してください' }]}
+        >
+          <Input type='date' />
+        </Form.Item>
+        <Form.Item
+          name='request_type'
+          label='種別'
+          rules={[{ required: true }]}
+        >
+          <Select placeholder='選択'>
+            <Option value='ABSENCE'>欠席</Option>
+            <Option value='EXTRA_DAY'>臨時追加</Option>
+            <Option value='SHIFT_TIME'>時間変更</Option>
+          </Select>
+        </Form.Item>
+        <Form.Item
+          name='request_reason'
+          label='理由 (10文字以上)'
+          rules={[{ required: true, min: 10, message: '10文字以上入力してください' }]}
+        >
+          <TextArea rows={3} />
+        </Form.Item>
+        <Form.Item name='requested_start_time' label='開始時刻'>
+          <Input type="time" />
+        </Form.Item>
+        <Form.Item name='requested_end_time' label='終了時刻'>
+          <Input type="time" />
+        </Form.Item>
+      </Form>
+    );
+  }
+);
 
 export default UserScheduleTab;

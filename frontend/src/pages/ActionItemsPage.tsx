@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { AlertTriangle, Clock, AlertCircle } from 'lucide-react';
 import { fetchActionItems, type ActionItem } from '../services/userService';
+import { Heading, Text, Label } from '../components/common/Typography';
 
 const ActionItemsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -85,30 +86,30 @@ const ActionItemsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 md:p-8 animate-in fade-in duration-500 max-w-5xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-black text-slate-800 tracking-tight flex items-center gap-3">
-          <AlertCircle className="text-rose-600 w-8 h-8" />
+    <div className="px-4 pb-8 md:px-8 md:pb-12 animate-in fade-in duration-500 max-w-5xl mx-auto">
+      <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-md pt-6 pb-4 md:pt-8 md:pb-4 mb-6 border-b border-slate-200">
+        <Heading variant="h1" className="flex items-center gap-3">
+          <AlertCircle className="text-rose-600 w-8 h-8 md:w-10 md:h-10" />
           管理確認事項
-        </h1>
-        <p className="text-slate-500 mt-2 font-medium">対応が必要なリスク項目の一覧です。</p>
-      </div>
+        </Heading>
+        <Text variant="small" className="mt-2">対応が必要なリスク項目の一覧です。</Text>
 
-      {/* タブUI */}
-      <div className="flex gap-2 mb-6 border-b border-slate-200 pb-2 overflow-x-auto">
-        {tabs.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setSearchParams({ type: tab.id })}
-            className={`px-4 py-2 font-bold text-sm whitespace-nowrap rounded-lg transition-colors ${
-              currentType === tab.id 
-                ? 'bg-indigo-600 text-white' 
-                : 'text-slate-600 hover:bg-slate-100'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {/* タブUI */}
+        <div className="flex gap-2 mt-6 overflow-x-auto pb-2">
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setSearchParams({ type: tab.id })}
+              className={`px-4 py-2 font-bold text-sm whitespace-nowrap rounded-lg transition-colors ${
+                currentType === tab.id 
+                  ? 'bg-indigo-600 text-white' 
+                  : 'text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -135,18 +136,18 @@ const ActionItemsPage: React.FC = () => {
                   {style.icon}
                 </div>
                 <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-3 mb-1">
-                    <h2 className="text-lg font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">{item.title}</h2>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${style.badgeColor}`}>
+                  <div className="flex flex-wrap items-center gap-3 mb-2">
+                    <Heading variant="h3" className="group-hover:text-indigo-600 transition-colors">{item.title}</Heading>
+                    <Label variant="badge" className={`px-2 py-0.5 rounded-full ${style.badgeColor}`}>
                       {item.user_name}
-                    </span>
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                    </Label>
+                    <Label variant="badge" className="px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                       {item.category_label}
-                    </span>
+                    </Label>
                   </div>
-                  <p className="text-slate-600 text-sm font-medium">{item.description}</p>
+                  <Text variant="body">{item.description}</Text>
                 </div>
-                <div className="text-indigo-600 font-bold text-sm bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-100 transition-colors shrink-0">
+                <div className="text-indigo-600 font-bold text-sm md:text-base bg-indigo-50 px-4 py-2 rounded-lg group-hover:bg-indigo-100 transition-colors shrink-0">
                   対応する
                 </div>
               </div>

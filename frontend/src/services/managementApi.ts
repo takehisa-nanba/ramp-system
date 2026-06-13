@@ -70,6 +70,8 @@ export interface OfficeService {
   target_disabilities?: Record<string, boolean> | null;
   cooperating_medical_institution?: string;
   manager_name?: string;
+  default_start_time?: string;
+  default_end_time?: string;
 }
 
 export interface OfficeSettings {

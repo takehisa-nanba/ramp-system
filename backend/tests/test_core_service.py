@@ -45,7 +45,7 @@ def test_get_corporation_id_for_user(app):
         db.session.add(user)
         db.session.flush()
 
-        cert = ServiceCertificate(user_id=user.id, certificate_issue_date=date.today(), municipality_master_id=muni.id, office_service_configuration_id=service_config.id)
+        cert = ServiceCertificate(user_id=user.id, certificate_issue_date=date.today(), municipality_master_id=muni.id, office_service_configuration_id=service_config.id, status='ACTIVE')
         db.session.add(cert)
         db.session.flush()
 
