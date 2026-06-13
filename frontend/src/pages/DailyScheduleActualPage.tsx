@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DatePicker, Table, Tag, Select, Space } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { Heading, Text } from '../components/common/Typography';
@@ -8,6 +9,7 @@ import type { DailyScheduleActualItem } from '../services/userService';
 const { Option } = Select;
 
 export const DailyScheduleActualPage: React.FC = () => {
+  const navigate = useNavigate();
   const [targetDate, setTargetDate] = useState<Dayjs>(dayjs());
   const [items, setItems] = useState<DailyScheduleActualItem[]>([]);
   const [loading, setLoading] = useState(false);
@@ -146,6 +148,13 @@ export const DailyScheduleActualPage: React.FC = () => {
             rowKey="user_id" 
             loading={loading}
             pagination={false}
+            rowClassName="hover:bg-slate-50 transition-colors"
+            onRow={(record) => ({
+              onClick: () => {
+                navigate(`/users/${record.user_id}/schedule-actuals`);
+              },
+              style: { cursor: 'pointer' }
+            })}
           />
         </div>
       </div>
