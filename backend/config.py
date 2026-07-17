@@ -68,3 +68,6 @@ class Config:
 
     # --- その他の設定（必要に応じて追加） ---
     # (例: CORS, Mailなど)
+    
+    # --- AI Gateway 設定 ---
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY')

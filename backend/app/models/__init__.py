@@ -25,6 +25,9 @@ from backend.app.models.core.supporter import (
     SupporterQualification, AttendanceCorrectionRequest,
     StaffActivityAllocationLog, EmploymentShiftPattern
 )
+from backend.app.models.core.staff_daily_ops import (
+    StaffDailyShift, StaffActionLog, StaffDailyReport
+)
 from backend.app.models.core.user import (
     User, UserPII
 )

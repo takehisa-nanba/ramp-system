@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { Users, FileText, AlertCircle, Search, CheckSquare, MessageSquare } from 'lucide-react';
 import apiClient from '../services/apiClient';
 import { Heading, Text } from '../components/common/Typography';
+import StaffStatusMonitor from '../components/dashboard/StaffStatusMonitor';
+import ActionLogWidget from '../components/dashboard/ActionLogWidget';
 
 interface DashboardSummary {
   today_users: number;
@@ -98,7 +100,7 @@ const DashboardPage: React.FC = () => {
           ダッシュボード情報の取得に失敗しました。
         </div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           {cards.map((item) => (
             <div
               key={item.id}
@@ -119,6 +121,14 @@ const DashboardPage: React.FC = () => {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 追加されたエリア A, B */}
+      {!loading && summary !== null && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <StaffStatusMonitor />
+          <ActionLogWidget />
         </div>
       )}
     </div>

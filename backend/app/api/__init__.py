@@ -18,6 +18,10 @@ from .management_masters import management_masters_bp
 from .dashboard import dashboard_bp
 from .action_items import action_items_bp
 from .schedules import schedules_bp
+from .ai_gateway import ai_gateway_bp # ★追加
+from .dashboard_staff import dashboard_staff_bp
+from .export import export_bp
+from .attendance import attendance_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
@@ -36,6 +40,8 @@ ALL_BLUEPRINTS = [
     dashboard_bp,
     action_items_bp,
     schedules_bp,
+    ai_gateway_bp, # ★追加
+    dashboard_staff_bp,
+    export_bp,
 ]
-
 

@@ -87,21 +87,21 @@ const SettingsPage: React.FC = () => {
   }, [user]);
 
   const hasViewStaff = useMemo(() => {
-    if (user?.permissions) {
+    if (user?.permissions && user.permissions.length > 0) {
       return user.permissions.includes('VIEW_STAFF');
     }
     return isManager;
   }, [user, isManager]);
 
   const hasCreateStaff = useMemo(() => {
-    if (user?.permissions) {
+    if (user?.permissions && user.permissions.length > 0) {
       return user.permissions.includes('CREATE_STAFF');
     }
     return isManager;
   }, [user, isManager]);
 
   const hasEditStaff = useMemo(() => {
-    if (user?.permissions) {
+    if (user?.permissions && user.permissions.length > 0) {
       return user.permissions.includes('EDIT_STAFF');
     }
     return isManager;

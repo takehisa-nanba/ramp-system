@@ -1,113 +1,78 @@
-from flask import Blueprint, jsonify, request
+# backend/app/api/attendance.py
+
+from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
-from backend.app import db
-from backend.app.models import Supporter, SupporterTimecard, OfficeServiceConfiguration
-from datetime import datetime
-from backend.app.utils.timezone import JST
+from datetime import datetime, date
+from backend.app.extensions import db
+from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern
+from backend.app.services.attendance_service import AttendanceService
 
 attendance_bp = Blueprint('attendance', __name__, url_prefix='/api/attendance')
 
-def get_current_supporter_id():
+@attendance_bp.route('/generate-shifts', methods=['POST'])
+@jwt_required()
+def generate_shifts():
     identity = get_jwt_identity()
-    if isinstance(identity, str) and identity.startswith('staff:'):
-        return int(identity.split(':')[1])
+    if not identity.startswith('staff:'):
+        return jsonify({"msg": "Unauthorized"}), 403
+        
+    data = request.get_json() or {}
+    year = data.get('year', date.today().year)
+    month = data.get('month', date.today().month)
+    supporter_id = data.get('supporter_id') # None if all
+    
+    svc = AttendanceService(db.session)
+    count = svc.generate_monthly_shifts(year, month, supporter_id)
+    return jsonify({"msg": f"Generated {count} shifts.", "count": count}), 201
+
+@attendance_bp.route('/timecards/<int:timecard_id>', methods=['PUT'])
+@jwt_required()
+def direct_edit_timecard(timecard_id):
+    """管理者によるタイムカードの直接編集"""
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({"msg": "Unauthorized"}), 403
+        
+    approver_id = int(identity.split(':')[1])
+        
+    data = request.get_json() or {}
+    
+    # ISO string to datetime parsing
+    check_in = datetime.fromisoformat(data['check_in'].replace('Z', '+00:00')) if data.get('check_in') else None
+    check_out = datetime.fromisoformat(data['check_out'].replace('Z', '+00:00')) if data.get('check_out') else None
+    
+    edit_data = {
+        'check_in': check_in,
+        'check_out': check_out,
+        'break_minutes': data.get('break_minutes'),
+        'is_absent': data.get('is_absent'),
+        'absence_type': data.get('absence_type')
+    }
+    
+    svc = AttendanceService(db.session)
     try:
-        return int(identity)
-    except (ValueError, TypeError):
-        return None
+        updated = svc.direct_edit_timecard(timecard_id, approver_id, edit_data)
+        return jsonify({"msg": "Timecard updated successfully", "deemed_work_minutes": updated.deemed_work_minutes}), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"msg": str(e)}), 400
 
-@attendance_bp.route('/status', methods=['GET'])
+@attendance_bp.route('/requests', methods=['POST'])
 @jwt_required()
-def get_status():
-    supporter_id = get_current_supporter_id()
-    if not supporter_id:
-        return jsonify({"msg": "Unauthorized"}), 403
-
-    today = datetime.now(JST).date()
+def create_request():
+    """一般スタッフからの修正申請"""
+    identity = get_jwt_identity()
+    supporter_id = int(identity.split(':')[1])
     
-    timecard = SupporterTimecard.query.filter_by(
-        supporter_id=supporter_id,
-        work_date=today
-    ).first()
-    
-    if not timecard:
-        return jsonify({
-            "status": "IDLE",
-            "check_in": None,
-            "check_out": None
-        }), 200
-        
-    status = "WORKING" if timecard.check_in and not timecard.check_out else "IDLE"
-    if timecard.check_in and timecard.check_out:
-        status = "COMPLETED"
-        
-    return jsonify({
-        "status": status,
-        "check_in": timecard.check_in.isoformat() if timecard.check_in else None,
-        "check_out": timecard.check_out.isoformat() if timecard.check_out else None
-    }), 200
-
-@attendance_bp.route('/clock-in', methods=['POST'])
-@jwt_required()
-def clock_in():
-    supporter_id = get_current_supporter_id()
-    if not supporter_id:
-        return jsonify({"msg": "Unauthorized"}), 403
-
     data = request.get_json() or {}
-    location = data.get('location')
-    
-    supporter = db.session.get(Supporter, supporter_id)
-    if not supporter:
-        return jsonify({"msg": "Supporter not found"}), 404
-        
-    today = datetime.now(JST).date()
-    
-    # すでに本日の打刻があるか確認
-    existing = SupporterTimecard.query.filter_by(supporter_id=supporter_id, work_date=today).first()
-    if existing:
-        return jsonify({"msg": "Already clocked in today"}), 400
-        
-    # 所属事業所のサービス設定を一つ取得（簡易化）
-    service_config = OfficeServiceConfiguration.query.filter_by(office_id=supporter.office_id).first()
-    if not service_config:
-        return jsonify({"msg": "Office service configuration not found"}), 400
-        
-    new_card = SupporterTimecard(
+    req = AttendanceCorrectionRequest(
         supporter_id=supporter_id,
-        office_service_configuration_id=service_config.id,
-        work_date=today,
-        check_in=datetime.now(JST),
-        check_in_location=location
+        target_date=date.fromisoformat(data['target_date']),
+        record_type=data.get('record_type', 'TIMECARD'),
+        requested_timestamp=datetime.now(),
+        request_reason=data.get('reason', ''),
+        request_status='PENDING'
     )
-    
-    db.session.add(new_card)
+    db.session.add(req)
     db.session.commit()
-    
-    return jsonify({"msg": "Clocked in successfully", "time": new_card.check_in.isoformat()}), 201
-
-@attendance_bp.route('/clock-out', methods=['POST'])
-@jwt_required()
-def clock_out():
-    supporter_id = get_current_supporter_id()
-    if not supporter_id:
-        return jsonify({"msg": "Unauthorized"}), 403
-
-    data = request.get_json() or {}
-    location = data.get('location')
-    
-    today = datetime.now(JST).date()
-    
-    timecard = SupporterTimecard.query.filter_by(supporter_id=supporter_id, work_date=today).first()
-    if not timecard or not timecard.check_in:
-        return jsonify({"msg": "No active clock-in found for today"}), 400
-        
-    if timecard.check_out:
-        return jsonify({"msg": "Already clocked out today"}), 400
-        
-    timecard.check_out = datetime.now(JST)
-    timecard.check_out_location = location
-    
-    db.session.commit()
-    
-    return jsonify({"msg": "Clocked out successfully", "time": timecard.check_out.isoformat()}), 200
+    return jsonify({"msg": "Request created", "id": req.id}), 201
