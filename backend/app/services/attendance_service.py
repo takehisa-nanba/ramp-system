@@ -19,7 +19,85 @@ class AttendanceService:
         if not approver or approver.employment_type != 'FULL_TIME':
             raise PermissionError("Only FULL_TIME admins can approve or edit attendance")
 
-    def generate_monthly_shifts(self, target_year: int, target_month: int, supporter_id: int = None):
+    def _check_timecard_exists(self, supporter_id: int, target_date: date):
+        """
+        タイムカード保護の物理法則: 打刻済みの日は一切のシフト変更を許可しない
+        """
+        timecard = self.db.query(SupporterTimecard).filter_by(
+            supporter_id=supporter_id,
+            work_date=target_date
+        ).first()
+        if timecard:
+            raise ValueError("Timecard already exists for this date. Manual changes are prohibited.")
+
+    def create_manual_shift(self, admin_id: int, data: dict):
+        self._check_admin_authorization(admin_id)
+        supporter_id = data.get('supporter_id')
+        target_date = date.fromisoformat(data['target_date'])
+        
+        self._check_timecard_exists(supporter_id, target_date)
+        
+        existing = self.db.query(StaffDailyShift).filter_by(
+            supporter_id=supporter_id, target_date=target_date
+        ).first()
+        if existing:
+            raise ValueError("Shift already exists for this date.")
+            
+        start_dt = datetime.strptime(f"{data['target_date']} {data['start_time']}", "%Y-%m-%d %H:%M") if data.get('start_time') else None
+        end_dt = datetime.strptime(f"{data['target_date']} {data['end_time']}", "%Y-%m-%d %H:%M") if data.get('end_time') else None
+        
+        # Office config fallback
+        from backend.app.models.core.office import OfficeServiceConfiguration
+        supporter = self.db.query(Supporter).get(supporter_id)
+        sc = self.db.query(OfficeServiceConfiguration).filter_by(office_id=supporter.office_id).first()
+        office_config_id = sc.id if sc else 1
+        
+        shift = StaffDailyShift(
+            supporter_id=supporter_id,
+            office_service_configuration_id=office_config_id,
+            target_date=target_date,
+            planned_start_time=start_dt,
+            planned_end_time=end_dt,
+            planned_break_minutes=data.get('break_minutes', 0)
+        )
+        self.db.add(shift)
+        self.db.commit()
+        return shift
+
+    def update_manual_shift(self, admin_id: int, shift_id: int, data: dict):
+        self._check_admin_authorization(admin_id)
+        shift = self.db.query(StaffDailyShift).get(shift_id)
+        if not shift:
+            raise ValueError("Shift not found.")
+            
+        self._check_timecard_exists(shift.supporter_id, shift.target_date)
+        if shift.is_confirmed:
+            raise ValueError("Cannot edit a confirmed shift.")
+            
+        if 'start_time' in data and data['start_time']:
+            shift.planned_start_time = datetime.strptime(f"{shift.target_date} {data['start_time']}", "%Y-%m-%d %H:%M")
+        if 'end_time' in data and data['end_time']:
+            shift.planned_end_time = datetime.strptime(f"{shift.target_date} {data['end_time']}", "%Y-%m-%d %H:%M")
+        if 'break_minutes' in data:
+            shift.planned_break_minutes = data['break_minutes']
+            
+        self.db.commit()
+        return shift
+
+    def delete_manual_shift(self, admin_id: int, shift_id: int):
+        self._check_admin_authorization(admin_id)
+        shift = self.db.query(StaffDailyShift).get(shift_id)
+        if not shift:
+            raise ValueError("Shift not found.")
+            
+        self._check_timecard_exists(shift.supporter_id, shift.target_date)
+        if shift.is_confirmed:
+            raise ValueError("Cannot delete a confirmed shift.")
+            
+        self.db.delete(shift)
+        self.db.commit()
+
+    def generate_monthly_shifts(self, target_year: int, target_month: int, supporter_id: int = None, ai_instruction: str = None):
         """
         基本パターン(EmploymentShiftPattern)から指定月のシフト(StaffDailyShift)を一括生成する。
         """
@@ -41,31 +119,172 @@ class AttendanceService:
 
         created_count = 0
         
+        # Supporter情報を事前取得
+        supporters = self.db.query(Supporter).filter(Supporter.id.in_(pattern_dict.keys())).all()
+        supporter_map = {s.id: s for s in supporters}
+        
+        # JobAssignments を全件取得して日付ごとに解決できるようにする
+        from backend.app.models import SupporterJobAssignment
+        job_assignments = self.db.query(SupporterJobAssignment).filter(
+            SupporterJobAssignment.supporter_id.in_(pattern_dict.keys())
+        ).all()
+        ja_map = {}
+        for ja in job_assignments:
+            if ja.supporter_id not in ja_map:
+                ja_map[ja.supporter_id] = []
+            ja_map[ja.supporter_id].append(ja)
+        
+        # Fallback office_config
+        fallback_config_map = {}
+        from backend.app.models.core.office import OfficeServiceConfiguration
+        for s in supporters:
+            sc = self.db.query(OfficeServiceConfiguration).filter_by(office_id=s.office_id).first()
+            fallback_config_map[s.id] = sc.id if sc else 1
+            
+        if ai_instruction:
+            from backend.app.services.ai_shift_service import AiShiftService
+            ai_svc = AiShiftService()
+            if ai_svc.client:
+                # Gather data for AI
+                current_shifts_data = []
+                start_date = date(target_year, target_month, 1)
+                end_date = date(target_year, target_month, num_days)
+                existing_shifts = self.db.query(StaffDailyShift).filter(
+                    StaffDailyShift.target_date >= start_date,
+                    StaffDailyShift.target_date <= end_date
+                ).all()
+                for s in existing_shifts:
+                    if not s.is_confirmed:
+                        current_shifts_data.append({
+                            "id": s.id,
+                            "supporter_id": s.supporter_id,
+                            "date": str(s.target_date),
+                            "start_time": s.planned_start_time.strftime("%H:%M") if s.planned_start_time else None,
+                            "end_time": s.planned_end_time.strftime("%H:%M") if s.planned_end_time else None
+                        })
+                
+                pattern_data = []
+                for p in patterns:
+                    pattern_data.append({
+                        "supporter_id": p.supporter_id,
+                        "day_of_week": p.day_of_week,
+                        "start_time": str(p.start_time) if p.start_time else None,
+                        "end_time": str(p.end_time) if p.end_time else None
+                    })
+                    
+                overwrites = ai_svc.adjust_shifts(current_shifts_data, pattern_data, ai_instruction)
+                if overwrites:
+                    # Apply AI overwrites
+                    for ow in overwrites:
+                        try:
+                            sid = ow.get('supporter_id')
+                            target_date_str = ow.get('date')
+                            action = ow.get('action')
+                            target_date_obj = datetime.strptime(target_date_str, "%Y-%m-%d").date()
+                            
+                            # check timecard
+                            timecard = self.db.query(SupporterTimecard).filter_by(supporter_id=sid, work_date=target_date_obj).first()
+                            if timecard:
+                                continue # protect
+                                
+                            existing = self.db.query(StaffDailyShift).filter_by(supporter_id=sid, target_date=target_date_obj).first()
+                            
+                            if action == 'DELETE':
+                                if existing and not existing.is_confirmed:
+                                    self.db.delete(existing)
+                                    created_count += 1
+                            elif action in ('UPDATE', 'CREATE'):
+                                start_t = ow.get('start_time')
+                                end_t = ow.get('end_time')
+                                if not start_t or not end_t:
+                                    continue
+                                start_dt = datetime.strptime(f"{target_date_str} {start_t}", "%Y-%m-%d %H:%M")
+                                end_dt = datetime.strptime(f"{target_date_str} {end_t}", "%Y-%m-%d %H:%M")
+                                
+                                if existing:
+                                    if not existing.is_confirmed:
+                                        existing.planned_start_time = start_dt
+                                        existing.planned_end_time = end_dt
+                                        created_count += 1
+                                else:
+                                    office_config_id = fallback_config_map.get(sid, 1)
+                                    # simplification: just use fallback for AI creations
+                                    shift = StaffDailyShift(
+                                        supporter_id=sid,
+                                        office_service_configuration_id=office_config_id,
+                                        target_date=target_date_obj,
+                                        planned_start_time=start_dt,
+                                        planned_end_time=end_dt,
+                                        planned_break_minutes=ow.get('break_minutes', 0)
+                                    )
+                                    self.db.add(shift)
+                                    created_count += 1
+                        except Exception as e:
+                            print("AI overwrite error:", e)
+                    self.db.commit()
+                    return created_count
+
         for day in range(1, num_days + 1):
             current_date = date(target_year, target_month, day)
             day_name = current_date.strftime('%A')
             
             for sid, p_map in pattern_dict.items():
-                if day_name in p_map:
-                    pattern = p_map[day_name]
+                supporter = supporter_map.get(sid)
+                if not supporter:
+                    continue
+                
+                # 入社前、退職後は対象外
+                if current_date < supporter.hire_date or (supporter.retirement_date and current_date > supporter.retirement_date):
+                    is_active_date = False
+                else:
+                    is_active_date = True
                     
-                    existing = self.db.query(StaffDailyShift).filter_by(
-                        supporter_id=sid,
-                        target_date=current_date
-                    ).first()
-                    
-                    if not existing and pattern.start_time and pattern.end_time:
-                        start_dt = datetime.strptime(f"{current_date} {pattern.start_time}", "%Y-%m-%d %H:%M")
-                        end_dt = datetime.strptime(f"{current_date} {pattern.end_time}", "%Y-%m-%d %H:%M")
+                # その日の office_service_configuration_id を解決
+                office_config_id = fallback_config_map.get(sid, 1)
+                for ja in ja_map.get(sid, []):
+                    if ja.start_date <= current_date and (not ja.end_date or ja.end_date >= current_date):
+                        office_config_id = ja.office_service_configuration_id
+                        break
                         
+                # タイムカード（実績）がすでに存在する場合は、保護のため一切変更しない
+                timecard = self.db.query(SupporterTimecard).filter_by(
+                    supporter_id=sid,
+                    work_date=current_date
+                ).first()
+                if timecard:
+                    continue
+                
+                pattern = p_map.get(day_name) if is_active_date else None
+                
+                existing = self.db.query(StaffDailyShift).filter_by(
+                    supporter_id=sid,
+                    target_date=current_date
+                ).first()
+                
+                if pattern and pattern.start_time and pattern.end_time:
+                    start_dt = datetime.strptime(f"{current_date} {pattern.start_time}", "%Y-%m-%d %H:%M")
+                    end_dt = datetime.strptime(f"{current_date} {pattern.end_time}", "%Y-%m-%d %H:%M")
+                    
+                    if existing:
+                        if not existing.is_confirmed:
+                            existing.planned_start_time = start_dt
+                            existing.planned_end_time = end_dt
+                            existing.planned_break_minutes = pattern.break_minutes
+                            created_count += 1
+                    else:
                         shift = StaffDailyShift(
                             supporter_id=sid,
+                            office_service_configuration_id=office_config_id,
                             target_date=current_date,
                             planned_start_time=start_dt,
                             planned_end_time=end_dt,
                             planned_break_minutes=pattern.break_minutes
                         )
                         self.db.add(shift)
+                        created_count += 1
+                else:
+                    if existing and not existing.is_confirmed:
+                        self.db.delete(existing)
                         created_count += 1
                         
         self.db.commit()

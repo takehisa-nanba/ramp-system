@@ -13,6 +13,19 @@ export interface ShiftPattern {
   break_minutes: number;
 }
 
+export interface ShiftRecord {
+  id: number;
+  supporter_id: number;
+  supporter_name: string;
+  employment_type: string;
+  job_title: string;
+  target_date: string;
+  planned_start_time: string | null;
+  planned_end_time: string | null;
+  planned_break_minutes: number;
+  is_confirmed: boolean;
+}
+
 export interface AttendanceCorrectionRequest {
   id: number;
   target_date: string;
@@ -25,12 +38,45 @@ export const attendanceApi = {
   /**
    * 基本シフトパターンから指定月のシフトを一括生成する
    */
-  generateShifts: async (year: number, month: number, supporterId?: number): Promise<{ msg: string, count: number }> => {
+  generateShifts: async (year: number, month: number, supporterId?: number, aiInstruction?: string): Promise<{ msg: string, count: number }> => {
     const res = await apiClient.post(`${API_URL}/generate-shifts`, {
       year,
       month,
-      supporter_id: supporterId
+      supporter_id: supporterId,
+      ai_instruction: aiInstruction
     });
+    return res.data;
+  },
+
+  /**
+   * 指定した年月のシフトを取得する
+   */
+  getShifts: async (year: number, month: number): Promise<{ items: ShiftRecord[] }> => {
+    const res = await apiClient.get(`${API_URL}/shifts?year=${year}&month=${month}`);
+    return res.data;
+  },
+
+  /**
+   * 個別シフト作成 (マニュアル)
+   */
+  createManualShift: async (data: { supporter_id: number; target_date: string; start_time: string; end_time: string; break_minutes: number }) => {
+    const res = await apiClient.post(`${API_URL}/shifts`, data);
+    return res.data;
+  },
+
+  /**
+   * 個別シフト更新 (マニュアル)
+   */
+  updateManualShift: async (shiftId: number, data: { start_time: string; end_time: string; break_minutes: number }) => {
+    const res = await apiClient.put(`${API_URL}/shifts/${shiftId}`, data);
+    return res.data;
+  },
+
+  /**
+   * 個別シフト削除 (マニュアル)
+   */
+  deleteManualShift: async (shiftId: number) => {
+    const res = await apiClient.delete(`${API_URL}/shifts/${shiftId}`);
     return res.data;
   },
 

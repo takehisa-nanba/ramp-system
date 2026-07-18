@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Building2, Save, ShieldCheck, UserCog, Plus, X, RefreshCw } from 'lucide-react';
-import { managementApi, type JobAssignment, type JobTitle, type ManagementMasters, type OfficeSettings, type Role, type StaffMember, type OfficeService } from '../services/managementApi';
+import { managementApi, type JobAssignment, type JobTitle, type ManagementMasters, type OfficeSettings, type Role, type StaffMember, type OfficeService, type EmploymentShiftPattern } from '../services/managementApi';
 import { toKatakana } from '../utils/inputHelpers';
 import { useAuth } from '../context/AuthContext';
 import { useMessage } from '../context/MessageContext';
@@ -29,6 +29,7 @@ type StaffForm = {
   allow_overlap_calculation: boolean;
   role_ids: number[];
   job_assignments: JobAssignment[];
+  shift_patterns: EmploymentShiftPattern[];
 };
 
 const EMPTY_STAFF_FORM: StaffForm = {
@@ -47,7 +48,8 @@ const EMPTY_STAFF_FORM: StaffForm = {
   is_active: true,
   allow_overlap_calculation: false,
   role_ids: [],
-  job_assignments: []
+  job_assignments: [],
+  shift_patterns: []
 };
 
 const employmentTypeLabels: Record<string, string> = {
@@ -56,6 +58,16 @@ const employmentTypeLabels: Record<string, string> = {
   PART_TIME: '非常勤',
   CONTRACT: '契約職員'
 };
+
+const WEEKDAYS = [
+  { key: 'Monday', label: '月曜' },
+  { key: 'Tuesday', label: '火曜' },
+  { key: 'Wednesday', label: '水曜' },
+  { key: 'Thursday', label: '木曜' },
+  { key: 'Friday', label: '金曜' },
+  { key: 'Saturday', label: '土曜' },
+  { key: 'Sunday', label: '日曜' }
+];
 
 const disabilityKeys = [
   ['physical', '身体'],
@@ -221,7 +233,8 @@ const SettingsPage: React.FC = () => {
       is_active: member.is_active,
       allow_overlap_calculation: member.allow_overlap_calculation,
       role_ids: member.role_ids || [],
-      job_assignments: member.job_assignments?.length ? member.job_assignments.map((j) => ({ ...j, assigned_hours_text: String((j.assigned_minutes || 0) / 60) })) : []
+      job_assignments: member.job_assignments?.length ? member.job_assignments.map((j) => ({ ...j, assigned_hours_text: String((j.assigned_minutes || 0) / 60) })) : [],
+      shift_patterns: member.shift_patterns || []
     });
     setWeeklyScheduledHoursText(String((member.weekly_scheduled_minutes || 0) / 60));
 
@@ -247,7 +260,8 @@ const SettingsPage: React.FC = () => {
         retirement_date: staffForm.retirement_date || null,
         job_assignments: staffForm.job_assignments
           .filter((j) => j.job_title_id && j.assigned_minutes > 0)
-          .map(({ assigned_hours_text, ...rest }) => rest)
+          .map(({ assigned_hours_text, ...rest }) => rest),
+        shift_patterns: staffForm.shift_patterns.filter(p => p.day_of_week && p.start_time && p.end_time)
       };
       if (staffForm.id) {
         await managementApi.updateStaff(staffForm.id, payload);
@@ -412,6 +426,24 @@ const SettingsPage: React.FC = () => {
       }
       next[index] = { ...next[index], ...newPatch };
       return { ...prev, job_assignments: next };
+    });
+  };
+
+  const updateShiftPattern = (day: string, field: keyof EmploymentShiftPattern, value: any) => {
+    setStaffForm((prev) => {
+      if (!prev) return prev;
+      const next = [...prev.shift_patterns];
+      const idx = next.findIndex(p => p.day_of_week === day);
+      if (idx >= 0) {
+        if (field === 'day_of_week' && !value) {
+          next.splice(idx, 1);
+        } else {
+          next[idx] = { ...next[idx], [field]: value };
+        }
+      } else if (value) {
+        next.push({ day_of_week: day, start_time: '09:00', end_time: '18:00', break_minutes: 60 });
+      }
+      return { ...prev, shift_patterns: next };
     });
   };
 
@@ -724,6 +756,30 @@ const SettingsPage: React.FC = () => {
                 ))}
                 <button onClick={addJobAssignment} className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-dashed border-slate-300 text-slate-500 font-bold text-sm hover:bg-slate-50"><Plus size={16} /> 職務を追加</button>
                 <div className={`text-sm font-bold ${assignedMinutesTotal > staffForm.weekly_scheduled_minutes && !staffForm.allow_overlap_calculation ? 'text-rose-600' : 'text-slate-500'}`}>職務割当合計: {minutesToHoursText(assignedMinutesTotal)} / 週所定: {minutesToHoursText(staffForm.weekly_scheduled_minutes)}</div>
+              </div>
+
+              <SectionTitle title="基本シフト" description="月次シフトを自動生成する際のベースとなる曜日ごとの勤務時間です。" />
+              <div className="space-y-2">
+                {WEEKDAYS.map((day) => {
+                  const pattern = staffForm.shift_patterns.find(p => p.day_of_week === day.key);
+                  const isEnabled = !!pattern;
+                  return (
+                    <div key={day.key} className={`flex items-center gap-4 p-3 rounded-2xl border transition-colors ${isEnabled ? 'bg-indigo-50/50 border-indigo-200' : 'bg-slate-50 border-slate-100 opacity-70'}`}>
+                      <div className="w-24">
+                        <Toggle checked={isEnabled} label={day.label} onChange={(v) => updateShiftPattern(day.key, 'day_of_week', v ? day.key : '')} />
+                      </div>
+                      {isEnabled && pattern ? (
+                        <div className="flex-1 flex gap-3">
+                          <Field type="time" label="出勤" value={pattern.start_time || ''} onChange={v => updateShiftPattern(day.key, 'start_time', v)} />
+                          <Field type="time" label="退勤" value={pattern.end_time || ''} onChange={v => updateShiftPattern(day.key, 'end_time', v)} />
+                          <Field type="number" label="休憩(分)" value={String(pattern.break_minutes)} onChange={v => updateShiftPattern(day.key, 'break_minutes', parseInt(v) || 0)} />
+                        </div>
+                      ) : (
+                        <div className="flex-1 text-sm text-slate-400 font-medium py-2">休み</div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="sticky bottom-0 bg-white border-t border-slate-100 px-6 py-4 flex justify-end gap-3 rounded-b-3xl">

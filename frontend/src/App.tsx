@@ -17,6 +17,7 @@ import SettingsPage from './pages/SettingsPage';
 import { DailyScheduleActualPage } from './pages/DailyScheduleActualPage';
 import AITestPage from './pages/AITestPage';
 import StaffAttendancePage from './pages/StaffAttendancePage';
+import SupportRecordsPage from './pages/SupportRecordsPage';
 
 // =================================================================
 // App コンポーネント (ルーター/レイアウトの役割のみ)
@@ -58,6 +59,7 @@ const App: React.FC = () => {
           <Route path="action-items" element={<ActionItemsPage />} />
           <Route path="ai-test" element={<AITestPage />} />
           <Route path="attendance" element={<StaffAttendancePage />} />
+          <Route path="records" element={<SupportRecordsPage />} />
           <Route path="settings" element={<SettingsPage />} />
 
           {/* Fallback */}

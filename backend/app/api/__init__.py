@@ -22,6 +22,7 @@ from .ai_gateway import ai_gateway_bp # ★追加
 from .dashboard_staff import dashboard_staff_bp
 from .export import export_bp
 from .attendance import attendance_bp
+from .support_records import bp as support_records_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
@@ -43,5 +44,6 @@ ALL_BLUEPRINTS = [
     ai_gateway_bp, # ★追加
     dashboard_staff_bp,
     export_bp,
+    support_records_bp,
 ]
 

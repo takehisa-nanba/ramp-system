@@ -150,7 +150,16 @@ def update_staff(staff_id):
             if not allow_overlap:
                 total_assigned = sum(int(a.get('assigned_minutes', 0)) for a in data['job_assignments'])
                 if total_assigned > weekly_minutes:
-                    raise ValidationError(f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。複数事業の重複計上（特例）がOFFの間は登録できません。")
+                    from backend.app.models.masters.master_definitions import JobTitleMaster
+                    assigned_title_ids = [int(a.get('job_title_id', 0)) for a in data['job_assignments']]
+                    titles = JobTitleMaster.query.filter(JobTitleMaster.id.in_(assigned_title_ids)).all()
+                    title_names = [t.title_name for t in titles]
+                    
+                    # 管理者とサービス管理責任者のみの兼務であれば、特例フラグOFFでも重複（40h+40h）を許可する
+                    allowed_overlap = all(n in ['管理者', 'サービス管理責任者'] for n in title_names)
+                    
+                    if not allowed_overlap:
+                        raise ValidationError(f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。管理者とサービス管理責任者の兼務以外の重複計上は特例ONにする必要があります。")
 
         if 'last_name' in data: staff.last_name = data['last_name']
         if 'first_name' in data: staff.first_name = data['first_name']
@@ -332,7 +341,15 @@ def register_staff():
             if not allow_overlap:
                 total_assigned = sum(int(a.get('assigned_minutes', 0)) for a in data['job_assignments'])
                 if total_assigned > weekly_minutes:
-                    raise ValidationError(f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。複数事業の重複計上（特例）がOFFの間は登録できません。")
+                    from backend.app.models.masters.master_definitions import JobTitleMaster
+                    assigned_title_ids = [int(a.get('job_title_id', 0)) for a in data['job_assignments']]
+                    titles = JobTitleMaster.query.filter(JobTitleMaster.id.in_(assigned_title_ids)).all()
+                    title_names = [t.title_name for t in titles]
+                    
+                    allowed_overlap = all(n in ['管理者', 'サービス管理責任者'] for n in title_names)
+                    
+                    if not allowed_overlap:
+                        raise ValidationError(f"各職務の割り当て合計（{total_assigned / 60:.1f}時間）が、週所定労働時間（{weekly_minutes / 60:.1f}時間）を超えています。管理者とサービス管理責任者の兼務以外の重複計上は特例ONにする必要があります。")
 
         target_office_id = current.office_id if current else None
         if not target_office_id:

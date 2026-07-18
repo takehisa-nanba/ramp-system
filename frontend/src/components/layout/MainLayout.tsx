@@ -3,10 +3,9 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Menu, X, LayoutDashboard, Users, 
   LogOut, Bell, Search, Settings,
-  MessageSquare, Calendar
+  MessageSquare, Calendar, Clock, PenTool, FileEdit
 } from 'lucide-react';
-
-
+import { SupportRecordModal } from '../records/SupportRecordModal';
 
 // import ActivityTracker from '../ActivityTracker';
 
@@ -23,6 +22,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const closeSidebar = () => setIsSidebarOpen(false);
   const isStaff = role === 'STAFF';
+  const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
 
   interface NavItem {
     name: string;
@@ -33,6 +33,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
 
   const navItems: NavItem[] = [
     { name: 'ホーム', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
+    { name: '支援記録', path: '/records', icon: <FileEdit size={18} /> },
+    { name: '勤怠・シフト', path: '/attendance', icon: <Clock size={18} /> },
     { name: '日別予定・実績', path: '/daily-schedules', icon: <Calendar size={18} /> },
     { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
     { name: '管理確認事項', path: '/action-items', icon: <Bell size={18} /> },
@@ -194,7 +196,28 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
         </button>
       )}
 
-      {/* {isStaff && <ActivityTracker />} */}
+      {/* Global Staff FAB for Support Records */}
+      {isStaff && (
+        <div className="fixed bottom-8 right-8 z-[50] flex flex-col items-end group">
+          <div className="absolute right-0 bottom-full mb-3 opacity-0 group-hover:opacity-100 translate-y-2 group-hover:translate-y-0 pointer-events-none transition-all duration-300">
+            <div className="bg-slate-800 text-white text-xs font-bold px-3 py-2 rounded-xl shadow-xl whitespace-nowrap relative">
+              支援記録を書く
+              <div className="absolute -bottom-1 right-6 w-2 h-2 bg-slate-800 transform rotate-45"></div>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsRecordModalOpen(true)}
+            className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl flex items-center justify-center shadow-[0_8px_30px_rgb(79,70,229,0.4)] hover:shadow-[0_8px_40px_rgb(79,70,229,0.6)] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-300 border border-white/20"
+          >
+            <PenTool size={28} className="drop-shadow-md" />
+          </button>
+        </div>
+      )}
+
+      <SupportRecordModal 
+        open={isRecordModalOpen} 
+        onClose={() => setIsRecordModalOpen(false)} 
+      />
 
     </div>
   );

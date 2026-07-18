@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { dashboardStaffApi } from '../../services/dashboardStaffApi';
 import type { StaffStatus } from '../../services/dashboardStaffApi';
 import { Heading } from '../common/Typography';
-import { Clock, UserCheck, UserMinus, UserX, Download, Play, LogIn, LogOut } from 'lucide-react';
+import { Clock, UserCheck, UserMinus, UserX, Download, Play, LogIn, LogOut, FileEdit } from 'lucide-react';
 import apiClient from '../../services/apiClient';
 
 const StaffStatusMonitor: React.FC = () => {

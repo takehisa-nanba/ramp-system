@@ -83,6 +83,10 @@ class SupportRecord(db.Model):
     support_plan_id = Column(Integer, ForeignKey('support_plans.id'), nullable=True)
     support_goal_id = Column(Integer, ForeignKey('individual_support_goals.id'), nullable=True)
     
+    # 支援場所
+    location_type = Column(String(50), nullable=True) # e.g., 'ON_SITE', 'OFF_SITE', 'VISIT'
+    location_detail = Column(String(255), nullable=True) # e.g., '〇〇企業', '自宅'
+
     support_content = Column(Text, nullable=False) # 支援内容・詳細
     decision_reason = Column(Text)                 # 判断理由等 (オプション)
     observation_note = Column(Text)                # 観察事項等 (オプション)
