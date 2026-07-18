@@ -57,7 +57,7 @@ export const StaffAttendancePage: React.FC = () => {
   const handleCellClick = (supporterId: number, supporterName: string, day: number, shift?: ShiftRecord) => {
     if (!isManager) return; // Non-managers cannot edit shifts
     // If the shift is confirmed, we prevent editing visually or in API
-    if (shift && shift.is_confirmed) {
+    if (shift && (shift.is_confirmed || String(shift.id).startsWith('tc_'))) {
       alert("確定済みのシフト（またはタイムカードが存在する日）は手動で変更できません。");
       return;
     }
@@ -252,26 +252,57 @@ export const StaffAttendancePage: React.FC = () => {
                     {daysArray.map(d => {
                       const shift = staff.shifts[d];
                       const isWeekend = new Date(selectedYear, selectedMonth - 1, d).getDay() === 0 || new Date(selectedYear, selectedMonth - 1, d).getDay() === 6;
+                      
+                      let cellContent = <div className="text-slate-200 text-xs">-</div>;
+                      
+                      if (shift) {
+                        const hasPlanned = shift.planned_start_time || shift.planned_end_time;
+                        const hasActual = shift.actual_check_in || shift.actual_check_out;
+                        const targetDate = dayjs(new Date(selectedYear, selectedMonth - 1, d));
+                        const isFuture = targetDate.isAfter(dayjs(), 'day');
+                        
+                        const plannedText = hasPlanned 
+                          ? `${shift.planned_start_time ? dayjs(shift.planned_start_time).format('HH:mm') : '-'}–${shift.planned_end_time ? dayjs(shift.planned_end_time).format('HH:mm') : '-'}`
+                          : '—';
+                          
+                        let actualText = '—';
+                        if (hasActual) {
+                          const start = shift.actual_check_in ? dayjs(shift.actual_check_in).format('HH:mm') : '-';
+                          const end = shift.actual_check_out ? dayjs(shift.actual_check_out).format('HH:mm') : '打刻中';
+                          actualText = `${start}–${end}`;
+                        } else if (!isFuture && hasPlanned) {
+                          actualText = '未打刻';
+                        }
+                        
+                        // tc_始まりのIDは実績のみのレコード
+                        const isTimecardOnly = String(shift.id).startsWith('tc_');
+                        
+                        cellContent = (
+                          <div className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg border ${shift.is_confirmed ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-200'}`}>
+                            <div className="flex items-center gap-1 w-full justify-center">
+                              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded">予</span>
+                              <span className={`text-[11px] font-black tracking-tighter whitespace-nowrap ${hasPlanned ? 'text-slate-700' : 'text-slate-300'}`}>
+                                {plannedText}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1 w-full justify-center">
+                              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded">実</span>
+                              <span className={`text-[11px] font-black tracking-tighter whitespace-nowrap ${actualText === '未打刻' ? 'text-rose-400' : actualText === '—' ? 'text-slate-300' : 'text-slate-700'}`}>
+                                {actualText}
+                              </span>
+                            </div>
+                            {shift.is_confirmed && !isTimecardOnly && <div className="text-[9px] text-indigo-500 font-black scale-90 mt-0.5">確定</div>}
+                          </div>
+                        );
+                      }
+
                       return (
                         <td 
                           key={d} 
                           className={`px-2 py-2 text-center border-r border-slate-100 align-middle ${isWeekend ? 'bg-slate-50/50' : ''} hover:bg-indigo-50 cursor-pointer transition-colors`}
                           onClick={() => handleCellClick(staff.supporter_id, staff.name, d, shift)}
                         >
-                          {shift ? (
-                            <div className={`flex flex-col items-center justify-center gap-0.5 py-1.5 rounded-lg border ${shift.is_confirmed ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-200'}`}>
-                              <div className="text-[11px] font-black tracking-tighter text-slate-700">
-                                {shift.planned_start_time ? dayjs(shift.planned_start_time).format('HH:mm') : '-'}
-                              </div>
-                              <div className="text-[10px] text-slate-300 leading-none">|</div>
-                              <div className="text-[11px] font-black tracking-tighter text-slate-700">
-                                {shift.planned_end_time ? dayjs(shift.planned_end_time).format('HH:mm') : '-'}
-                              </div>
-                              {shift.is_confirmed && <div className="text-[9px] text-indigo-500 font-black scale-90 mt-1">確定</div>}
-                            </div>
-                          ) : (
-                            <div className="text-slate-200 text-xs">-</div>
-                          )}
+                          {cellContent}
                         </td>
                       );
                     })}
