@@ -1,7 +1,7 @@
 # backend/app/api/attendance.py
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime, date
 from backend.app.extensions import db
 from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern, SupporterJobAssignment
@@ -13,7 +13,10 @@ attendance_bp = Blueprint('attendance', __name__, url_prefix='/api/attendance')
 @jwt_required()
 def generate_shifts():
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
+    if not identity.startswith('staff:') or not is_manager:
         return jsonify({"msg": "Unauthorized"}), 403
         
     data = request.get_json() or {}
@@ -30,6 +33,10 @@ def generate_shifts():
 @jwt_required()
 def get_shifts():
     identity = get_jwt_identity()
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
+    
     if not identity.startswith('staff:'):
         return jsonify({"msg": "Unauthorized"}), 403
         
@@ -44,60 +51,112 @@ def get_shifts():
     else:
         end_date = date(year, month + 1, 1)
         
-    shifts = StaffDailyShift.query.filter(
+    query_shifts = StaffDailyShift.query.filter(
         StaffDailyShift.target_date >= start_date,
         StaffDailyShift.target_date < end_date
-    ).order_by(StaffDailyShift.target_date.asc(), StaffDailyShift.planned_start_time.asc()).all()
+    )
+    query_tcs = SupporterTimecard.query.filter(
+        SupporterTimecard.work_date >= start_date,
+        SupporterTimecard.work_date < end_date
+    )
+    
+    if not is_manager:
+        try:
+            current_supporter_id = int(identity.split(':')[1])
+            query_shifts = query_shifts.filter(StaffDailyShift.supporter_id == current_supporter_id)
+            query_tcs = query_tcs.filter(SupporterTimecard.supporter_id == current_supporter_id)
+        except:
+            pass
+            
+    shifts = query_shifts.all()
+    tcs = query_tcs.all()
+    
+    records = {}
+    for s in shifts:
+        key = (s.supporter_id, s.target_date)
+        records[key] = {"shift": s, "tc": None}
+        
+    for tc in tcs:
+        key = (tc.supporter_id, tc.work_date)
+        if key not in records:
+            records[key] = {"shift": None, "tc": tc}
+        else:
+            records[key]["tc"] = tc
+            
+    supporter_ids = list(set([k[0] for k in records.keys()]))
+    supporters = Supporter.query.filter(Supporter.id.in_(supporter_ids)).all() if supporter_ids else []
+    supporter_dict = {s.id: s for s in supporters}
     
     result = []
-    for s in shifts:
-        supporter = s.supporter
+    for (supp_id, rec_date), data in records.items():
+        supporter = supporter_dict.get(supp_id)
         if not supporter:
             continue
             
-        supporter_name = f"{supporter.last_name} {supporter.first_name}"
+        s = data["shift"]
+        tc = data["tc"]
         
+        supporter_name = f"{supporter.last_name} {supporter.first_name}"
         emp_type = supporter.employment_type
         if emp_type == 'FULL_TIME':
             emp_type_ja = '常勤'
         elif emp_type == 'PART_TIME':
             emp_type_ja = '非常勤'
-        assignments = SupporterJobAssignment.query.filter(
-            SupporterJobAssignment.supporter_id == supporter.id,
-            SupporterJobAssignment.office_service_configuration_id == s.office_service_configuration_id,
-            SupporterJobAssignment.start_date <= s.target_date,
-            (SupporterJobAssignment.end_date >= s.target_date) | (SupporterJobAssignment.end_date == None)
-        ).all()
-        
-        job_titles = []
-        for a in assignments:
-            if a.job_title:
-                job_titles.append(a.job_title.title_name)
-                
-        if not job_titles:
-            job_titles = ["職務未設定"]
+        else:
+            emp_type_ja = emp_type
             
-        for title in job_titles:
-            result.append({
-                "id": s.id,
-                "supporter_id": s.supporter_id,
-                "supporter_name": supporter_name,
-                "employment_type": emp_type_ja,
-                "job_title": title,
-                "target_date": s.target_date.isoformat(),
-                "planned_start_time": s.planned_start_time.isoformat() if s.planned_start_time else None,
-                "planned_end_time": s.planned_end_time.isoformat() if s.planned_end_time else None,
-                "planned_break_minutes": s.planned_break_minutes,
-                "is_confirmed": s.is_confirmed
-            })
+        title = "職務未設定"
+        if s:
+            assignments = SupporterJobAssignment.query.filter(
+                SupporterJobAssignment.supporter_id == supporter.id,
+                SupporterJobAssignment.office_service_configuration_id == s.office_service_configuration_id,
+                SupporterJobAssignment.start_date <= s.target_date,
+                (SupporterJobAssignment.end_date >= s.target_date) | (SupporterJobAssignment.end_date == None)
+            ).all()
+            for a in assignments:
+                if a.job_title:
+                    title = a.job_title.title_name
+                    break
         
+        if not s and tc:
+            assignments = SupporterJobAssignment.query.filter(
+                SupporterJobAssignment.supporter_id == supporter.id,
+                SupporterJobAssignment.office_service_configuration_id == tc.office_service_configuration_id,
+                SupporterJobAssignment.start_date <= tc.work_date,
+                (SupporterJobAssignment.end_date >= tc.work_date) | (SupporterJobAssignment.end_date == None)
+            ).all()
+            for a in assignments:
+                if a.job_title:
+                    title = a.job_title.title_name
+                    break
+        
+        result.append({
+            "id": s.id if s else f"tc_{tc.id}",
+            "supporter_id": supp_id,
+            "supporter_name": supporter_name,
+            "employment_type": emp_type_ja,
+            "job_title": title,
+            "target_date": rec_date.isoformat(),
+            "planned_start_time": s.planned_start_time.isoformat() if s and s.planned_start_time else None,
+            "planned_end_time": s.planned_end_time.isoformat() if s and s.planned_end_time else None,
+            "planned_break_minutes": s.planned_break_minutes if s else 0,
+            "is_confirmed": s.is_confirmed if s else True,
+            "actual_check_in": tc.check_in.isoformat() if tc and tc.check_in else None,
+            "actual_check_out": tc.check_out.isoformat() if tc and tc.check_out else None
+        })
+        
+    result.sort(key=lambda x: (x["target_date"], x["planned_start_time"] or "99:99"))
+    
     return jsonify({"items": result}), 200
 
 @attendance_bp.route('/shifts', methods=['POST'])
 @jwt_required()
 def create_shift():
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
+    if not identity.startswith('staff:') or not is_manager:
         return jsonify({"msg": "Unauthorized"}), 403
     admin_id = int(identity.split(':')[1])
     data = request.get_json() or {}
@@ -114,7 +173,10 @@ def create_shift():
 @jwt_required()
 def update_shift(shift_id):
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
+    if not identity.startswith('staff:') or not is_manager:
         return jsonify({"msg": "Unauthorized"}), 403
     admin_id = int(identity.split(':')[1])
     data = request.get_json() or {}
@@ -131,7 +193,10 @@ def update_shift(shift_id):
 @jwt_required()
 def delete_shift(shift_id):
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
+    if not identity.startswith('staff:') or not is_manager:
         return jsonify({"msg": "Unauthorized"}), 403
     admin_id = int(identity.split(':')[1])
     

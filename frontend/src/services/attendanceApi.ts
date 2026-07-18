@@ -24,6 +24,8 @@ export interface ShiftRecord {
   planned_end_time: string | null;
   planned_break_minutes: number;
   is_confirmed: boolean;
+  actual_check_in?: string | null;
+  actual_check_out?: string | null;
 }
 
 export interface AttendanceCorrectionRequest {

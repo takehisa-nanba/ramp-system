@@ -9,7 +9,6 @@ import { UserAttendanceTab } from './tabs/UserAttendanceTab';
 import { UserCertificateTabPage } from './tabs/UserCertificateTabPage';
 import { UserScheduleTemplatesTab } from './tabs/UserScheduleTemplatesTab';
 import { UserScheduleRequestsTab } from './tabs/UserScheduleRequestsTab';
-import { UserScheduleActualsTab } from './tabs/UserScheduleActualsTab';
 
 const UserOverview: React.FC<{ userId: number }> = ({ userId }) => {
   const [user, setUser] = useState<UserPiiResponse | null>(null);
@@ -146,15 +145,14 @@ const UserDetailPage: React.FC = () => {
       {/* MVP Tabs (Sticky Top) */}
       <div className="sticky top-0 bg-slate-50/95 backdrop-blur-md z-30 -mx-6 px-6 py-3 border-b border-slate-200 mb-6 overflow-x-auto whitespace-nowrap flex gap-4 transition-all duration-300">
         <NavLink to={`/users/${id}`} end className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>概要</NavLink>
-        <NavLink to={`/users/${id}/attendance`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>実績・記録</NavLink>
+        <NavLink to={`/users/${id}/attendance`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>月間予定・実績・記録</NavLink>
         <NavLink to={`/users/${id}/certificate`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>受給者証情報</NavLink>
         <NavLink to={`/users/${id}/support-plans`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>支援計画サイクル</NavLink>
         <NavLink to={`/users/${id}/action-items`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>管理確認事項</NavLink>
         <NavLink to={`/users/${id}/history`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>履歴</NavLink>
         <NavLink to={`/users/${id}/schedule-templates`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定テンプレート</NavLink>
         <NavLink to={`/users/${id}/schedule-requests`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定変更申請</NavLink>
-        <NavLink to={`/users/${id}/schedule-actuals`} className={({ isActive }) => `pb-1.5 ${isActive ? 'font-black text-indigo-600 border-b-2 border-indigo-600' : 'font-bold text-slate-500 hover:text-indigo-500'}`}>予定・実績</NavLink>
-      </div>
+        </div>
 
       <div>
         <Routes>
@@ -166,8 +164,7 @@ const UserDetailPage: React.FC = () => {
           <Route path="history" element={<UserHistoryTab />} />
           <Route path="schedule-templates" element={<UserScheduleTemplatesTab userId={Number(id)} />} />
           <Route path="schedule-requests" element={<UserScheduleRequestsTab userId={Number(id)} />} />
-          <Route path="schedule-actuals" element={<UserScheduleActualsTab userId={Number(id)} />} />
-
+          
           {/* 古いパスからのリダイレクト（後方互換性） */}
           <Route path="schedule" element={<Navigate to="../schedule-templates" replace />} />
           <Route path="daily-logs" element={<Navigate to="../attendance" replace />} />

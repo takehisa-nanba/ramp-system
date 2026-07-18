@@ -4,7 +4,9 @@ import { Users, FileText, AlertCircle, Search, CheckSquare, MessageSquare } from
 import apiClient from '../services/apiClient';
 import { Heading, Text } from '../components/common/Typography';
 import StaffStatusMonitor from '../components/dashboard/StaffStatusMonitor';
+import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
 import ActionLogWidget from '../components/dashboard/ActionLogWidget';
+import { useAuth } from '../context/AuthContext';
 
 interface DashboardSummary {
   today_users: number;
@@ -17,8 +19,11 @@ interface DashboardSummary {
 
 const DashboardPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isManager = user?.roleScopes?.some(s => ['SYSTEM', 'CORPORATE'].includes(s)) ?? false;
 
   useEffect(() => {
     apiClient.get<DashboardSummary>('/dashboard/summary')
@@ -91,6 +96,8 @@ const DashboardPage: React.FC = () => {
         <Text variant="small" className="mt-2">今日の状況と、確認が必要な項目です。</Text>
       </div>
 
+      <StaffTimecardWidget />
+
       {loading ? (
         <div className="flex justify-center p-16">
           <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin" />
@@ -124,10 +131,9 @@ const DashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* 追加されたエリア A, B */}
       {!loading && summary !== null && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <StaffStatusMonitor />
+        <div className={`grid grid-cols-1 ${isManager ? 'lg:grid-cols-2' : ''} gap-6`}>
+          {isManager && <StaffStatusMonitor />}
           <ActionLogWidget />
         </div>
       )}

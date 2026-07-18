@@ -144,3 +144,60 @@ def get_user_attendance_records(user_id: int):
     items.sort(key=lambda x: x["date"], reverse=True)
 
     return jsonify({"items": items}), 200
+
+@users_bp.route('/<int:user_id>/attendance-actuals/<date_str>', methods=['PUT'])
+@jwt_required()
+def update_user_attendance_actuals(user_id: int, date_str: str):
+    from flask_jwt_extended import get_jwt_identity
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({"success": False, "error": {"code": "FORBIDDEN", "message": "この操作には職員権限が必要です。"}}), 403
+
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"success": False, "error": {"code": "NOT_FOUND", "message": "利用者が見つかりません。"}}), 404
+
+    from datetime import datetime
+    from backend.app.utils.timezone import JST
+    from backend.app.models.support.attendance_workflow import AttendanceRecord
+    from sqlalchemy import func
+
+    try:
+        target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({"success": False, "error": {"code": "VALIDATION_ERROR", "message": "日付のフォーマットが不正です。"}}), 400
+
+    data = request.get_json() or {}
+    check_in_time = data.get('actual_check_in') # "HH:MM" or None
+    check_out_time = data.get('actual_check_out') # "HH:MM" or None
+
+    attendances = AttendanceRecord.query.filter_by(user_id=user_id).filter(func.date(AttendanceRecord.timestamp) == target_date).all()
+    in_record = next((r for r in attendances if r.record_type == 'CHECK_IN'), None)
+    out_record = next((r for r in attendances if r.record_type == 'CHECK_OUT'), None)
+
+    def make_timestamp(time_str):
+        if not time_str: return None
+        return datetime.strptime(f"{date_str} {time_str}", "%Y-%m-%d %H:%M").replace(tzinfo=JST)
+
+    if check_in_time:
+        new_ts = make_timestamp(check_in_time)
+        if in_record:
+            in_record.timestamp = new_ts
+        else:
+            in_record = AttendanceRecord(user_id=user_id, record_type='CHECK_IN', timestamp=new_ts)
+            db.session.add(in_record)
+    else:
+        if in_record: db.session.delete(in_record)
+
+    if check_out_time:
+        new_ts = make_timestamp(check_out_time)
+        if out_record:
+            out_record.timestamp = new_ts
+        else:
+            out_record = AttendanceRecord(user_id=user_id, record_type='CHECK_OUT', timestamp=new_ts)
+            db.session.add(out_record)
+    else:
+        if out_record: db.session.delete(out_record)
+
+    db.session.commit()
+    return jsonify({"success": True, "msg": "実績を更新しました"}), 200

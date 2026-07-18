@@ -909,3 +909,7 @@ export const fetchDailyScheduleActuals = async (date?: string): Promise<{ items:
   const response = await apiClient.get<{ items: DailyScheduleActualItem[] }>('/schedules/daily-actuals', { params });
   return response.data;
 };
+export const updateUserAttendanceActuals = async (userId: number | string, date: string, data: { actual_check_in: string | null; actual_check_out: string | null; }) => {
+  const response = await apiClient.put(`/users/${userId}/attendance-actuals/${date}`, data);
+  return response.data;
+};

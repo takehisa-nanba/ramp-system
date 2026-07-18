@@ -6,9 +6,13 @@ import { Calendar, Play, FileEdit } from 'lucide-react';
 import { attendanceApi, type ShiftRecord } from '../services/attendanceApi';
 import dayjs from 'dayjs';
 import { AiShiftGenerationModal } from '../components/attendance/AiShiftGenerationModal';
+import { useAuth } from '../context/AuthContext';
 import { ManualShiftEditModal } from '../components/attendance/ManualShiftEditModal';
+import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
 
 export const StaffAttendancePage: React.FC = () => {
+  const { user } = useAuth();
+  const isManager = user?.roleScopes?.some(s => ['SYSTEM', 'CORPORATE'].includes(s)) ?? false;
   const [loading, setLoading] = useState(false);
   const [shiftsLoading, setShiftsLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -51,6 +55,7 @@ export const StaffAttendancePage: React.FC = () => {
   };
 
   const handleCellClick = (supporterId: number, supporterName: string, day: number, shift?: ShiftRecord) => {
+    if (!isManager) return; // Non-managers cannot edit shifts
     // If the shift is confirmed, we prevent editing visually or in API
     if (shift && shift.is_confirmed) {
       alert("確定済みのシフト（またはタイムカードが存在する日）は手動で変更できません。");
@@ -127,27 +132,36 @@ export const StaffAttendancePage: React.FC = () => {
         <Calendar className="w-8 h-8 text-indigo-600" />
         勤怠・シフト詳細画面
       </Heading>
+      
+      {/* タイムカード（打刻）ウィジェット */}
+      <StaffTimecardWidget />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         {/* 基本シフト・一括生成 */}
         <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
           <Heading variant="h3" className="mb-4 flex items-center gap-2">
-            <Play className="w-5 h-5 text-emerald-600" />
-            シフトの自動生成
+            <Calendar className="w-5 h-5 text-emerald-600" />
+            {isManager ? 'シフトの自動生成' : '表示月の選択'}
           </Heading>
-          <p className="text-sm text-slate-500 mb-2">
-            登録されている「曜日ごとの基本シフトパターン」に基づいて、指定した月のシフトを一括生成します。
-          </p>
-          <div className="text-xs text-indigo-600 bg-indigo-50 p-2 rounded mb-4">
-            💡 <strong>使い分けのヒント：</strong><br/>
-            大幅な予定変更や複雑な調整は「AIシフト生成」をお使いください。<br/>
-            「この人だけ今日休みにしたい」「時間をずらしたい」といった軽微な変更は、下の表のセルを直接クリックして手動で素早く変更できます。
-          </div>
+          
+          {isManager && (
+            <>
+              <p className="text-sm text-slate-500 mb-2">
+                登録されている「曜日ごとの基本シフトパターン」に基づいて、指定した月のシフトを一括生成します。
+              </p>
+              <div className="text-xs text-indigo-600 bg-indigo-50 p-2 rounded mb-4">
+                💡 <strong>使い分けのヒント：</strong><br/>
+                大幅な予定変更や複雑な調整は「AIシフト生成」をお使いください。<br/>
+                「この人だけ今日休みにしたい」「時間をずらしたい」といった軽微な変更は、下の表のセルを直接クリックして手動で素早く変更できます。
+              </div>
+            </>
+          )}
+
           <div className="flex flex-wrap gap-4 items-center">
             <select 
               value={selectedYear} 
               onChange={e => setSelectedYear(Number(e.target.value))}
-              className="px-4 py-2 border rounded-xl"
+              className="px-4 py-2 border rounded-xl font-bold"
             >
               {[...Array(5)].map((_, i) => {
                 const y = new Date().getFullYear() - 2 + i;
@@ -157,19 +171,23 @@ export const StaffAttendancePage: React.FC = () => {
             <select 
               value={selectedMonth} 
               onChange={e => setSelectedMonth(Number(e.target.value))}
-              className="px-4 py-2 border rounded-xl"
+              className="px-4 py-2 border rounded-xl font-bold"
             >
               {[...Array(12)].map((_, i) => (
                 <option key={i+1} value={i+1}>{i+1}月</option>
               ))}
             </select>
-            <button 
-              onClick={handleGenerateClick}
-              disabled={loading}
-              className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50"
-            >
-              {loading ? '処理中...' : '当月のシフトを自動生成する'}
-            </button>
+            
+            {isManager && (
+              <button 
+                onClick={handleGenerateClick}
+                disabled={loading}
+                className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Play className="w-4 h-4" />
+                {loading ? '処理中...' : '当月のシフトを自動生成する'}
+              </button>
+            )}
           </div>
         </div>
 
