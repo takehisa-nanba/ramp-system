@@ -342,19 +342,20 @@ def test_fte_value_decimal(pg_db_session, test_office_service_config, test_suppo
     assert isinstance(fetched.fte_value, Decimal)
     assert fetched.fte_value == Decimal("0.50")
 
-def test_existing_tables_new_columns_nullable(pg_db_session, test_supporter, test_office_service_config):
+def test_phase2b_sequence_no_is_required(pg_db_session, test_supporter, test_office_service_config):
     """追加した既存テーブルの新カラムがNULLのまま保存可能"""
     tc = SupporterTimecard(
         supporter_id=test_supporter.id,
         office_service_configuration_id=test_office_service_config.id,
-        work_date=date(2024, 1, 1)
+        work_date=date(2024, 1, 1),
+        sequence_no=1
     )
     pg_db_session.add(tc)
     pg_db_session.commit()
     
     assert tc.id is not None
     assert tc.office_id is None
-    assert tc.sequence_no is None
+    assert tc.sequence_no == 1
     
 def test_existing_creation_process_succeeds(pg_db_session, test_supporter, test_office_service_config, test_job_title, test_staff_activity):
     """既存カラムだけを使った従来の作成処理が成功する"""

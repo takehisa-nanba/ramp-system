@@ -2,6 +2,7 @@
 
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from backend.app.domain.attendance.exceptions import AttendanceDomainError
 from backend.app.extensions import db
 from backend.app.models import Supporter, StaffActionLog, StaffDailyReport, SupporterTimecard, StaffDailyShift
 from datetime import datetime, date
@@ -18,24 +19,55 @@ def get_staff_status():
     if not identity.startswith('staff:'):
         return jsonify({"msg": "Unauthorized"}), 403
         
-    today = date.today()
+    import pytz
+    tz = pytz.timezone('Asia/Tokyo')
+    now = datetime.now(tz)
+    today = now.date()
     
     # 本日のシフト
     shifts = StaffDailyShift.query.filter_by(target_date=today).all()
-    # 本日の打刻
+    # 本日の全打刻
     timecards = SupporterTimecard.query.filter_by(work_date=today).all()
+    
+    # 進行中の打刻（日付をまたいでいる可能性を考慮）
+    ongoing_timecards = SupporterTimecard.query.filter(
+        SupporterTimecard.check_in != None,
+        SupporterTimecard.check_out == None
+    ).all()
+    ongoing_map = {tc.supporter_id: tc for tc in ongoing_timecards}
+    
+    # 本日の打刻をsupporter_idでグループ化し、完了済みのみに絞る
+    completed_map = {}
+    for tc in timecards:
+        if tc.check_out is not None:
+            if tc.supporter_id not in completed_map:
+                completed_map[tc.supporter_id] = []
+            completed_map[tc.supporter_id].append(tc)
     
     staff_data = []
     
     supporters = Supporter.query.filter_by(is_active=True).all()
     for supporter in supporters:
         shift = next((s for s in shifts if s.supporter_id == supporter.id), None)
-        timecard = next((t for t in timecards if t.supporter_id == supporter.id), None)
+        
+        ongoing = ongoing_map.get(supporter.id)
+        completed_list = completed_map.get(supporter.id, [])
+        # sequence_noでソート
+        completed_list.sort(key=lambda x: x.sequence_no or 0)
+        
+        rep_timecard = ongoing if ongoing else (completed_list[-1] if completed_list else None)
+        
+        total_worked_seconds = 0
+        for tc in completed_list:
+            if tc.check_in and tc.check_out:
+                duration = (tc.check_out - tc.check_in).total_seconds()
+                break_sec = (tc.total_break_minutes or 0) * 60
+                total_worked_seconds += (duration - break_sec)
         
         status = "NOT_SCHEDULED"
-        if timecard and timecard.check_in and not timecard.check_out:
+        if ongoing:
             status = "WORKING"
-        elif timecard and timecard.check_out:
+        elif completed_list:
             status = "FINISHED"
         elif shift:
             status = "SCHEDULED"
@@ -45,13 +77,14 @@ def get_staff_status():
             "name": f"{supporter.last_name} {supporter.first_name}",
             "status": status,
             "shift": {
-                "start": shift.planned_start_time.isoformat() if shift else None,
-                "end": shift.planned_end_time.isoformat() if shift else None
+                "start": shift.planned_start_time.isoformat() + "+09:00" if shift and shift.planned_start_time else None,
+                "end": shift.planned_end_time.isoformat() + "+09:00" if shift and shift.planned_end_time else None
             } if shift else None,
             "timecard": {
-                "check_in": timecard.check_in.isoformat() if timecard and timecard.check_in else None,
-                "check_out": timecard.check_out.isoformat() if timecard and timecard.check_out else None
-            } if timecard else None
+                "check_in": rep_timecard.check_in.isoformat() + "+09:00" if rep_timecard and rep_timecard.check_in else None,
+                "check_out": rep_timecard.check_out.isoformat() + "+09:00" if rep_timecard and rep_timecard.check_out else None,
+                "total_worked_seconds": total_worked_seconds
+            } if rep_timecard or completed_list else None
         })
         
     return jsonify({
@@ -166,29 +199,55 @@ def clock_in():
         return jsonify({"msg": "Unauthorized"}), 403
     
     supporter_id = int(identity.split(':')[1])
-    today = date.today()
+    data = request.get_json() or {}
     
-    timecard = SupporterTimecard.query.filter_by(supporter_id=supporter_id, work_date=today).first()
-    if not timecard:
-        from backend.app.models import OfficeServiceConfiguration, Supporter
+    office_id = data.get('office_id')
+    if not office_id:
+        from backend.app.models import Supporter, SupporterJobAssignment
+        from backend.app.models.core.office import OfficeServiceConfiguration
         supporter = Supporter.query.get(supporter_id)
-        osc = OfficeServiceConfiguration.query.filter_by(office_id=supporter.office_id).first()
-        if not osc:
-            osc = OfficeServiceConfiguration.query.first() # fallback
-            
-        timecard = SupporterTimecard(
-            supporter_id=supporter_id, 
-            work_date=today,
-            office_service_configuration_id=osc.id if osc else 1
-        )
-        db.session.add(timecard)
-    
-    if timecard.check_in:
-        return jsonify({"msg": "Already clocked in"}), 400
         
-    timecard.check_in = datetime.now()
-    db.session.commit()
-    return jsonify({"msg": "Clocked in successfully"}), 200
+        valid_offices = set()
+        if supporter.office_id:
+            valid_offices.add(supporter.office_id)
+            
+        assignments = SupporterJobAssignment.query.filter_by(supporter_id=supporter_id).all()
+        for ja in assignments:
+            if ja.office_service_configuration_id:
+                osc = OfficeServiceConfiguration.query.get(ja.office_service_configuration_id)
+                if osc:
+                    valid_offices.add(osc.office_id)
+                    
+        if len(valid_offices) == 1:
+            office_id = list(valid_offices)[0]
+        else:
+            return jsonify({"msg": "office_id is required or ambiguous"}), 400
+
+    location_type = data.get('location_type', 'OFFICE')
+    location_detail = data.get('location_detail', '')
+    
+    from backend.app.services.attendance_service import AttendanceService
+    svc = AttendanceService(db.session)
+    
+    try:
+        timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+        db.session.commit()
+        return jsonify({
+            "msg": "Clocked in successfully",
+            "timecard_id": timecard.id,
+            "sequence_no": timecard.sequence_no,
+            "check_in": timecard.check_in.isoformat() + "+09:00"
+        }), 201
+    except PermissionError as e:
+        db.session.rollback()
+        return jsonify({"msg": str(e)}), 403
+    except AttendanceDomainError as e:
+        db.session.rollback()
+        return jsonify({"msg": str(e)}), e.status_code
+    except Exception as e:
+        db.session.rollback()
+        # Log unexpected error here if needed
+        return jsonify({"msg": "Internal Server Error"}), 500
 
 @dashboard_staff_bp.route('/clock-out', methods=['POST'])
 @jwt_required()
@@ -198,26 +257,28 @@ def clock_out():
         return jsonify({"msg": "Unauthorized"}), 403
     
     supporter_id = int(identity.split(':')[1])
-    today = date.today()
-    
     data = request.get_json() or {}
     break_minutes = data.get('break_minutes', 0)
     
-    timecard = SupporterTimecard.query.filter_by(supporter_id=supporter_id, work_date=today).first()
-    if not timecard or not timecard.check_in:
-        return jsonify({"msg": "Not clocked in"}), 400
-        
-    if timecard.check_out:
-        return jsonify({"msg": "Already clocked out"}), 400
-        
-    timecard.check_out = datetime.now()
+    from backend.app.services.attendance_service import AttendanceService
+    svc = AttendanceService(db.session)
+    
     try:
-        timecard.total_break_minutes = int(break_minutes)
-    except ValueError:
-        timecard.total_break_minutes = 0
-        
-    db.session.commit()
-    return jsonify({"msg": "Clocked out successfully"}), 200
+        timecard = svc.clock_out(supporter_id, timecard_id=None, break_minutes=break_minutes)
+        db.session.commit()
+        return jsonify({
+            "msg": "Clocked out successfully",
+            "timecard_id": timecard.id,
+            "check_out": timecard.check_out.isoformat() + "+09:00"
+        }), 200
+
+    except AttendanceDomainError as e:
+        db.session.rollback()
+        return jsonify({"msg": str(e)}), e.status_code
+    except Exception as e:
+        db.session.rollback()
+        # Log unexpected error here if needed
+        return jsonify({"msg": "Internal Server Error"}), 500
 
 @dashboard_staff_bp.route('/seed-shifts', methods=['POST'])
 @jwt_required()

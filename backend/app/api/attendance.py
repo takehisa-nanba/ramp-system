@@ -6,6 +6,7 @@ from datetime import datetime, date
 from backend.app.extensions import db
 from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern, SupporterJobAssignment
 from backend.app.services.attendance_service import AttendanceService
+from backend.app.domain.attendance.exceptions import handle_attendance_errors
 
 attendance_bp = Blueprint('attendance', __name__, url_prefix='/api/attendance')
 
@@ -162,12 +163,8 @@ def create_shift():
     data = request.get_json() or {}
     
     svc = AttendanceService(db.session)
-    try:
-        shift = svc.create_manual_shift(admin_id, data)
-        return jsonify({"msg": "Shift created", "id": shift.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    shift = svc.create_manual_shift(admin_id, data)
+    return jsonify({"msg": "Shift created", "id": shift.id}), 201
 
 @attendance_bp.route('/shifts/<int:shift_id>', methods=['PUT'])
 @jwt_required()
@@ -182,12 +179,8 @@ def update_shift(shift_id):
     data = request.get_json() or {}
     
     svc = AttendanceService(db.session)
-    try:
-        svc.update_manual_shift(admin_id, shift_id, data)
-        return jsonify({"msg": "Shift updated"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    svc.update_manual_shift(admin_id, shift_id, data)
+    return jsonify({"msg": "Shift updated"}), 200
 
 @attendance_bp.route('/shifts/<int:shift_id>', methods=['DELETE'])
 @jwt_required()
@@ -201,12 +194,8 @@ def delete_shift(shift_id):
     admin_id = int(identity.split(':')[1])
     
     svc = AttendanceService(db.session)
-    try:
-        svc.delete_manual_shift(admin_id, shift_id)
-        return jsonify({"msg": "Shift deleted"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    svc.delete_manual_shift(admin_id, shift_id)
+    return jsonify({"msg": "Shift deleted"}), 200
 
 @attendance_bp.route('/timecards/<int:timecard_id>', methods=['PUT'])
 @jwt_required()
@@ -233,12 +222,8 @@ def direct_edit_timecard(timecard_id):
     }
     
     svc = AttendanceService(db.session)
-    try:
-        updated = svc.direct_edit_timecard(timecard_id, approver_id, edit_data)
-        return jsonify({"msg": "Timecard updated successfully", "deemed_work_minutes": updated.deemed_work_minutes}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    updated = svc.direct_edit_timecard(timecard_id, approver_id, edit_data)
+    return jsonify({"msg": "Timecard updated successfully", "deemed_work_minutes": updated.deemed_work_minutes}), 200
 
 @attendance_bp.route('/requests', methods=['POST'])
 @jwt_required()
@@ -259,3 +244,92 @@ def create_request():
     db.session.add(req)
     db.session.commit()
     return jsonify({"msg": "Request created", "id": req.id}), 201
+
+@attendance_bp.route('/clock-in', methods=['POST'])
+@jwt_required()
+@handle_attendance_errors
+def clock_in():
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({"msg": "Unauthorized"}), 403
+    
+    supporter_id = int(identity.split(':')[1])
+    data = request.get_json() or {}
+    
+    office_id = data.get('office_id')
+    if not office_id:
+        return jsonify({"msg": "office_id is required"}), 400
+        
+    location_type = data.get('location_type')
+    if not location_type:
+        return jsonify({"msg": "location_type is required"}), 400
+        
+    location_detail = data.get('location_detail', '')
+    
+    svc = AttendanceService(db.session)
+    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+    db.session.commit()
+    return jsonify({
+        "msg": "Clocked in successfully",
+        "timecard_id": timecard.id,
+        "sequence_no": timecard.sequence_no,
+        "check_in": timecard.check_in.isoformat() + "+09:00"
+    }), 201
+
+@attendance_bp.route('/timecards/<int:timecard_id>/clock-out', methods=['POST'])
+@jwt_required()
+@handle_attendance_errors
+def clock_out(timecard_id):
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({"msg": "Unauthorized"}), 403
+    
+    supporter_id = int(identity.split(':')[1])
+    data = request.get_json() or {}
+    break_minutes = data.get('break_minutes', 0)
+    
+    svc = AttendanceService(db.session)
+    timecard = svc.clock_out(supporter_id, timecard_id=timecard_id, break_minutes=break_minutes)
+    db.session.commit()
+    return jsonify({
+        "msg": "Clocked out successfully",
+        "timecard_id": timecard.id,
+        "check_out": timecard.check_out.isoformat() + "+09:00"
+    }), 200
+
+@attendance_bp.route('/timecards', methods=['GET'])
+@jwt_required()
+def get_timecards():
+    identity = get_jwt_identity()
+    if not identity.startswith('staff:'):
+        return jsonify({"msg": "Unauthorized"}), 403
+        
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({"msg": "date is required"}), 400
+        
+    try:
+        target_date = date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"msg": "Invalid date format"}), 400
+        
+    supporter_id = int(identity.split(':')[1])
+    
+    timecards = SupporterTimecard.query.filter_by(
+        supporter_id=supporter_id, 
+        work_date=target_date
+    ).order_by(SupporterTimecard.sequence_no).all()
+    
+    result = []
+    for tc in timecards:
+        result.append({
+            "id": tc.id,
+            "sequence_no": tc.sequence_no,
+            "office_id": tc.office_id,
+            "location_type": tc.location_type,
+            "check_in": tc.check_in.isoformat() + "+09:00" if tc.check_in else None,
+            "check_out": tc.check_out.isoformat() + "+09:00" if tc.check_out else None,
+            "total_break_minutes": tc.total_break_minutes
+        })
+        
+    return jsonify(result), 200

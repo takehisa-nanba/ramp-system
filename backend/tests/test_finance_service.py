@@ -167,7 +167,7 @@ def test_fte_calculation(app):
             check_in=datetime(2025, 1, 1, 9, 0), check_out=datetime(2025, 1, 1, 13, 0), # 実働4時間 (240分)
             deemed_work_minutes=240, 
             absence_type="PAID_LEAVE",
-            total_break_minutes=0, scheduled_work_minutes=480 # 【修正】NOT NULL回避
+            total_break_minutes=0, scheduled_work_minutes=480, sequence_no=1
         )
         
         # Bさん (非常勤): 
@@ -178,7 +178,7 @@ def test_fte_calculation(app):
             check_in=datetime(2025, 1, 1, 9, 0), check_out=datetime(2025, 1, 1, 13, 0), # 実働4時間 (240分)
             deemed_work_minutes=240, 
             absence_type="PAID_LEAVE",
-            total_break_minutes=0, scheduled_work_minutes=480 # 【修正】NOT NULL回避
+            total_break_minutes=0, scheduled_work_minutes=480, sequence_no=1
         )
         
         session.add_all([tc_a, tc_b])

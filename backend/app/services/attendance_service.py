@@ -6,6 +6,12 @@ from sqlalchemy.orm import Session
 from backend.app.models import Supporter, EmploymentShiftPattern, StaffDailyShift, SupporterTimecard, AttendanceCorrectionRequest
 from backend.app.domain.attendance.fte_calculation import FteCalculationDomain
 from backend.app.domain.attendance.decision_rules import AttendanceDecisionDomain
+from backend.app.domain.attendance.exceptions import (
+    AttendanceDomainError,
+    AttendanceValidationError,
+    AttendanceNotFoundError,
+    AttendanceConflictError
+)
 
 class AttendanceService:
     def __init__(self, db_session: Session):
@@ -17,7 +23,7 @@ class AttendanceService:
         """
         approver = self.db.query(Supporter).get(approver_id)
         if not approver or approver.employment_type != 'FULL_TIME':
-            raise PermissionError("Only FULL_TIME admins can approve or edit attendance")
+            raise AttendanceForbiddenError("Only FULL_TIME admins can approve or edit attendance")
 
     def _check_timecard_exists(self, supporter_id: int, target_date: date):
         """
@@ -28,7 +34,7 @@ class AttendanceService:
             work_date=target_date
         ).first()
         if timecard:
-            raise ValueError("Timecard already exists for this date. Manual changes are prohibited.")
+            raise AttendanceConflictError("Timecard already exists for this date. Manual changes are prohibited.")
 
     def create_manual_shift(self, admin_id: int, data: dict):
         self._check_admin_authorization(admin_id)
@@ -41,7 +47,7 @@ class AttendanceService:
             supporter_id=supporter_id, target_date=target_date
         ).first()
         if existing:
-            raise ValueError("Shift already exists for this date.")
+            raise AttendanceConflictError("Shift already exists for this date.")
             
         start_dt = datetime.strptime(f"{data['target_date']} {data['start_time']}", "%Y-%m-%d %H:%M") if data.get('start_time') else None
         end_dt = datetime.strptime(f"{data['target_date']} {data['end_time']}", "%Y-%m-%d %H:%M") if data.get('end_time') else None
@@ -68,11 +74,11 @@ class AttendanceService:
         self._check_admin_authorization(admin_id)
         shift = self.db.query(StaffDailyShift).get(shift_id)
         if not shift:
-            raise ValueError("Shift not found.")
+            raise AttendanceNotFoundError("Shift not found.")
             
         self._check_timecard_exists(shift.supporter_id, shift.target_date)
         if shift.is_confirmed:
-            raise ValueError("Cannot edit a confirmed shift.")
+            raise AttendanceConflictError("Cannot edit a confirmed shift.")
             
         if 'start_time' in data and data['start_time']:
             shift.planned_start_time = datetime.strptime(f"{shift.target_date} {data['start_time']}", "%Y-%m-%d %H:%M")
@@ -88,11 +94,11 @@ class AttendanceService:
         self._check_admin_authorization(admin_id)
         shift = self.db.query(StaffDailyShift).get(shift_id)
         if not shift:
-            raise ValueError("Shift not found.")
+            raise AttendanceNotFoundError("Shift not found.")
             
         self._check_timecard_exists(shift.supporter_id, shift.target_date)
         if shift.is_confirmed:
-            raise ValueError("Cannot delete a confirmed shift.")
+            raise AttendanceConflictError("Cannot delete a confirmed shift.")
             
         self.db.delete(shift)
         self.db.commit()
@@ -287,8 +293,148 @@ class AttendanceService:
                         self.db.delete(existing)
                         created_count += 1
                         
-        self.db.commit()
-        return created_count
+    def check_overlap(self, supporter_id: int, start_time: datetime, end_time: datetime = None, exclude_timecard_id: int = None):
+        """対象職員の勤務区間重複を検証する"""
+        query = self.db.query(SupporterTimecard).filter(
+            SupporterTimecard.supporter_id == supporter_id
+        )
+        if exclude_timecard_id:
+            query = query.filter(SupporterTimecard.id != exclude_timecard_id)
+            
+        timecards = query.all()
+        for tc in timecards:
+            if not tc.check_in:
+                continue
+            e_start = tc.check_in
+            e_end = tc.check_out
+            n_start = start_time
+            n_end = end_time
+            
+            if e_end is None and n_end is None:
+                return True
+            if e_end is None:
+                if n_end is None or n_end > e_start:
+                    return True
+                continue
+            if n_end is None:
+                if n_start < e_end:
+                    return True
+                continue
+            if max(e_start, n_start) < min(e_end, n_end):
+                return True
+        return False
+
+    def get_ongoing_timecard(self, supporter_id: int) -> SupporterTimecard:
+        ongoing_timecards = self.db.query(SupporterTimecard).filter(
+            SupporterTimecard.supporter_id == supporter_id,
+            SupporterTimecard.check_in != None,
+            SupporterTimecard.check_out == None
+        ).all()
+        
+        if len(ongoing_timecards) == 1:
+            return ongoing_timecards[0]
+        elif len(ongoing_timecards) > 1:
+            raise AttendanceValidationError("Multiple ongoing timecards found")
+        return None
+
+    def clock_in(self, supporter_id: int, office_id: int, location_type: str, location_detail: str) -> SupporterTimecard:
+        ongoing = self.get_ongoing_timecard(supporter_id)
+        if ongoing:
+            raise AttendanceConflictError("Already clocked in")
+
+        valid_locations = {"OFFICE", "CLIENT_COMPANY", "USER_HOME", "REMOTE", "EXTERNAL_FACILITY", "TRAVEL", "OTHER"}
+        if location_type not in valid_locations:
+            raise AttendanceValidationError(f"Invalid location_type: {location_type}")
+
+        now = datetime.now()
+        today = now.date()
+
+        if self.check_overlap(supporter_id, start_time=now):
+            raise AttendanceConflictError("Timecard overlaps with existing completed record")
+
+        # Config ID の取得 (一番単純な実装、実際は割り当てを見るべきだが)
+        from backend.app.models.core.office import OfficeServiceConfiguration
+        from backend.app.models import SupporterJobAssignment
+        
+        assignments = self.db.query(SupporterJobAssignment).filter(
+            SupporterJobAssignment.supporter_id == supporter_id,
+            SupporterJobAssignment.start_date <= today,
+            (SupporterJobAssignment.end_date >= today) | (SupporterJobAssignment.end_date == None)
+        ).all()
+        
+        osc_id = None
+        if assignments:
+            osc_id = assignments[0].office_service_configuration_id
+        else:
+            # フォールバック
+            osc_list = self.db.query(OfficeServiceConfiguration).filter_by(office_id=office_id).all()
+            if len(osc_list) == 1:
+                osc_id = osc_list[0].id
+            else:
+                raise AttendanceValidationError("Invalid office_id or multiple configurations found")
+
+        from sqlalchemy import func
+        max_seq = self.db.query(func.max(SupporterTimecard.sequence_no)).filter(
+            SupporterTimecard.supporter_id == supporter_id,
+            SupporterTimecard.work_date == today
+        ).scalar()
+        next_seq = 1 if max_seq is None else max_seq + 1
+
+        timecard = SupporterTimecard(
+            supporter_id=supporter_id,
+            work_date=today,
+            office_id=office_id,
+            office_service_configuration_id=osc_id,
+            location_type=location_type,
+            location_detail=location_detail,
+            sequence_no=next_seq,
+            check_in=now
+        )
+        self.db.add(timecard)
+        return timecard
+
+    def clock_out(self, supporter_id: int, timecard_id: int = None, break_minutes: int = 0) -> SupporterTimecard:
+        if timecard_id is None:
+            timecard = self.get_ongoing_timecard(supporter_id)
+            if not timecard:
+                raise AttendanceNotFoundError("Timecard not found")
+            timecard_id = timecard.id
+            
+        timecard = self.db.query(SupporterTimecard).get(timecard_id)
+        if not timecard or timecard.supporter_id != supporter_id:
+            raise AttendanceNotFoundError("Timecard not found")
+
+        if timecard.check_out:
+            raise AttendanceConflictError("Already clocked out")
+
+        now = datetime.now()
+
+        if timecard.check_in and now <= timecard.check_in:
+            raise AttendanceValidationError("check_out must be after check_in")
+
+        if break_minutes < 0:
+            raise AttendanceValidationError("break_minutes cannot be negative")
+
+        if timecard.check_in:
+            duration_mins = (now - timecard.check_in).total_seconds() / 60
+            if break_minutes > duration_mins:
+                raise AttendanceValidationError("break_minutes cannot exceed worked duration")
+
+        if self.check_overlap(supporter_id, start_time=timecard.check_in, end_time=now, exclude_timecard_id=timecard.id):
+            raise AttendanceConflictError("Timecard overlaps with existing completed record")
+
+        timecard.check_out = now
+        timecard.total_break_minutes = break_minutes
+        
+        # calc scheduled_work_minutes
+        timecard.scheduled_work_minutes = 0
+        if timecard.check_in:
+            duration = timecard.check_out - timecard.check_in
+            total_mins = int(duration.total_seconds() / 60)
+            actual_work_mins = max(0, total_mins - break_minutes)
+            timecard.scheduled_work_minutes = actual_work_mins
+
+        return timecard
 
     def process_attendance_correction(self, request_id: int, approver_id: int, is_approved: bool):
         """
