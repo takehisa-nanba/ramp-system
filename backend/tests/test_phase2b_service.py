@@ -11,7 +11,8 @@ from backend.app.services.attendance_service import AttendanceService
 from backend.app.services.daily_log_service import DailyLogService
 from backend.app.domain.attendance.exceptions import AttendanceConflictError, AttendanceValidationError
 
-PG_TEST_DB_URL = os.environ.get('TEST_DATABASE_URL', 'postgresql://postgres:postgres@localhost:5432/ramp_db_test_phase2b')
+PG_TEST_DB_URL = os.environ.get('TEST_DATABASE_URL')
+assert PG_TEST_DB_URL, "TEST_DATABASE_URL must be set"
 
 class Phase2BTestConfig(Config):
     TESTING = True

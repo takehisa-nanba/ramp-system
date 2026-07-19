@@ -21,6 +21,18 @@ def allocate_activity():
     supporter_id = int(identity.split(':')[1])
     data = request.get_json() or {}
     
+    required_fields = [
+        "supporter_timecard_id",
+        "office_service_configuration_id",
+        "job_title_id",
+        "staff_activity_master_id",
+        "allocation_recording_mode"
+    ]
+    for field in required_fields:
+        if field not in data:
+            from backend.app.domain.attendance.exceptions import AttendanceValidationError
+            raise AttendanceValidationError(f"Missing required field: {field}")
+
     svc = DailyLogService()
     allocation = svc.record_activity_allocation(supporter_id, data)
     db.session.commit()

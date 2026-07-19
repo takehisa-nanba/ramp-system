@@ -30,13 +30,15 @@ def setup_teardown_migration_db():
         conn.execute(text(f"DROP DATABASE IF EXISTS {db_name}"))
 
 def run_alembic(command, target=None):
+    from pathlib import Path
+    root_dir = str(Path(__file__).parent.parent.parent.resolve())
     cmd = ["flask", "db", command, "-d", MIGRATIONS_DIR]
     if target:
         cmd.append(target)
     env = os.environ.copy()
     env["DATABASE_URL"] = PG_MIGRATION_DB_URL
     env["FLASK_APP"] = "backend.app:create_app"
-    result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd="C:/Users/nanba/Desktop/ramp-system")
+    result = subprocess.run(cmd, env=env, capture_output=True, text=True, cwd=root_dir)
     return result
 
 def get_current_revision():

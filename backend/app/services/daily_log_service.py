@@ -1,6 +1,7 @@
 from backend.app.extensions import db
 from backend.app.models import StaffActivityMaster, UserDailyLog, SupportRecord, StaffActivityAllocationLog, User, IndividualSupportGoal, ShortTermGoal, LongTermGoal, SupportPlan, AuditActionLog
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
 import logging
 from backend.app.utils.errors import ValidationError
 
@@ -171,7 +172,7 @@ class DailyLogService:
     def record_activity_allocation(self, supporter_id: int, data: dict):
         from backend.app.models import SupporterTimecard
         from backend.app.domain.attendance.exceptions import (
-            AttendanceValidationError, AttendanceNotFoundError, AttendanceConflictError
+            AttendanceValidationError, AttendanceNotFoundError, AttendanceConflictError, AttendanceForbiddenError
         )
 
         mode = data.get('allocation_recording_mode')
@@ -193,7 +194,9 @@ class DailyLogService:
         if osc_id:
             from backend.app.models import OfficeServiceConfiguration
             osc = db.session.query(OfficeServiceConfiguration).get(osc_id)
-            if osc and osc.office_id != timecard.office_id:
+            if not osc:
+                raise AttendanceNotFoundError("Service configuration not found")
+            if osc.office_id != timecard.office_id:
                 raise AttendanceValidationError("Office mismatch between timecard and service configuration")
 
         job_title_id = data.get('job_title_id')
@@ -207,7 +210,7 @@ class DailyLogService:
                 (SupporterJobAssignment.end_date >= timecard.work_date) | (SupporterJobAssignment.end_date == None)
             ).first()
             if not valid_assignment:
-                raise AttendanceValidationError("Invalid or inactive job assignment for the given date")
+                raise AttendanceForbiddenError("Invalid or inactive job assignment for the given date")
 
         allocated_minutes = 0
         start_time = None
@@ -220,8 +223,8 @@ class DailyLogService:
                 raise AttendanceValidationError("allocation_start_time and allocation_end_time are required for TIME_RANGE")
             
             # ISO string to datetime parsing
-            start_time = datetime.fromisoformat(start_str.replace('Z', '+00:00')).replace(tzinfo=None)
-            end_time = datetime.fromisoformat(end_str.replace('Z', '+00:00')).replace(tzinfo=None)
+            start_time = datetime.fromisoformat(start_str.replace('Z', '+00:00')).astimezone(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
+            end_time = datetime.fromisoformat(end_str.replace('Z', '+00:00')).astimezone(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
             
             if start_time >= end_time:
                 raise AttendanceValidationError("start_time must be before end_time")

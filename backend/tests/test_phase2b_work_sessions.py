@@ -129,41 +129,32 @@ def test_concurrent_clock_in(app, engine, setup_data):
     office_id = setup_data['office_id']
 
     Session = scoped_session(sessionmaker(bind=engine))
-    
-    results = []
-    def worker():
-        session = Session()
-        try:
-            svc = AttendanceService(session)
-            timecard = svc.clock_in(supporter_id, office_id, "OFFICE", "Concurrent Test")
-            session.commit()
-            results.append("SUCCESS")
-        except Exception as e:
-            session.rollback()
-            results.append(f"ERROR: {str(e)}")
-        finally:
-            Session.remove()
+def test_concurrent_clock_in(app, auth_headers, setup_data):
+    import concurrent.futures
 
-    threads = []
-    for _ in range(5):
-        t = threading.Thread(target=worker)
-        threads.append(t)
-        t.start()
+    def hit_api():
+        client = app.test_client()
+        return client.post('/api/attendance/clock-in', headers=auth_headers, json={
+            "office_id": setup_data['office_id'],
+            "location_type": "OFFICE"
+        })
 
-    for t in threads:
-        t.join()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(hit_api) for _ in range(2)]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
-    # Verify results: Only 1 SUCCESS, others should be 409 Conflict
-    successes = [r for r in results if r == "SUCCESS"]
-    assert len(successes) == 1, f"Expected 1 success, got: {results}"
-    
+    status_codes = [r.status_code for r in results]
+    assert status_codes.count(201) == 1, f"Expected one 201, got {status_codes}"
+    assert status_codes.count(409) == 1, f"Expected one 409, got {status_codes}"
+
     with app.app_context():
-        ongoing = SupporterTimecard.query.filter_by(supporter_id=supporter_id, check_out=None).all()
+        from backend.app.services.attendance_service import AttendanceService
+        ongoing = SupporterTimecard.query.filter_by(supporter_id=setup_data['supporter_id'], check_out=None).all()
         assert len(ongoing) == 1, "There should be exactly 1 ongoing timecard"
         
         # Clock out to clean up
         svc = AttendanceService(db.session)
-        svc.clock_out(supporter_id, timecard_id=ongoing[0].id, break_minutes=0)
+        svc.clock_out(setup_data['supporter_id'], timecard_id=ongoing[0].id, break_minutes=0)
         db.session.commit()
 
 def test_overlapping_time_range_allocations(app, setup_data):

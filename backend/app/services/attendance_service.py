@@ -406,12 +406,10 @@ class AttendanceService:
         try:
             self.db.flush()
         except IntegrityError as e:
-            self.db.rollback()
             constraint = getattr(getattr(e, "orig", None), "diag", None)
-            if constraint and getattr(constraint, "constraint_name", None) in ("uq_supporter_ongoing_timecard", "uq_supporter_timecard_seq"):
+            if constraint and getattr(constraint, "constraint_name", None) in ("uq_supporter_ongoing_timecard", "uq_supporter_timecards_supporter_date_seq"):
                 raise AttendanceConflictError("Already clocked in or sequence conflict")
             raise e
-            
         return timecard
 
     def clock_out(self, supporter_id: int, timecard_id: int = None, break_minutes: int = 0) -> SupporterTimecard:
