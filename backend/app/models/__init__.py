@@ -50,6 +50,18 @@ from backend.app.models.core.audit_log import (
 from backend.app.models.core.holistic_support_policy import (
     HolisticSupportPolicy
 )
+
+# --- 3. staffing パッケージ (Phase 2A Additive Schema) ---
+from backend.app.models.staffing import (
+    IntegratedServiceOperation,
+    IntegratedServiceOperationMember,
+    StaffingCalculationRule,
+    StaffingCalculationException,
+    StaffingCalculationRun,
+    StaffingCalculationResult,
+    StaffingCalculationResultException
+)
+
 from backend.app.models.core.session_management import (
     SessionLock # PII揮発性のためのモデル
 )

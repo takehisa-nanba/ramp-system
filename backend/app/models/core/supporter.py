@@ -179,6 +179,12 @@ class SupporterTimecard(db.Model):
     
     work_date = Column(Date, nullable=False, index=True)
     
+    # [Phase 2A Additive Columns] 物理的な勤務区間の新定義
+    office_id = Column(Integer, ForeignKey('office_settings.id'), nullable=True, index=True)
+    sequence_no = Column(Integer, nullable=True) # Phase 2Aではnullable
+    location_type = Column(String(50), nullable=True)
+    location_detail = Column(Text, nullable=True)
+    
     # --- 実績時間 ---
     check_in = Column(DateTime) 
     check_out = Column(DateTime)
@@ -225,16 +231,21 @@ class SupporterJobAssignment(db.Model):
     # ★ 常勤換算割合の明示
     assigned_minutes = Column(Integer, nullable=False)
     
+    # [Phase 2A Additive Columns] 新設カラム (コピーなし、デフォルトなし)
+    weekly_assigned_minutes = Column(Integer, nullable=True)
+    assignment_mode = Column(String(20), nullable=True)
+    
     # --- サビ管みなし配置の証跡 ---
     is_deemed_assignment = Column(Boolean, default=False) # みなし配置フラグ
     deemed_expiry_date = Column(Date) # みなし期限
     
-    supporter = db.relationship('Supporter', back_populates='job_assignments')
-    job_title = db.relationship('JobTitleMaster', back_populates='assignments')
-    
     __table_args__ = (
+        db.CheckConstraint('weekly_assigned_minutes IS NULL OR weekly_assigned_minutes >= 0', name='chk_weekly_assigned_minutes_positive'),
         UniqueConstraint('supporter_id', 'job_title_id', 'start_date', 'office_service_configuration_id', name='uq_supporter_job_assignment'),
     )
+    
+    supporter = db.relationship('Supporter', back_populates='job_assignments')
+    job_title = db.relationship('JobTitleMaster', back_populates='assignments')
 
 
 # ====================================================================
@@ -282,8 +293,22 @@ class StaffActivityAllocationLog(db.Model):
     # 合計時間 (秒)
     allocated_duration_seconds = Column(Integer, nullable=False, default=0)
     
+    # [Phase 2A Additive Columns] ハイブリッドC案のための新設カラム
+    supporter_timecard_id = Column(Integer, ForeignKey('supporter_timecards.id'), nullable=True, index=True)
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
+    job_title_id = Column(Integer, ForeignKey('job_title_master.id'), nullable=True)
+    allocation_type = Column(String(50), nullable=True)
+    allocation_recording_mode = Column(String(20), nullable=True)
+    allocated_minutes = Column(Integer, nullable=True)
+    allocation_start_time = Column(DateTime, nullable=True)
+    allocation_end_time = Column(DateTime, nullable=True)
+    
     # 管理業務フラグ（同時刻の二重計上の例外判定などに使用）
     is_governance_task = Column(Boolean, default=False)
+    
+    __table_args__ = (
+        db.CheckConstraint('allocated_minutes IS NULL OR allocated_minutes >= 0', name='chk_allocated_minutes_positive'),
+    )
     
     # --- 承認 ---
     approver_id = Column(Integer, ForeignKey('supporters.id'))
