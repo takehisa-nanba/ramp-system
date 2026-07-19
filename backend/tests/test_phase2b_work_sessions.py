@@ -17,7 +17,8 @@ from backend.app.services.daily_log_service import DailyLogService
 from backend.app.domain.attendance.exceptions import AttendanceConflictError
 
 # PostgreSQL test DB URL
-PG_TEST_DB_URL = os.environ.get('SQLALCHEMY_DATABASE_URI', 'postgresql://postgres:postgres@localhost:5432/ramp_db_test_phase2b')
+PG_TEST_DB_URL = os.environ.get('TEST_DATABASE_URL')
+assert PG_TEST_DB_URL, 'TEST_DATABASE_URL must be set'
 
 class Phase2BTestConfig(Config):
     TESTING = True
@@ -58,12 +59,12 @@ def setup_data(app):
         db.session.flush()
 
         office = OfficeSetting(
-            corporation_id=corp.id, office_name="Test Office", 
+            corporation_id=corp.id, office_name="Test Office",
             municipality_id=muni.id, full_time_weekly_minutes=2400
         )
         db.session.add(office)
         db.session.flush()
-        
+
         from backend.app.models import ServiceTypeMaster
         service_type = db.session.query(ServiceTypeMaster).filter_by(service_code="TEST-001").first()
         if not service_type:
@@ -72,11 +73,11 @@ def setup_data(app):
             db.session.flush()
 
         osc = OfficeServiceConfiguration(
-            office_id=office.id, 
-            service_type_master_id=service_type.id, 
+            office_id=office.id,
+            service_type_master_id=service_type.id,
             jigyosho_bango="1234567890",
             capacity=20,
-            default_start_time="09:00", 
+            default_start_time="09:00",
             default_end_time="18:00"
         )
         db.session.add(osc)
@@ -85,7 +86,7 @@ def setup_data(app):
         supporter = Supporter(
             staff_code="T001", last_name="Test", first_name="Staff",
             last_name_kana="テスト", first_name_kana="スタッフ",
-            office_id=office.id, employment_type="FULL_TIME", 
+            office_id=office.id, employment_type="FULL_TIME",
             weekly_scheduled_minutes=2400, hire_date=date(2025, 1, 1)
         )
         db.session.add(supporter)
@@ -120,42 +121,6 @@ def setup_data(app):
             "osc_id": osc.id
         }
 
-def test_concurrent_clock_in(app, engine, setup_data):
-    """
-    Test concurrent clock_in requests to ensure safe sequence_no generation 
-    and no multiple ongoing timecards.
-    """
-    supporter_id = setup_data['supporter_id']
-    office_id = setup_data['office_id']
-
-    Session = scoped_session(sessionmaker(bind=engine))
-def test_concurrent_clock_in(app, auth_headers, setup_data):
-    import concurrent.futures
-
-    def hit_api():
-        client = app.test_client()
-        return client.post('/api/attendance/clock-in', headers=auth_headers, json={
-            "office_id": setup_data['office_id'],
-            "location_type": "OFFICE"
-        })
-
-    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-        futures = [executor.submit(hit_api) for _ in range(2)]
-        results = [f.result() for f in concurrent.futures.as_completed(futures)]
-
-    status_codes = [r.status_code for r in results]
-    assert status_codes.count(201) == 1, f"Expected one 201, got {status_codes}"
-    assert status_codes.count(409) == 1, f"Expected one 409, got {status_codes}"
-
-    with app.app_context():
-        from backend.app.services.attendance_service import AttendanceService
-        ongoing = SupporterTimecard.query.filter_by(supporter_id=setup_data['supporter_id'], check_out=None).all()
-        assert len(ongoing) == 1, "There should be exactly 1 ongoing timecard"
-        
-        # Clock out to clean up
-        svc = AttendanceService(db.session)
-        svc.clock_out(setup_data['supporter_id'], timecard_id=ongoing[0].id, break_minutes=0)
-        db.session.commit()
 
 def test_overlapping_time_range_allocations(app, setup_data):
     """
@@ -168,9 +133,9 @@ def test_overlapping_time_range_allocations(app, setup_data):
     with app.app_context():
         svc_att = AttendanceService(db.session)
         svc_dl = DailyLogService()
-        
+
         now = datetime.now()
-        
+
         # Clock in manually (simulating a bit in the past)
         tc = SupporterTimecard(
             supporter_id=supporter_id,
@@ -184,11 +149,11 @@ def test_overlapping_time_range_allocations(app, setup_data):
         )
         db.session.add(tc)
         db.session.commit()
-        
+
         # Add first allocation: 1 hour ago to 30 mins ago
         start1 = now - timedelta(hours=1)
         end1 = now - timedelta(minutes=30)
-        
+
         alloc1 = svc_dl.record_activity_allocation(supporter_id, {
             "allocation_recording_mode": "TIME_RANGE",
             "supporter_timecard_id": tc.id,
@@ -197,11 +162,11 @@ def test_overlapping_time_range_allocations(app, setup_data):
             "allocation_end_time": end1.isoformat() + "+09:00"
         })
         db.session.commit()
-        
+
         # Attempt to add overlapping allocation: 45 mins ago to 15 mins ago
         start2 = now - timedelta(minutes=45)
         end2 = now - timedelta(minutes=15)
-        
+
         with pytest.raises(AttendanceConflictError) as excinfo:
             svc_dl.record_activity_allocation(supporter_id, {
                 "allocation_recording_mode": "TIME_RANGE",
@@ -211,7 +176,7 @@ def test_overlapping_time_range_allocations(app, setup_data):
                 "allocation_end_time": end2.isoformat() + "+09:00"
             })
         assert "overlaps" in str(excinfo.value), "Should raise overlap error"
-        
+
         db.session.rollback()
 
 def test_minutes_only_allocation(app, setup_data):
@@ -224,7 +189,7 @@ def test_minutes_only_allocation(app, setup_data):
 
     with app.app_context():
         svc_dl = DailyLogService()
-        
+
         now = datetime.now()
         tc = SupporterTimecard(
             supporter_id=supporter_id,
@@ -245,8 +210,39 @@ def test_minutes_only_allocation(app, setup_data):
             "allocated_minutes": 15
         })
         db.session.commit()
-        
+
         assert alloc.allocated_minutes == 15
         assert alloc.allocated_duration_seconds == 900
         assert alloc.allocation_start_time is None
         assert alloc.allocation_end_time is None
+
+
+def test_concurrent_clock_in(app, auth_headers, setup_data):
+    import concurrent.futures
+    from backend.app.models import SupporterTimecard
+    from backend.app.services.attendance_service import AttendanceService
+    from backend.app.extensions import db
+
+    def hit_api():
+        client = app.test_client()
+        return client.post('/api/attendance/clock-in', headers=auth_headers, json={
+            "office_id": setup_data['office_id'],
+            "location_type": "OFFICE"
+        })
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [executor.submit(hit_api) for _ in range(2)]
+        results = [f.result() for f in concurrent.futures.as_completed(futures)]
+
+    status_codes = [r.status_code for r in results]
+    assert status_codes.count(201) == 1, f"Expected one 201, got {status_codes}"
+    assert status_codes.count(409) == 1, f"Expected one 409, got {status_codes}"
+
+    with app.app_context():
+        ongoing = SupporterTimecard.query.filter_by(supporter_id=setup_data['supporter_id'], check_out=None).all()
+        assert len(ongoing) == 1, "There should be exactly 1 ongoing timecard"
+
+        # Clock out to clean up
+        svc = AttendanceService(db.session)
+        svc.clock_out(setup_data['supporter_id'], timecard_id=ongoing[0].id, break_minutes=0)
+        db.session.commit()

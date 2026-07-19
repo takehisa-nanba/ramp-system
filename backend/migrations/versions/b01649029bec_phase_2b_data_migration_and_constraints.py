@@ -90,7 +90,6 @@ def upgrade():
             WHERE check_in IS NOT NULL AND check_out IS NULL
         """)
 
-    pass
 
 def downgrade():
     conn = op.get_bind()
@@ -101,5 +100,3 @@ def downgrade():
     with op.batch_alter_table('supporter_timecards', schema=None) as batch_op:
         batch_op.drop_constraint(batch_op.f('uq_supporter_timecards_supporter_date_seq'), type_='unique')
         batch_op.alter_column('sequence_no', existing_type=sa.INTEGER(), nullable=True)
-        
-    pass

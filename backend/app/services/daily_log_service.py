@@ -197,11 +197,14 @@ class DailyLogService:
             if not osc:
                 raise AttendanceNotFoundError("Service configuration not found")
             if osc.office_id != timecard.office_id:
-                raise AttendanceValidationError("Office mismatch between timecard and service configuration")
+                raise AttendanceForbiddenError("Office mismatch between timecard and service configuration")
 
         job_title_id = data.get('job_title_id')
         if job_title_id:
-            from backend.app.models import SupporterJobAssignment
+            from backend.app.models import SupporterJobAssignment, JobTitleMaster
+            job_title = db.session.query(JobTitleMaster).get(job_title_id)
+            if not job_title:
+                raise AttendanceNotFoundError("Job title not found")
             valid_assignment = db.session.query(SupporterJobAssignment).filter(
                 SupporterJobAssignment.supporter_id == supporter_id,
                 SupporterJobAssignment.job_title_id == job_title_id,
