@@ -338,6 +338,22 @@ class AttendanceService:
         return None
 
     def clock_in(self, supporter_id: int, office_id: int, location_type: str, location_detail: str) -> SupporterTimecard:
+        from sqlalchemy.exc import IntegrityError
+        from zoneinfo import ZoneInfo
+        from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
+        
+        supporter = (
+            self.db.query(Supporter)
+            .filter(Supporter.id == supporter_id)
+            .with_for_update()
+            .one_or_none()
+        )
+        if not supporter:
+            raise AttendanceNotFoundError("Supporter not found")
+
+        now = datetime.now(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
+        today = now.date()
+
         ongoing = self.get_ongoing_timecard(supporter_id)
         if ongoing:
             raise AttendanceConflictError("Already clocked in")
@@ -346,32 +362,28 @@ class AttendanceService:
         if location_type not in valid_locations:
             raise AttendanceValidationError(f"Invalid location_type: {location_type}")
 
-        now = datetime.now()
-        today = now.date()
-
         if self.check_overlap(supporter_id, start_time=now):
             raise AttendanceConflictError("Timecard overlaps with existing completed record")
 
-        # Config ID の取得 (一番単純な実装、実際は割り当てを見るべきだが)
-        from backend.app.models.core.office import OfficeServiceConfiguration
         from backend.app.models import SupporterJobAssignment
+        from backend.app.models.core.office import OfficeServiceConfiguration
         
-        assignments = self.db.query(SupporterJobAssignment).filter(
+        assignments = self.db.query(SupporterJobAssignment).join(
+            OfficeServiceConfiguration,
+            SupporterJobAssignment.office_service_configuration_id == OfficeServiceConfiguration.id
+        ).filter(
             SupporterJobAssignment.supporter_id == supporter_id,
+            OfficeServiceConfiguration.office_id == office_id,
             SupporterJobAssignment.start_date <= today,
             (SupporterJobAssignment.end_date >= today) | (SupporterJobAssignment.end_date == None)
         ).all()
         
-        osc_id = None
-        if assignments:
-            osc_id = assignments[0].office_service_configuration_id
-        else:
-            # フォールバック
-            osc_list = self.db.query(OfficeServiceConfiguration).filter_by(office_id=office_id).all()
-            if len(osc_list) == 1:
-                osc_id = osc_list[0].id
-            else:
-                raise AttendanceValidationError("Invalid office_id or multiple configurations found")
+        if len(assignments) == 0:
+            raise AttendanceForbiddenError("Not assigned to this office")
+        elif len(assignments) > 1:
+            raise AttendanceValidationError("Multiple active assignments in this office")
+            
+        osc_id = assignments[0].office_service_configuration_id
 
         from sqlalchemy import func
         max_seq = self.db.query(func.max(SupporterTimecard.sequence_no)).filter(
@@ -391,6 +403,15 @@ class AttendanceService:
             check_in=now
         )
         self.db.add(timecard)
+        try:
+            self.db.flush()
+        except IntegrityError as e:
+            self.db.rollback()
+            constraint = getattr(getattr(e, "orig", None), "diag", None)
+            if constraint and getattr(constraint, "constraint_name", None) in ("uq_supporter_ongoing_timecard", "uq_supporter_timecard_seq"):
+                raise AttendanceConflictError("Already clocked in or sequence conflict")
+            raise e
+            
         return timecard
 
     def clock_out(self, supporter_id: int, timecard_id: int = None, break_minutes: int = 0) -> SupporterTimecard:
@@ -407,7 +428,8 @@ class AttendanceService:
         if timecard.check_out:
             raise AttendanceConflictError("Already clocked out")
 
-        now = datetime.now()
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
 
         if timecard.check_in and now <= timecard.check_in:
             raise AttendanceValidationError("check_out must be after check_in")

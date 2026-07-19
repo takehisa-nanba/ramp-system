@@ -119,9 +119,10 @@ class DailyLogService:
             # 互換性のため: 現在のtimecardを取得
             from backend.app.models import SupporterTimecard
             from backend.app.domain.attendance.exceptions import AttendanceValidationError
+            
             ongoing_timecards = db.session.query(SupporterTimecard).filter(
                 SupporterTimecard.supporter_id == supporter_id,
-                SupporterTimecard.work_date == log_date,
+                SupporterTimecard.check_in != None,
                 SupporterTimecard.check_out == None
             ).all()
             

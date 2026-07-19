@@ -84,7 +84,7 @@ def setup_data(app):
 
         job_assignment = SupporterJobAssignment(
             supporter_id=supporter.id, office_service_configuration_id=osc.id, job_title_id=job_title.id,
-            start_date=date(2025, 1, 1), end_date=date(2025, 12, 31),
+            start_date=date(2025, 1, 1), end_date=None,
             assigned_minutes=2400
         )
         db.session.add(job_assignment)

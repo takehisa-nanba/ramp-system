@@ -86,6 +86,31 @@ def setup_data(app):
         )
         db.session.add(supporter2)
 
+        from backend.app.models import JobTitleMaster, SupporterJobAssignment
+        job_title = db.session.query(JobTitleMaster).filter_by(title_name="Test Job").first()
+        if not job_title:
+            job_title = JobTitleMaster(title_name="Test Job")
+            db.session.add(job_title)
+            db.session.flush()
+
+        assignment1 = SupporterJobAssignment(
+            supporter_id=supporter.id,
+            job_title_id=job_title.id,
+            office_service_configuration_id=osc.id,
+            start_date=date(2025, 1, 1),
+            assigned_minutes=2400
+        )
+        db.session.add(assignment1)
+
+        assignment2 = SupporterJobAssignment(
+            supporter_id=supporter2.id,
+            job_title_id=job_title.id,
+            office_service_configuration_id=osc.id,
+            start_date=date(2025, 1, 1),
+            assigned_minutes=2400
+        )
+        db.session.add(assignment2)
+
         db.session.commit()
 
         return {
@@ -126,11 +151,25 @@ def test_clock_in_invalid_location_type(app, auth_headers, setup_data):
 
 def test_clock_in_unauthorized_office(app, auth_headers, setup_data):
     client = app.test_client()
+    with app.app_context():
+        from backend.app.models import SupporterJobAssignment
+        assignments = db.session.query(SupporterJobAssignment).all()
+        print(f"\nALL ASSIGNMENTS: {[(a.id, a.supporter_id, a.office_service_configuration_id, a.start_date, a.end_date) for a in assignments]}")
+        from backend.app.models.core.office import OfficeServiceConfiguration
+        oscs = db.session.query(OfficeServiceConfiguration).all()
+        print(f"ALL OSCS: {[(o.id, o.office_id) for o in oscs]}")
+        from datetime import datetime
+        from zoneinfo import ZoneInfo
+        now = datetime.now(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
+        today = now.date()
+        print(f"TODAY: {today}")
+
     resp = client.post('/api/attendance/clock-in', headers=auth_headers, json={
         "office_id": setup_data['other_office_id'],
         "location_type": "OFFICE"
     })
-    assert resp.status_code == 400
+    
+    assert resp.status_code == 403
 
 def test_old_dashboard_clock_in_success(app, auth_headers):
     client = app.test_client()

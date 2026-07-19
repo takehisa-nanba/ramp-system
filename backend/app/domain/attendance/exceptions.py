@@ -3,21 +3,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 class AttendanceDomainError(Exception):
-    status_code = 400
+    """Base exception for all attendance domain errors."""
+    status_code = 500
     def __init__(self, message="Attendance domain error"):
         super().__init__(message)
         self.message = message
 
 class AttendanceValidationError(AttendanceDomainError):
+    """Validation errors, maps to HTTP 400."""
     status_code = 400
 
 class AttendanceForbiddenError(AttendanceDomainError):
+    """Forbidden actions, maps to HTTP 403."""
     status_code = 403
 
 class AttendanceNotFoundError(AttendanceDomainError):
+    """Resource not found, maps to HTTP 404."""
     status_code = 404
 
 class AttendanceConflictError(AttendanceDomainError):
+    """State conflict, maps to HTTP 409."""
     status_code = 409
 
 def handle_attendance_errors(func):

@@ -3,6 +3,7 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from backend.app.extensions import db
 from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern, SupporterJobAssignment
 from backend.app.services.attendance_service import AttendanceService
@@ -273,7 +274,7 @@ def clock_in():
         "msg": "Clocked in successfully",
         "timecard_id": timecard.id,
         "sequence_no": timecard.sequence_no,
-        "check_in": timecard.check_in.isoformat() + "+09:00"
+        "check_in": timecard.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
     }), 201
 
 @attendance_bp.route('/timecards/<int:timecard_id>/clock-out', methods=['POST'])
@@ -294,7 +295,7 @@ def clock_out(timecard_id):
     return jsonify({
         "msg": "Clocked out successfully",
         "timecard_id": timecard.id,
-        "check_out": timecard.check_out.isoformat() + "+09:00"
+        "check_out": timecard.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
     }), 200
 
 @attendance_bp.route('/timecards', methods=['GET'])
@@ -327,8 +328,8 @@ def get_timecards():
             "sequence_no": tc.sequence_no,
             "office_id": tc.office_id,
             "location_type": tc.location_type,
-            "check_in": tc.check_in.isoformat() + "+09:00" if tc.check_in else None,
-            "check_out": tc.check_out.isoformat() + "+09:00" if tc.check_out else None,
+            "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
+            "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
             "total_break_minutes": tc.total_break_minutes
         })
         

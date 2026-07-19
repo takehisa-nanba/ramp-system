@@ -93,8 +93,26 @@ def setup_data(app):
 
         tag = StaffActivityMaster(activity_name="Direct Support Test", is_direct_support=False)
         db.session.add(tag)
-        db.session.commit()
 
+        from backend.app.models import JobTitleMaster, SupporterJobAssignment
+        job_title = db.session.query(JobTitleMaster).filter_by(title_name="Test Job").first()
+        if not job_title:
+            job_title = JobTitleMaster(title_name="Test Job")
+            db.session.add(job_title)
+            db.session.flush()
+
+        assignment1 = SupporterJobAssignment(
+            supporter_id=supporter.id,
+            job_title_id=job_title.id,
+            office_service_configuration_id=osc.id,
+            start_date=date(2025, 1, 1),
+            assigned_minutes=2400
+        )
+        db.session.add(assignment1)
+
+
+
+        db.session.commit()
         return {
             "supporter_id": supporter.id,
             "office_id": office.id,

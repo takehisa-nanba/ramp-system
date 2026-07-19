@@ -4,6 +4,7 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app.extensions import db
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from backend.app.services.daily_log_service import DailyLogService
 from backend.app.domain.attendance.exceptions import handle_attendance_errors
 

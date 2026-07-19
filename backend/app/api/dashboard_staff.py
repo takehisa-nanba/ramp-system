@@ -6,6 +6,7 @@ from backend.app.domain.attendance.exceptions import AttendanceDomainError
 from backend.app.extensions import db
 from backend.app.models import Supporter, StaffActionLog, StaffDailyReport, SupporterTimecard, StaffDailyShift
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 
 dashboard_staff_bp = Blueprint('dashboard_staff', __name__, url_prefix='/api/dashboard/staff')
 
@@ -77,12 +78,12 @@ def get_staff_status():
             "name": f"{supporter.last_name} {supporter.first_name}",
             "status": status,
             "shift": {
-                "start": shift.planned_start_time.isoformat() + "+09:00" if shift and shift.planned_start_time else None,
-                "end": shift.planned_end_time.isoformat() + "+09:00" if shift and shift.planned_end_time else None
+                "start": shift.planned_start_time.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if shift and shift.planned_start_time else None,
+                "end": shift.planned_end_time.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if shift and shift.planned_end_time else None
             } if shift else None,
             "timecard": {
-                "check_in": rep_timecard.check_in.isoformat() + "+09:00" if rep_timecard and rep_timecard.check_in else None,
-                "check_out": rep_timecard.check_out.isoformat() + "+09:00" if rep_timecard and rep_timecard.check_out else None,
+                "check_in": rep_timecard.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if rep_timecard and rep_timecard.check_in else None,
+                "check_out": rep_timecard.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if rep_timecard and rep_timecard.check_out else None,
                 "total_worked_seconds": total_worked_seconds
             } if rep_timecard or completed_list else None
         })
@@ -236,7 +237,7 @@ def clock_in():
             "msg": "Clocked in successfully",
             "timecard_id": timecard.id,
             "sequence_no": timecard.sequence_no,
-            "check_in": timecard.check_in.isoformat() + "+09:00"
+            "check_in": timecard.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
         }), 201
     except PermissionError as e:
         db.session.rollback()
@@ -269,7 +270,7 @@ def clock_out():
         return jsonify({
             "msg": "Clocked out successfully",
             "timecard_id": timecard.id,
-            "check_out": timecard.check_out.isoformat() + "+09:00"
+            "check_out": timecard.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
         }), 200
 
     except AttendanceDomainError as e:
