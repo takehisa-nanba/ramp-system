@@ -186,14 +186,14 @@ class DailyLogService:
         if not tag_id:
             raise AttendanceValidationError("staff_activity_master_id is required")
 
-        timecard = db.session.query(SupporterTimecard).get(timecard_id)
+        timecard = db.session.get(SupporterTimecard, timecard_id)
         if not timecard or timecard.supporter_id != supporter_id:
             raise AttendanceNotFoundError("Timecard not found or unauthorized")
 
         osc_id = data.get('office_service_configuration_id')
         if osc_id:
             from backend.app.models import OfficeServiceConfiguration
-            osc = db.session.query(OfficeServiceConfiguration).get(osc_id)
+            osc = db.session.get(OfficeServiceConfiguration, osc_id)
             if not osc:
                 raise AttendanceNotFoundError("Service configuration not found")
             if osc.office_id != timecard.office_id:
@@ -202,7 +202,7 @@ class DailyLogService:
         job_title_id = data.get('job_title_id')
         if job_title_id:
             from backend.app.models import SupporterJobAssignment, JobTitleMaster
-            job_title = db.session.query(JobTitleMaster).get(job_title_id)
+            job_title = db.session.get(JobTitleMaster, job_title_id)
             if not job_title:
                 raise AttendanceNotFoundError("Job title not found")
             valid_assignment = db.session.query(SupporterJobAssignment).filter(

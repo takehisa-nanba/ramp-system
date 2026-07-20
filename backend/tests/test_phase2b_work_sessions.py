@@ -3,6 +3,7 @@
 import pytest
 import os
 import threading
+from flask_jwt_extended import create_access_token
 from datetime import datetime, date, timedelta
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, scoped_session
@@ -121,6 +122,14 @@ def setup_data(app):
             "osc_id": osc.id
         }
 
+@pytest.fixture
+def auth_headers(app, setup_data):
+    with app.app_context():
+        token = create_access_token(
+            identity=f"staff:{setup_data['supporter_id']}"
+        )
+        return {"Authorization": f"Bearer {token}"}
+
 
 def test_overlapping_time_range_allocations(app, setup_data):
     """
@@ -163,6 +172,17 @@ def test_overlapping_time_range_allocations(app, setup_data):
         })
         db.session.commit()
 
+        alloc1_id = alloc1.id
+        initial_count = db.session.query(StaffActivityAllocationLog).filter_by(
+            supporter_timecard_id=tc.id
+        ).count()
+        initial_state = (
+            alloc1.allocation_start_time,
+            alloc1.allocation_end_time,
+            alloc1.allocated_duration_seconds,
+        )
+        engine = db.engine
+
         # Attempt to add overlapping allocation: 45 mins ago to 15 mins ago
         start2 = now - timedelta(minutes=45)
         end2 = now - timedelta(minutes=15)
@@ -178,6 +198,28 @@ def test_overlapping_time_range_allocations(app, setup_data):
         assert "overlaps" in str(excinfo.value), "Should raise overlap error"
 
         db.session.rollback()
+
+        Session = sessionmaker(bind=engine)
+        independent_session = Session()
+        try:
+            current_count = independent_session.query(
+                StaffActivityAllocationLog
+            ).filter_by(
+                supporter_timecard_id=tc.id
+            ).count()
+            assert current_count == initial_count
+
+            saved_alloc = independent_session.get(
+                StaffActivityAllocationLog, alloc1_id
+            )
+            assert saved_alloc is not None
+            assert (
+                saved_alloc.allocation_start_time,
+                saved_alloc.allocation_end_time,
+                saved_alloc.allocated_duration_seconds,
+            ) == initial_state
+        finally:
+            independent_session.close()
 
 def test_minutes_only_allocation(app, setup_data):
     """

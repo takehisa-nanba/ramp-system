@@ -419,7 +419,7 @@ class AttendanceService:
                 raise AttendanceNotFoundError("Timecard not found")
             timecard_id = timecard.id
             
-        timecard = self.db.query(SupporterTimecard).get(timecard_id)
+        timecard = self.db.get(SupporterTimecard, timecard_id)
         if not timecard or timecard.supporter_id != supporter_id:
             raise AttendanceNotFoundError("Timecard not found")
 

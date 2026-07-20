@@ -1,42 +1,48 @@
 # backend/app/api/dashboard_staff.py
 
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import jwt_required, get_jwt_identity
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from backend.app.domain.attendance.exceptions import AttendanceDomainError
 from backend.app.extensions import db
 from backend.app.models import Supporter, StaffActionLog, StaffDailyReport, SupporterTimecard, StaffDailyShift
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
+from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope, filter_query_by_tenant_scope
+from backend.app.domain.attendance.exceptions import handle_attendance_errors
 
 dashboard_staff_bp = Blueprint('dashboard_staff', __name__, url_prefix='/api/dashboard/staff')
 
 @dashboard_staff_bp.route('/status', methods=['GET'])
 @jwt_required()
+@handle_attendance_errors
 def get_staff_status():
     """
     ダッシュボード用：今日の職員の勤務状況（シフトと実打刻状況）を取得する
     """
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
+    staff_id = extract_staff_id(identity)
+    claims = get_jwt()
+    scope = resolve_tenant_scope(staff_id, claims.get('role_scopes', []))
         
     import pytz
     tz = pytz.timezone('Asia/Tokyo')
     now = datetime.now(tz)
     today = now.date()
-    
+
     # 本日のシフト
-    shifts = StaffDailyShift.query.filter_by(target_date=today).all()
+    query_shifts = StaffDailyShift.query.filter_by(target_date=today)
     # 本日の全打刻
-    timecards = SupporterTimecard.query.filter_by(work_date=today).all()
-    
-    # 進行中の打刻（日付をまたいでいる可能性を考慮）
-    ongoing_timecards = SupporterTimecard.query.filter(
-        SupporterTimecard.check_in != None,
-        SupporterTimecard.check_out == None
-    ).all()
+    query_tcs = SupporterTimecard.query.filter_by(work_date=today)
+
+    query_tcs, query_shifts, _ = filter_query_by_tenant_scope(scope, query_tcs, query_shifts, requester_id=staff_id)
+
+    shifts = query_shifts.all()
+    timecards = query_tcs.all()
+
+    # 進行中の打刻
+    ongoing_timecards = [tc for tc in timecards if tc.check_in is not None and tc.check_out is None]
     ongoing_map = {tc.supporter_id: tc for tc in ongoing_timecards}
-    
+
     # 本日の打刻をsupporter_idでグループ化し、完了済みのみに絞る
     completed_map = {}
     for tc in timecards:
@@ -44,10 +50,18 @@ def get_staff_status():
             if tc.supporter_id not in completed_map:
                 completed_map[tc.supporter_id] = []
             completed_map[tc.supporter_id].append(tc)
-    
+
     staff_data = []
-    
-    supporters = Supporter.query.filter_by(is_active=True).all()
+
+    from backend.app.models.core.office import OfficeSetting
+    supp_query = Supporter.query.filter_by(is_active=True)
+    if scope['level'] == 'CORPORATE':
+        supp_query = supp_query.join(OfficeSetting, Supporter.office_id == OfficeSetting.id).filter(OfficeSetting.corporation_id == scope['corp_id'])
+    elif scope['self_only']:
+        supp_query = supp_query.filter(Supporter.id == staff_id)
+
+    supporters = supp_query.all()
+
     for supporter in supporters:
         shift = next((s for s in shifts if s.supporter_id == supporter.id), None)
         
@@ -72,7 +86,7 @@ def get_staff_status():
             status = "FINISHED"
         elif shift:
             status = "SCHEDULED"
-            
+
         staff_data.append({
             "supporter_id": supporter.id,
             "name": f"{supporter.last_name} {supporter.first_name}",
@@ -95,16 +109,15 @@ def get_staff_status():
 
 @dashboard_staff_bp.route('/action-logs', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def add_action_log():
     """職員のアクションログ（つぶやき）を追加"""
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
-        
-    supporter_id = int(identity.split(':')[1])
+    staff_id = extract_staff_id(identity)
+    supporter_id = staff_id
     data = request.get_json()
     content = data.get('content')
-    
+
     if not content:
         return jsonify({"msg": "Content is required"}), 400
         
@@ -115,25 +128,24 @@ def add_action_log():
     )
     db.session.add(log)
     db.session.commit()
-    
+
     return jsonify({"msg": "Action log added successfully", "id": log.id}), 201
 
 @dashboard_staff_bp.route('/action-logs/today', methods=['GET'])
 @jwt_required()
+@handle_attendance_errors
 def get_today_action_logs():
     """職員の今日のアクションログ一覧を取得"""
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
-        
-    supporter_id = int(identity.split(':')[1])
+    staff_id = extract_staff_id(identity)
+    supporter_id = staff_id
     today = date.today()
-    
+
     logs = StaffActionLog.query.filter(
         StaffActionLog.supporter_id == supporter_id,
         db.func.date(StaffActionLog.action_timestamp) == today
     ).order_by(StaffActionLog.action_timestamp.desc()).all()
-    
+
     return jsonify([{
         "id": log.id,
         "content": log.action_content,
@@ -143,22 +155,21 @@ def get_today_action_logs():
 
 @dashboard_staff_bp.route('/daily-report/generate', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def generate_daily_report():
     """AIを利用してアクションログから業務日報を下書きする（モック版）"""
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
-        
-    supporter_id = int(identity.split(':')[1])
+    staff_id = extract_staff_id(identity)
+    supporter_id = staff_id
     today = date.today()
-    
+
     # 未処理のログを取得
     unprocessed_logs = StaffActionLog.query.filter(
         StaffActionLog.supporter_id == supporter_id,
         db.func.date(StaffActionLog.action_timestamp) == today,
         StaffActionLog.is_processed_by_ai == False
     ).all()
-    
+
     if not unprocessed_logs:
         return jsonify({"msg": "No unprocessed logs available for today."}), 400
         
@@ -185,7 +196,7 @@ def generate_daily_report():
         db.session.add(report)
         
     db.session.commit()
-    
+
     return jsonify({
         "msg": "Daily report draft generated",
         "report_id": report.id,
@@ -194,31 +205,30 @@ def generate_daily_report():
 
 @dashboard_staff_bp.route('/clock-in', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def clock_in():
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
-    
-    supporter_id = int(identity.split(':')[1])
+    staff_id = extract_staff_id(identity)
+    supporter_id = staff_id
     data = request.get_json() or {}
-    
+
     office_id = data.get('office_id')
     if not office_id:
         from backend.app.models import Supporter, SupporterJobAssignment
         from backend.app.models.core.office import OfficeServiceConfiguration
-        supporter = Supporter.query.get(supporter_id)
+        supporter = db.session.get(Supporter, supporter_id)
         
         valid_offices = set()
         if supporter.office_id:
             valid_offices.add(supporter.office_id)
-            
+
         assignments = SupporterJobAssignment.query.filter_by(supporter_id=supporter_id).all()
         for ja in assignments:
             if ja.office_service_configuration_id:
-                osc = OfficeServiceConfiguration.query.get(ja.office_service_configuration_id)
+                osc = db.session.get(OfficeServiceConfiguration, ja.office_service_configuration_id)
                 if osc:
                     valid_offices.add(osc.office_id)
-                    
+
         if len(valid_offices) == 1:
             office_id = list(valid_offices)[0]
         else:
@@ -226,10 +236,10 @@ def clock_in():
 
     location_type = data.get('location_type', 'OFFICE')
     location_detail = data.get('location_detail', '')
-    
+
     from backend.app.services.attendance_service import AttendanceService
     svc = AttendanceService(db.session)
-    
+
     try:
         timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
         db.session.commit()
@@ -252,18 +262,17 @@ def clock_in():
 
 @dashboard_staff_bp.route('/clock-out', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def clock_out():
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
-    
-    supporter_id = int(identity.split(':')[1])
+    staff_id = extract_staff_id(identity)
+    supporter_id = staff_id
     data = request.get_json() or {}
     break_minutes = data.get('break_minutes', 0)
-    
+
     from backend.app.services.attendance_service import AttendanceService
     svc = AttendanceService(db.session)
-    
+
     try:
         timecard = svc.clock_out(supporter_id, timecard_id=None, break_minutes=break_minutes)
         db.session.commit()
@@ -283,16 +292,16 @@ def clock_out():
 
 @dashboard_staff_bp.route('/seed-shifts', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def seed_shifts():
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
+    staff_id = extract_staff_id(identity)
         
     today = date.today()
-    
+
     # 既存のシフトを削除
     StaffDailyShift.query.filter_by(target_date=today).delete()
-    
+
     supporters = Supporter.query.filter_by(is_active=True).all()
     created = 0
     for s in supporters:

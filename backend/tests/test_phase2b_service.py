@@ -1,11 +1,13 @@
 import pytest
 import os
 from datetime import datetime, date, timedelta
+from sqlalchemy.orm import sessionmaker
 from backend.app import create_app, db
 from backend.config import Config
 from backend.app.models import (
     Supporter, OfficeSetting, Corporation, MunicipalityMaster, SupporterTimecard, OfficeServiceConfiguration, StaffActivityMaster,
-    SupporterJobAssignment, JobTitleMaster, ServiceTypeMaster, SupportRecord, UserDailyLog, User, StatusMaster
+    SupporterJobAssignment, JobTitleMaster, ServiceTypeMaster, SupportRecord, UserDailyLog, User, StatusMaster,
+    StaffActivityAllocationLog
 )
 from backend.app.services.attendance_service import AttendanceService
 from backend.app.services.daily_log_service import DailyLogService
@@ -290,7 +292,8 @@ def test_allocation_validity_period_mismatch(app, setup_data):
         db.session.commit()
         
         # Should raise error because SupporterJobAssignment is not valid in 2023
-        with pytest.raises(AttendanceValidationError):
+        from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
+        with pytest.raises(AttendanceForbiddenError):
             svc.record_activity_allocation(setup_data['supporter_id'], {
                 "supporter_timecard_id": tc.id, "office_service_configuration_id": setup_data['osc_id'], "job_title_id": setup_data['job_title_id'],
                 "staff_activity_master_id": setup_data['tag_id'], "allocated_minutes": 60, "allocation_recording_mode": "MINUTES_ONLY"
@@ -324,13 +327,57 @@ def test_timecard_office_mismatch(app, setup_data):
         db.session.add(tc)
         db.session.commit()
 
+        tc_id = tc.id
+        other_osc_id = other_osc.id
+        initial_count = db.session.query(StaffActivityAllocationLog).filter_by(
+            supporter_timecard_id=tc_id
+        ).count()
+        initial_timecard_state = (
+            tc.office_id,
+            tc.office_service_configuration_id,
+            tc.check_in,
+            tc.check_out,
+        )
+        initial_other_osc_office_id = other_osc.office_id
+        engine = db.engine
+
         # Try to allocate using other_osc.id which belongs to other_office, but timecard is for office_id
-        with pytest.raises(AttendanceValidationError):
+        from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
+        with pytest.raises(AttendanceForbiddenError):
             svc.record_activity_allocation(setup_data['supporter_id'], {
                 "supporter_timecard_id": tc.id, "office_service_configuration_id": other_osc.id, "job_title_id": setup_data['job_title_id'],
                 "staff_activity_master_id": setup_data['tag_id'], "allocated_minutes": 60, "allocation_recording_mode": "MINUTES_ONLY"
             })
             
+        db.session.rollback()
+
+        Session = sessionmaker(bind=engine)
+        independent_session = Session()
+        try:
+            current_count = independent_session.query(
+                StaffActivityAllocationLog
+            ).filter_by(
+                supporter_timecard_id=tc_id
+            ).count()
+            assert current_count == initial_count
+
+            saved_tc = independent_session.get(SupporterTimecard, tc_id)
+            assert saved_tc is not None
+            assert (
+                saved_tc.office_id,
+                saved_tc.office_service_configuration_id,
+                saved_tc.check_in,
+                saved_tc.check_out,
+            ) == initial_timecard_state
+
+            saved_other_osc = independent_session.get(
+                OfficeServiceConfiguration, other_osc_id
+            )
+            assert saved_other_osc is not None
+            assert saved_other_osc.office_id == initial_other_osc_office_id
+        finally:
+            independent_session.close()
+
         db.session.delete(tc)
         db.session.delete(other_osc)
         db.session.delete(other_office)
