@@ -34,7 +34,7 @@ def allocate_activity():
             
         if field in ["office_service_configuration_id", "job_title_id"]:
             val = data.get(field)
-            if val is None or not isinstance(val, int) or val <= 0:
+            if type(val) is not int or val <= 0:
                 from backend.app.domain.attendance.exceptions import AttendanceValidationError
                 raise AttendanceValidationError(f"Invalid value for field: {field}")
 
