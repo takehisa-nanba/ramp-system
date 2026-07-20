@@ -14,11 +14,10 @@ activities_bp = Blueprint('activities', __name__, url_prefix='/api/activities')
 @jwt_required()
 @handle_attendance_errors
 def allocate_activity():
-    identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
+    from backend.app.utils.tenant import extract_staff_id
+    supporter_id = extract_staff_id(get_jwt_identity())
+    if not supporter_id:
         return jsonify({"msg": "Unauthorized"}), 403
-    
-    supporter_id = int(identity.split(':')[1])
     data = request.get_json() or {}
     
     required_fields = [
@@ -32,6 +31,12 @@ def allocate_activity():
         if field not in data:
             from backend.app.domain.attendance.exceptions import AttendanceValidationError
             raise AttendanceValidationError(f"Missing required field: {field}")
+            
+        if field in ["office_service_configuration_id", "job_title_id"]:
+            val = data.get(field)
+            if val is None or not isinstance(val, int) or val <= 0:
+                from backend.app.domain.attendance.exceptions import AttendanceValidationError
+                raise AttendanceValidationError(f"Invalid value for field: {field}")
 
     svc = DailyLogService()
     allocation = svc.record_activity_allocation(supporter_id, data)

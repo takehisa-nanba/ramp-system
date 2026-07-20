@@ -1065,3 +1065,73 @@ def test_dashboard_staff_status_is_isolated_by_corporation(app, setup_data):
     assert setup_data["supporter_id"] in supporter_ids
     assert setup_data["other_supporter_id"] in supporter_ids
     assert other_supporter_id not in supporter_ids
+
+
+
+
+def test_allocate_activity_invalid_identity(app):
+    from flask_jwt_extended import create_access_token
+    from backend.app.models.core.supporter import StaffActivityAllocationLog
+    from backend.app.extensions import db
+    
+    with app.app_context():
+        token = create_access_token(identity="invalid:123", additional_claims={"role_scopes": ["JOB"]})
+        client = app.test_client()
+        
+        initial_count = db.session.query(StaffActivityAllocationLog).count()
+        
+        payload = {
+            "supporter_timecard_id": 1,
+            "office_service_configuration_id": 1,
+            "job_title_id": 1,
+            "staff_activity_master_id": 1,
+            "allocation_recording_mode": "MANUAL"
+        }
+        
+        res = client.post('/api/activities/allocations', json=payload, headers={'Authorization': f'Bearer {token}'})
+        assert res.status_code == 403
+        
+        final_count = db.session.query(StaffActivityAllocationLog).count()
+        assert initial_count == final_count
+
+def test_allocate_activity_null_ids(app, setup_data):
+    from flask_jwt_extended import create_access_token
+    from backend.app.models.core.supporter import StaffActivityAllocationLog
+    from backend.app.extensions import db
+    
+    creator_id = setup_data['supporter_id']
+    
+    with app.app_context():
+        token = create_access_token(identity=f"staff:{creator_id}", additional_claims={"role_scopes": ["SYSTEM_SELF"]})
+        client = app.test_client()
+        
+        initial_count = db.session.query(StaffActivityAllocationLog).count()
+        
+        payload1 = {
+            "supporter_timecard_id": 1,
+            "office_service_configuration_id": None,
+            "job_title_id": 1,
+            "staff_activity_master_id": 1,
+            "allocation_recording_mode": "MINUTES_ONLY",
+            "allocated_minutes": 30
+        }
+        
+        res1 = client.post('/api/activities/allocations', json=payload1, headers={'Authorization': f'Bearer {token}'})
+        assert res1.status_code == 400
+        assert "Invalid value for field: office_service_configuration_id" in str(res1.get_json())
+        
+        payload2 = {
+            "supporter_timecard_id": 1,
+            "office_service_configuration_id": 1,
+            "job_title_id": None,
+            "staff_activity_master_id": 1,
+            "allocation_recording_mode": "MINUTES_ONLY",
+            "allocated_minutes": 30
+        }
+        
+        res2 = client.post('/api/activities/allocations', json=payload2, headers={'Authorization': f'Bearer {token}'})
+        assert res2.status_code == 400
+        assert "Invalid value for field: job_title_id" in str(res2.get_json())
+        
+        final_count = db.session.query(StaffActivityAllocationLog).count()
+        assert initial_count == final_count
