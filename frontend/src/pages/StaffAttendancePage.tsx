@@ -12,7 +12,7 @@ import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
 
 export const StaffAttendancePage: React.FC = () => {
   const { user } = useAuth();
-  const isManager = user?.roleScopes?.some(s => ['SYSTEM', 'CORPORATE'].includes(s)) ?? false;
+  const isManager = user?.roleScopes?.includes('CORPORATE') ?? false;
   const [loading, setLoading] = useState(false);
   const [shiftsLoading, setShiftsLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
@@ -57,7 +57,7 @@ export const StaffAttendancePage: React.FC = () => {
   const handleCellClick = (supporterId: number, supporterName: string, day: number, shift?: ShiftRecord) => {
     if (!isManager) return; // Non-managers cannot edit shifts
     // If the shift is confirmed, we prevent editing visually or in API
-    if (shift && (shift.is_confirmed || String(shift.id).startsWith('tc_'))) {
+    if (shift && (shift.is_confirmed || String(shift.id).startsWith('tc_') || (shift.timecards && shift.timecards.length > 0))) {
       alert("確定済みのシフト（またはタイムカードが存在する日）は手動で変更できません。");
       return;
     }
@@ -271,7 +271,11 @@ export const StaffAttendancePage: React.FC = () => {
                           const end = shift.actual_check_out ? dayjs(shift.actual_check_out).format('HH:mm') : '打刻中';
                           actualText = `${start}–${end}`;
                         } else if (!isFuture && hasPlanned) {
-                          actualText = '未打刻';
+                          if (!targetDate.isSame(dayjs(), 'day')) {
+                            actualText = '未打刻';
+                          } else if (shift.planned_start_time && dayjs().isAfter(dayjs(shift.planned_start_time))) {
+                            actualText = '未打刻';
+                          }
                         }
 
                         // tc_始まりのIDは実績のみのレコード
