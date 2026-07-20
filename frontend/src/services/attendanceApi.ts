@@ -13,8 +13,18 @@ export interface ShiftPattern {
   break_minutes: number;
 }
 
-export interface ShiftRecord {
+export interface TimecardRecord {
   id: number;
+  sequence_no: number;
+  office_id: number;
+  location_type: string;
+  check_in: string | null;
+  check_out: string | null;
+  total_break_minutes: number;
+}
+
+export interface ShiftRecord {
+  id: number | string;
   supporter_id: number;
   supporter_name: string;
   employment_type: string;
@@ -26,6 +36,8 @@ export interface ShiftRecord {
   is_confirmed: boolean;
   actual_check_in?: string | null;
   actual_check_out?: string | null;
+  total_worked_seconds?: number;
+  timecards?: TimecardRecord[];
 }
 
 export interface AttendanceCorrectionRequest {

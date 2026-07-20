@@ -74,7 +74,7 @@ export const StaffAttendancePage: React.FC = () => {
 
   const handleManualSave = async (data: any) => {
     if (manualEditData?.shift) {
-      await attendanceApi.updateManualShift(manualEditData.shift.id, {
+      await attendanceApi.updateManualShift(Number(manualEditData.shift.id), {
         start_time: data.start_time,
         end_time: data.end_time,
         break_minutes: data.break_minutes
@@ -87,7 +87,7 @@ export const StaffAttendancePage: React.FC = () => {
 
   const handleManualDelete = async () => {
     if (manualEditData?.shift) {
-      await attendanceApi.deleteManualShift(manualEditData.shift.id);
+      await attendanceApi.deleteManualShift(Number(manualEditData.shift.id));
       loadShifts();
     }
   };
@@ -105,7 +105,7 @@ export const StaffAttendancePage: React.FC = () => {
       const day = dayjs(s.target_date).date();
       grouped[key].shifts[day] = s;
     });
-    
+
     return Object.values(grouped).sort((a, b) => {
       if (a.supporter_id !== b.supporter_id) return a.supporter_id - b.supporter_id;
       return a.job_title.localeCompare(b.job_title);
@@ -117,7 +117,7 @@ export const StaffAttendancePage: React.FC = () => {
     const dow = d.getDay();
     return ['日', '月', '火', '水', '木', '金', '土'][dow];
   };
-  
+
   const getDayOfWeekColor = (day: number) => {
     const d = new Date(selectedYear, selectedMonth - 1, day);
     const dow = d.getDay();
@@ -132,7 +132,7 @@ export const StaffAttendancePage: React.FC = () => {
         <Calendar className="w-8 h-8 text-indigo-600" />
         勤怠・シフト詳細画面
       </Heading>
-      
+
       {/* タイムカード（打刻）ウィジェット */}
       <StaffTimecardWidget />
 
@@ -143,7 +143,7 @@ export const StaffAttendancePage: React.FC = () => {
             <Calendar className="w-5 h-5 text-emerald-600" />
             {isManager ? 'シフトの自動生成' : '表示月の選択'}
           </Heading>
-          
+
           {isManager && (
             <>
               <p className="text-sm text-slate-500 mb-2">
@@ -158,8 +158,8 @@ export const StaffAttendancePage: React.FC = () => {
           )}
 
           <div className="flex flex-wrap gap-4 items-center">
-            <select 
-              value={selectedYear} 
+            <select
+              value={selectedYear}
               onChange={e => setSelectedYear(Number(e.target.value))}
               className="px-4 py-2 border rounded-xl font-bold"
             >
@@ -168,8 +168,8 @@ export const StaffAttendancePage: React.FC = () => {
                 return <option key={y} value={y}>{y}年</option>;
               })}
             </select>
-            <select 
-              value={selectedMonth} 
+            <select
+              value={selectedMonth}
               onChange={e => setSelectedMonth(Number(e.target.value))}
               className="px-4 py-2 border rounded-xl font-bold"
             >
@@ -177,9 +177,9 @@ export const StaffAttendancePage: React.FC = () => {
                 <option key={i+1} value={i+1}>{i+1}月</option>
               ))}
             </select>
-            
+
             {isManager && (
-              <button 
+              <button
                 onClick={handleGenerateClick}
                 disabled={loading}
                 className="px-6 py-2 bg-emerald-600 text-white font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-2"
@@ -201,7 +201,7 @@ export const StaffAttendancePage: React.FC = () => {
             一般スタッフは、自身の打刻実績や予定を勝手に書き換えることはできません。
             修正や休暇の取得を希望する場合は、こちらから申請（Decision要求）を行ってください。
           </p>
-          <button 
+          <button
             onClick={() => alert('申請フォームモーダル（未実装）')}
             className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700"
           >
@@ -217,7 +217,7 @@ export const StaffAttendancePage: React.FC = () => {
             表示中のスタッフ: 全体
           </span>
         </div>
-        
+
         {shiftsLoading ? (
           <div className="p-8 text-center text-slate-500 font-bold">読み込み中...</div>
         ) : shifts.length === 0 ? (
@@ -252,19 +252,19 @@ export const StaffAttendancePage: React.FC = () => {
                     {daysArray.map(d => {
                       const shift = staff.shifts[d];
                       const isWeekend = new Date(selectedYear, selectedMonth - 1, d).getDay() === 0 || new Date(selectedYear, selectedMonth - 1, d).getDay() === 6;
-                      
+
                       let cellContent = <div className="text-slate-200 text-xs">-</div>;
-                      
+
                       if (shift) {
                         const hasPlanned = shift.planned_start_time || shift.planned_end_time;
                         const hasActual = shift.actual_check_in || shift.actual_check_out;
                         const targetDate = dayjs(new Date(selectedYear, selectedMonth - 1, d));
                         const isFuture = targetDate.isAfter(dayjs(), 'day');
-                        
-                        const plannedText = hasPlanned 
+
+                        const plannedText = hasPlanned
                           ? `${shift.planned_start_time ? dayjs(shift.planned_start_time).format('HH:mm') : '-'}–${shift.planned_end_time ? dayjs(shift.planned_end_time).format('HH:mm') : '-'}`
                           : '—';
-                          
+
                         let actualText = '—';
                         if (hasActual) {
                           const start = shift.actual_check_in ? dayjs(shift.actual_check_in).format('HH:mm') : '-';
@@ -273,10 +273,38 @@ export const StaffAttendancePage: React.FC = () => {
                         } else if (!isFuture && hasPlanned) {
                           actualText = '未打刻';
                         }
-                        
+
                         // tc_始まりのIDは実績のみのレコード
                         const isTimecardOnly = String(shift.id).startsWith('tc_');
-                        
+
+                        const renderActuals = () => {
+                          if (shift.timecards && shift.timecards.length > 0) {
+                            return (
+                              <div className="flex flex-col items-center gap-0.5">
+                                {shift.timecards.map((tc, idx) => {
+                                  const start = tc.check_in ? dayjs(tc.check_in).format('HH:mm') : '-';
+                                  const end = tc.check_out ? dayjs(tc.check_out).format('HH:mm') : '勤務中';
+                                  return (
+                                    <span key={idx} className="text-[11px] font-black tracking-tighter whitespace-nowrap text-slate-700">
+                                      {start}–{end}
+                                    </span>
+                                  );
+                                })}
+                                {typeof shift.total_worked_seconds === 'number' && shift.total_worked_seconds > 0 && (
+                                  <span className="text-[9px] text-slate-500 font-bold mt-0.5">
+                                    計 {Math.floor(shift.total_worked_seconds / 3600)}h{Math.floor((shift.total_worked_seconds % 3600) / 60)}m
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          }
+                          return (
+                            <span className={`text-[11px] font-black tracking-tighter whitespace-nowrap ${actualText === '未打刻' ? 'text-rose-400' : actualText === '—' ? 'text-slate-300' : 'text-slate-700'}`}>
+                              {actualText}
+                            </span>
+                          );
+                        };
+
                         cellContent = (
                           <div className={`flex flex-col items-center justify-center gap-1 py-1.5 px-1 rounded-lg border ${shift.is_confirmed ? 'bg-indigo-50 border-indigo-100' : 'bg-white border-slate-200'}`}>
                             <div className="flex items-center gap-1 w-full justify-center">
@@ -285,11 +313,9 @@ export const StaffAttendancePage: React.FC = () => {
                                 {plannedText}
                               </span>
                             </div>
-                            <div className="flex items-center gap-1 w-full justify-center">
-                              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded">実</span>
-                              <span className={`text-[11px] font-black tracking-tighter whitespace-nowrap ${actualText === '未打刻' ? 'text-rose-400' : actualText === '—' ? 'text-slate-300' : 'text-slate-700'}`}>
-                                {actualText}
-                              </span>
+                            <div className="flex items-start gap-1 w-full justify-center pt-1 border-t border-slate-100/50">
+                              <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1 rounded mt-0.5">実</span>
+                              {renderActuals()}
                             </div>
                             {shift.is_confirmed && !isTimecardOnly && <div className="text-[9px] text-indigo-500 font-black scale-90 mt-0.5">確定</div>}
                           </div>
@@ -297,8 +323,8 @@ export const StaffAttendancePage: React.FC = () => {
                       }
 
                       return (
-                        <td 
-                          key={d} 
+                        <td
+                          key={d}
                           className={`px-2 py-2 text-center border-r border-slate-100 align-middle ${isWeekend ? 'bg-slate-50/50' : ''} hover:bg-indigo-50 cursor-pointer transition-colors`}
                           onClick={() => handleCellClick(staff.supporter_id, staff.name, d, shift)}
                         >
