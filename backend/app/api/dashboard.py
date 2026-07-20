@@ -3,17 +3,19 @@ GET /api/dashboard/summary
 Dashboard用の集計データを1回のAPIで返す。
 """
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from backend.app import db
-from backend.app.models import UserDailyLog, SupportPlan, CaseConferenceLog
+from backend.app.models import UserDailyLog, SupportPlan, CaseConferenceLog, User
 from datetime import date, datetime
 from backend.app.utils.timezone import get_jst_today
+from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope, get_accessible_users_subquery
+from backend.app.domain.attendance.exceptions import handle_attendance_errors
 
 dashboard_bp = Blueprint('dashboard', __name__, url_prefix='/api/dashboard')
 
-
 @dashboard_bp.route('/summary', methods=['GET'])
 @jwt_required()
+@handle_attendance_errors
 def get_dashboard_summary():
     """
     Dashboard表示に必要な集計値を返す。
@@ -25,44 +27,67 @@ def get_dashboard_summary():
     - action_items: pending_daily_logs + pending_approvals + monitoring_due_count の合計
     - today_case_conferences: 本日開催のケース会議数
     """
+    identity = get_jwt_identity()
+    staff_id = extract_staff_id(identity)
+    claims = get_jwt()
+    scope = resolve_tenant_scope(staff_id, claims.get('role_scopes', []))
+
     today = get_jst_today()
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
 
+    users_sq = get_accessible_users_subquery(scope, today, staff_id)
+    if users_sq is not None:
+        # Check if the subquery yields any results (fail closed)
+        has_access = db.session.query(users_sq.c.user_id).first() is not None
+        if not has_access:
+            return jsonify({
+                "today_users": 0,
+                "pending_daily_logs": 0,
+                "pending_approvals": 0,
+                "monitoring_due_count": 0,
+                "action_items": 0,
+                "today_case_conferences": 0,
+            }), 200
+
     # 今日の通所者数（本日のCHECK_IN実績が存在するユニーク利用者数）
     from backend.app.models.support.attendance_workflow import AttendanceRecord
-    from sqlalchemy import func
-    
-    today_users = db.session.query(AttendanceRecord.user_id)\
-        .filter(
-            AttendanceRecord.record_type == 'CHECK_IN',
-            func.date(AttendanceRecord.timestamp) == today
-        ).distinct().count()
+    from sqlalchemy import func, select
+
+    q_today = db.session.query(AttendanceRecord.user_id).filter(
+        AttendanceRecord.record_type == 'CHECK_IN',
+        func.date(AttendanceRecord.timestamp) == today
+    )
+    if users_sq is not None:
+        q_today = q_today.filter(AttendanceRecord.user_id.in_(select(users_sq.c.user_id)))
+    today_users = q_today.distinct().count()
 
     # 未完了日報数（DRAFT状態）
-    pending_daily_logs = UserDailyLog.query\
-        .filter(UserDailyLog.log_status == 'DRAFT')\
-        .count()
+    q_logs = UserDailyLog.query.filter(UserDailyLog.log_status == 'DRAFT')
+    if users_sq is not None:
+        q_logs = q_logs.filter(UserDailyLog.user_id.in_(select(users_sq.c.user_id)))
+    pending_daily_logs = q_logs.count()
 
     # 承認待ち計画数
-    pending_approvals = SupportPlan.query\
-        .filter(SupportPlan.plan_status == 'PENDING_CONSENT')\
-        .count()
+    q_plans = SupportPlan.query.filter(SupportPlan.plan_status == 'PENDING_CONSENT')
+    if users_sq is not None:
+        q_plans = q_plans.filter(SupportPlan.user_id.in_(select(users_sq.c.user_id)))
+    pending_approvals = q_plans.count()
 
     # 未実施モニタリング数
-    # ACTIVE計画のうち plan_end_date が今日以前のもの（期限切れまたは本日が期限）を対象とする。
-    # TODO: replace plan_end_date fallback with formal monitoring schedule field
-    # 正式な monitoring_schedule が実装されたら next_monitoring_due < today で判定する。
-    monitoring_due_count = SupportPlan.query\
-        .filter(SupportPlan.plan_status == 'ACTIVE')\
-        .filter(SupportPlan.plan_end_date <= today)\
-        .count()
+    q_mon = SupportPlan.query.filter(SupportPlan.plan_status == 'ACTIVE').filter(SupportPlan.plan_end_date <= today)
+    if users_sq is not None:
+        q_mon = q_mon.filter(SupportPlan.user_id.in_(select(users_sq.c.user_id)))
+    monitoring_due_count = q_mon.count()
 
     # 本日のケース会議数
-    today_case_conferences = CaseConferenceLog.query\
-        .filter(CaseConferenceLog.conference_datetime >= today_start)\
-        .filter(CaseConferenceLog.conference_datetime <= today_end)\
-        .count()
+    q_conf = CaseConferenceLog.query.filter(
+        CaseConferenceLog.conference_datetime >= today_start,
+        CaseConferenceLog.conference_datetime <= today_end
+    )
+    if users_sq is not None:
+        q_conf = q_conf.filter(CaseConferenceLog.user_id.in_(select(users_sq.c.user_id)))
+    today_case_conferences = q_conf.count()
 
     # action_items は全未処理事項の合計
     action_items = pending_daily_logs + pending_approvals + monitoring_due_count
@@ -78,21 +103,38 @@ def get_dashboard_summary():
 
 @dashboard_bp.route('/today-users', methods=['GET'])
 @jwt_required()
+@handle_attendance_errors
 def get_today_users():
     """
     本日来所している利用者の一覧と打刻時間、日報ステータスを返す。
     """
+    identity = get_jwt_identity()
+    staff_id = extract_staff_id(identity)
+    claims = get_jwt()
+    scope = resolve_tenant_scope(staff_id, claims.get('role_scopes', []))
+
     from backend.app.models.support.attendance_workflow import AttendanceRecord
-    from sqlalchemy import func
-    
+    from sqlalchemy import func, select
+
     today = get_jst_today()
-    
+    users_sq = get_accessible_users_subquery(scope, today, staff_id)
+    if users_sq is not None:
+        has_access = db.session.query(users_sq.c.user_id).first() is not None
+        if not has_access:
+            return jsonify({"items": []}), 200
+
     # 本日のCHECK_IN実績を取得
-    check_ins = AttendanceRecord.query.filter(
+    q_check_ins = AttendanceRecord.query.filter(
         AttendanceRecord.record_type == 'CHECK_IN',
         func.date(AttendanceRecord.timestamp) == today
-    ).order_by(AttendanceRecord.timestamp.asc()).all()
-    
+    )
+    if users_sq is not None:
+        q_check_ins = q_check_ins.filter(
+            AttendanceRecord.user_id.in_(select(users_sq.c.user_id))
+        )
+
+    check_ins = q_check_ins.order_by(AttendanceRecord.timestamp.asc()).all()
+
     items = []
     for att in check_ins:
         user_id = att.user_id
@@ -115,7 +157,7 @@ def get_today_users():
                 daily_log_status = "completed"
             elif log.log_status == 'DRAFT':
                 daily_log_status = "draft"
-                
+
         status = "CHECKED_OUT" if check_out else "CHECKED_IN"
         
         items.append({
@@ -129,4 +171,3 @@ def get_today_users():
         })
         
     return jsonify({"items": items}), 200
-

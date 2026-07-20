@@ -6,7 +6,7 @@ from backend.app.extensions import db, bcrypt
 from backend.config import Config
 from backend.app.utils.custom_types import EncryptedString
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, UniqueConstraint, Text, func, CheckConstraint
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, Index, UniqueConstraint, func, CheckConstraint
 
 #  修正点: rbac_links を絶対参照でインポート
 from backend.app.models.core.rbac_links import supporter_role_link
@@ -181,7 +181,7 @@ class SupporterTimecard(db.Model):
     
     # [Phase 2A Additive Columns] 物理的な勤務区間の新定義
     office_id = Column(Integer, ForeignKey('office_settings.id'), nullable=True, index=True)
-    sequence_no = Column(Integer, nullable=True) # Phase 2Aではnullable
+    sequence_no = Column(Integer, nullable=False) # Phase 2BでNOT NULL化
     location_type = Column(String(50), nullable=True)
     location_detail = Column(Text, nullable=True)
     
@@ -206,6 +206,11 @@ class SupporterTimecard(db.Model):
     
     supporter = db.relationship('Supporter', back_populates='timecards')
     service_config = db.relationship('OfficeServiceConfiguration')
+
+    __table_args__ = (
+        UniqueConstraint('supporter_id', 'work_date', 'sequence_no', name='uq_supporter_timecards_supporter_date_seq'),
+        Index('uq_supporter_ongoing_timecard', 'supporter_id', unique=True, postgresql_where=db.text('check_in IS NOT NULL AND check_out IS NULL')),
+    )
 
 
 # ====================================================================

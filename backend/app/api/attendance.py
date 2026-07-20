@@ -3,42 +3,53 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 from datetime import datetime, date
+from zoneinfo import ZoneInfo
 from backend.app.extensions import db
-from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern, SupporterJobAssignment
+from backend.app.models import SupporterTimecard, StaffDailyShift, AttendanceCorrectionRequest, Supporter, EmploymentShiftPattern, SupporterJobAssignment, OfficeSetting, OfficeServiceConfiguration
 from backend.app.services.attendance_service import AttendanceService
+from backend.app.domain.attendance.exceptions import handle_attendance_errors, AttendanceForbiddenError, AttendanceNotFoundError
+from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope, validate_target_supporter_tenant, filter_query_by_tenant_scope
 
 attendance_bp = Blueprint('attendance', __name__, url_prefix='/api/attendance')
 
 @attendance_bp.route('/generate-shifts', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def generate_shifts():
     identity = get_jwt_identity()
+    admin_id = extract_staff_id(identity)
     claims = get_jwt()
     role_scopes = claims.get('role_scopes', [])
-    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
-    if not identity.startswith('staff:') or not is_manager:
-        return jsonify({"msg": "Unauthorized"}), 403
+
+    scope = resolve_tenant_scope(admin_id, role_scopes)
+    if scope['level'] not in ['SYSTEM', 'CORPORATE']:
+        raise AttendanceForbiddenError("Unauthorized")
         
     data = request.get_json() or {}
     year = data.get('year', date.today().year)
     month = data.get('month', date.today().month)
-    supporter_id = data.get('supporter_id') # None if all
-    ai_instruction = data.get('ai_instruction') # AI instruction if any
-    
+    supporter_id = data.get('supporter_id')
+
+    if supporter_id:
+        validate_target_supporter_tenant(scope, admin_id, supporter_id)
+
+    ai_instruction = data.get('ai_instruction')
+
     svc = AttendanceService(db.session)
-    count = svc.generate_monthly_shifts(year, month, supporter_id, ai_instruction)
+    count = svc.generate_monthly_shifts(year, month, supporter_id, ai_instruction, corp_id=scope['corp_id'])
     return jsonify({"msg": f"Generated {count} shifts.", "count": count}), 201
 
 @attendance_bp.route('/shifts', methods=['GET'])
 @jwt_required()
+@handle_attendance_errors
 def get_shifts():
     identity = get_jwt_identity()
+    staff_id = extract_staff_id(identity)
+
     claims = get_jwt()
     role_scopes = claims.get('role_scopes', [])
-    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
-    
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
+
+    scope = resolve_tenant_scope(staff_id, role_scopes)
         
     year = request.args.get('year', type=int)
     month = request.args.get('month', type=int)
@@ -59,79 +70,99 @@ def get_shifts():
         SupporterTimecard.work_date >= start_date,
         SupporterTimecard.work_date < end_date
     )
-    
-    if not is_manager:
-        try:
-            current_supporter_id = int(identity.split(':')[1])
-            query_shifts = query_shifts.filter(StaffDailyShift.supporter_id == current_supporter_id)
-            query_tcs = query_tcs.filter(SupporterTimecard.supporter_id == current_supporter_id)
-        except:
-            pass
-            
+
+    query_tcs, query_shifts, _ = filter_query_by_tenant_scope(scope, query_tcs, query_shifts, requester_id=staff_id)
+
     shifts = query_shifts.all()
     tcs = query_tcs.all()
-    
+
     records = {}
     for s in shifts:
         key = (s.supporter_id, s.target_date)
-        records[key] = {"shift": s, "tc": None}
+        records[key] = {"shift": s, "tcs": []}
         
     for tc in tcs:
         key = (tc.supporter_id, tc.work_date)
         if key not in records:
-            records[key] = {"shift": None, "tc": tc}
+            records[key] = {"shift": None, "tcs": [tc]}
         else:
-            records[key]["tc"] = tc
-            
+            records[key]["tcs"].append(tc)
+
     supporter_ids = list(set([k[0] for k in records.keys()]))
     supporters = Supporter.query.filter(Supporter.id.in_(supporter_ids)).all() if supporter_ids else []
     supporter_dict = {s.id: s for s in supporters}
-    
+
     result = []
     for (supp_id, rec_date), data in records.items():
         supporter = supporter_dict.get(supp_id)
         if not supporter:
             continue
-            
+
         s = data["shift"]
-        tc = data["tc"]
+        tcs_list = data["tcs"]
+        tcs_list.sort(key=lambda x: x.sequence_no)
         
         supporter_name = f"{supporter.last_name} {supporter.first_name}"
         emp_type = supporter.employment_type
-        if emp_type == 'FULL_TIME':
-            emp_type_ja = '常勤'
-        elif emp_type == 'PART_TIME':
-            emp_type_ja = '非常勤'
-        else:
-            emp_type_ja = emp_type
-            
+        emp_type_ja = '常勤' if emp_type == 'FULL_TIME' else ('非常勤' if emp_type == 'PART_TIME' else emp_type)
+
+        ongoing_tcs = [tc for tc in tcs_list if tc.check_out is None]
+        rep_tc = None
+        if len(ongoing_tcs) > 0:
+            rep_tc = ongoing_tcs[-1]
+        elif len(tcs_list) > 0:
+            rep_tc = tcs_list[-1]
+
         title = "職務未設定"
-        if s:
+        ref_obj = s if s else rep_tc
+        if ref_obj:
             assignments = SupporterJobAssignment.query.filter(
                 SupporterJobAssignment.supporter_id == supporter.id,
-                SupporterJobAssignment.office_service_configuration_id == s.office_service_configuration_id,
-                SupporterJobAssignment.start_date <= s.target_date,
-                (SupporterJobAssignment.end_date >= s.target_date) | (SupporterJobAssignment.end_date == None)
+                SupporterJobAssignment.office_service_configuration_id == ref_obj.office_service_configuration_id,
+                SupporterJobAssignment.start_date <= rec_date,
+                (SupporterJobAssignment.end_date >= rec_date) | (SupporterJobAssignment.end_date == None)
             ).all()
             for a in assignments:
                 if a.job_title:
                     title = a.job_title.title_name
                     break
         
-        if not s and tc:
-            assignments = SupporterJobAssignment.query.filter(
-                SupporterJobAssignment.supporter_id == supporter.id,
-                SupporterJobAssignment.office_service_configuration_id == tc.office_service_configuration_id,
-                SupporterJobAssignment.start_date <= tc.work_date,
-                (SupporterJobAssignment.end_date >= tc.work_date) | (SupporterJobAssignment.end_date == None)
-            ).all()
-            for a in assignments:
-                if a.job_title:
-                    title = a.job_title.title_name
-                    break
+        timecards_arr = []
+        total_worked_seconds = 0
+        actual_check_in = None
+        actual_check_out = None
+        has_ongoing = False
+
+        for tc in tcs_list:
+            if not actual_check_in or (tc.check_in and tc.check_in < actual_check_in):
+                actual_check_in = tc.check_in
+
+            if tc.check_out is None:
+                has_ongoing = True
+            elif not has_ongoing:
+                if not actual_check_out or tc.check_out > actual_check_out:
+                    actual_check_out = tc.check_out
+
+            if tc.check_out and tc.check_in:
+                duration = (tc.check_out - tc.check_in).total_seconds()
+                break_sec = (tc.total_break_minutes or 0) * 60
+                total_worked_seconds += max(0, duration - break_sec)
+
+            timecards_arr.append({
+                "id": tc.id,
+                "sequence_no": tc.sequence_no,
+                "office_id": tc.office_id,
+                "location_type": tc.location_type,
+                "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
+                "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+                "total_break_minutes": tc.total_break_minutes or 0
+            })
+
+        if has_ongoing:
+            actual_check_out = None
         
         result.append({
-            "id": s.id if s else f"tc_{tc.id}",
+            "id": s.id if s else f"tc_{rep_tc.id}" if rep_tc else None,
             "supporter_id": supp_id,
             "supporter_name": supporter_name,
             "employment_type": emp_type_ja,
@@ -141,89 +172,119 @@ def get_shifts():
             "planned_end_time": s.planned_end_time.isoformat() if s and s.planned_end_time else None,
             "planned_break_minutes": s.planned_break_minutes if s else 0,
             "is_confirmed": s.is_confirmed if s else True,
-            "actual_check_in": tc.check_in.isoformat() if tc and tc.check_in else None,
-            "actual_check_out": tc.check_out.isoformat() if tc and tc.check_out else None
+            "actual_check_in": actual_check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if actual_check_in else None,
+            "actual_check_out": actual_check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if actual_check_out else None,
+            "total_worked_seconds": total_worked_seconds,
+            "timecards": timecards_arr
         })
         
     result.sort(key=lambda x: (x["target_date"], x["planned_start_time"] or "99:99"))
-    
+
     return jsonify({"items": result}), 200
 
 @attendance_bp.route('/shifts', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def create_shift():
     identity = get_jwt_identity()
+    admin_id = extract_staff_id(identity)
     claims = get_jwt()
     role_scopes = claims.get('role_scopes', [])
-    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
-    if not identity.startswith('staff:') or not is_manager:
-        return jsonify({"msg": "Unauthorized"}), 403
-    admin_id = int(identity.split(':')[1])
+
+    scope = resolve_tenant_scope(admin_id, role_scopes)
+    if scope['level'] not in ['SYSTEM', 'CORPORATE']:
+        raise AttendanceForbiddenError("Unauthorized")
+
     data = request.get_json() or {}
-    
+
+    target_supporter_id = data.get('supporter_id')
+    if not target_supporter_id:
+        return jsonify({"msg": "supporter_id is required"}), 400
+
+    validate_target_supporter_tenant(scope, admin_id, target_supporter_id)
+
     svc = AttendanceService(db.session)
-    try:
-        shift = svc.create_manual_shift(admin_id, data)
-        return jsonify({"msg": "Shift created", "id": shift.id}), 201
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    shift = svc.create_manual_shift(admin_id, data)
+    return jsonify({"msg": "Shift created", "id": shift.id}), 201
 
 @attendance_bp.route('/shifts/<int:shift_id>', methods=['PUT'])
 @jwt_required()
+@handle_attendance_errors
 def update_shift(shift_id):
     identity = get_jwt_identity()
+    admin_id = extract_staff_id(identity)
     claims = get_jwt()
     role_scopes = claims.get('role_scopes', [])
-    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
-    if not identity.startswith('staff:') or not is_manager:
-        return jsonify({"msg": "Unauthorized"}), 403
-    admin_id = int(identity.split(':')[1])
+
+    scope = resolve_tenant_scope(admin_id, role_scopes)
+    if scope['level'] not in ['SYSTEM', 'CORPORATE']:
+        raise AttendanceForbiddenError("Unauthorized")
+
+    # Check existing shift
+    shift = StaffDailyShift.query.get(shift_id)
+    if not shift:
+        raise AttendanceNotFoundError("Shift not found")
+
+    validate_target_supporter_tenant(scope, admin_id, shift.supporter_id)
+
     data = request.get_json() or {}
-    
+    target_supporter_id = data.get('supporter_id')
+    if target_supporter_id and target_supporter_id != shift.supporter_id:
+        validate_target_supporter_tenant(scope, admin_id, target_supporter_id)
+
     svc = AttendanceService(db.session)
-    try:
-        svc.update_manual_shift(admin_id, shift_id, data)
-        return jsonify({"msg": "Shift updated"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    svc.update_manual_shift(admin_id, shift_id, data)
+    return jsonify({"msg": "Shift updated"}), 200
 
 @attendance_bp.route('/shifts/<int:shift_id>', methods=['DELETE'])
 @jwt_required()
+@handle_attendance_errors
 def delete_shift(shift_id):
     identity = get_jwt_identity()
+    admin_id = extract_staff_id(identity)
     claims = get_jwt()
     role_scopes = claims.get('role_scopes', [])
-    is_manager = any(s in ['SYSTEM', 'CORPORATE'] for s in role_scopes)
-    if not identity.startswith('staff:') or not is_manager:
-        return jsonify({"msg": "Unauthorized"}), 403
-    admin_id = int(identity.split(':')[1])
-    
+
+    scope = resolve_tenant_scope(admin_id, role_scopes)
+    if scope['level'] not in ['SYSTEM', 'CORPORATE']:
+        raise AttendanceForbiddenError("Unauthorized")
+
+    shift = StaffDailyShift.query.get(shift_id)
+    if not shift:
+        raise AttendanceNotFoundError("Shift not found")
+
+    validate_target_supporter_tenant(scope, admin_id, shift.supporter_id)
+
     svc = AttendanceService(db.session)
-    try:
-        svc.delete_manual_shift(admin_id, shift_id)
-        return jsonify({"msg": "Shift deleted"}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    svc.delete_manual_shift(admin_id, shift_id)
+    return jsonify({"msg": "Shift deleted"}), 200
 
 @attendance_bp.route('/timecards/<int:timecard_id>', methods=['PUT'])
 @jwt_required()
+@handle_attendance_errors
 def direct_edit_timecard(timecard_id):
     """管理者によるタイムカードの直接編集"""
     identity = get_jwt_identity()
-    if not identity.startswith('staff:'):
-        return jsonify({"msg": "Unauthorized"}), 403
+    admin_id = extract_staff_id(identity)
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+
+    scope = resolve_tenant_scope(admin_id, role_scopes)
+    if scope['level'] not in ['SYSTEM', 'CORPORATE']:
+        raise AttendanceForbiddenError("Unauthorized")
         
-    approver_id = int(identity.split(':')[1])
+    timecard = SupporterTimecard.query.get(timecard_id)
+    if not timecard:
+        raise AttendanceNotFoundError("Timecard not found")
+
+    validate_target_supporter_tenant(scope, admin_id, timecard.supporter_id)
         
     data = request.get_json() or {}
-    
+
     # ISO string to datetime parsing
     check_in = datetime.fromisoformat(data['check_in'].replace('Z', '+00:00')) if data.get('check_in') else None
     check_out = datetime.fromisoformat(data['check_out'].replace('Z', '+00:00')) if data.get('check_out') else None
-    
+
     edit_data = {
         'check_in': check_in,
         'check_out': check_out,
@@ -231,22 +292,19 @@ def direct_edit_timecard(timecard_id):
         'is_absent': data.get('is_absent'),
         'absence_type': data.get('absence_type')
     }
-    
+
     svc = AttendanceService(db.session)
-    try:
-        updated = svc.direct_edit_timecard(timecard_id, approver_id, edit_data)
-        return jsonify({"msg": "Timecard updated successfully", "deemed_work_minutes": updated.deemed_work_minutes}), 200
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({"msg": str(e)}), 400
+    updated = svc.direct_edit_timecard(timecard_id, admin_id, edit_data)
+    return jsonify({"msg": "Timecard updated successfully", "deemed_work_minutes": updated.deemed_work_minutes}), 200
 
 @attendance_bp.route('/requests', methods=['POST'])
 @jwt_required()
+@handle_attendance_errors
 def create_request():
     """一般スタッフからの修正申請"""
     identity = get_jwt_identity()
-    supporter_id = int(identity.split(':')[1])
-    
+    supporter_id = extract_staff_id(identity)
+
     data = request.get_json() or {}
     req = AttendanceCorrectionRequest(
         supporter_id=supporter_id,
@@ -259,3 +317,90 @@ def create_request():
     db.session.add(req)
     db.session.commit()
     return jsonify({"msg": "Request created", "id": req.id}), 201
+
+@attendance_bp.route('/clock-in', methods=['POST'])
+@jwt_required()
+@handle_attendance_errors
+def clock_in():
+    identity = get_jwt_identity()
+    supporter_id = extract_staff_id(identity)
+
+    data = request.get_json() or {}
+    office_id = data.get('office_id')
+    if not office_id:
+        return jsonify({"msg": "office_id is required"}), 400
+        
+    location_type = data.get('location_type')
+    if not location_type:
+        return jsonify({"msg": "location_type is required"}), 400
+        
+    location_detail = data.get('location_detail', '')
+
+    svc = AttendanceService(db.session)
+    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+    db.session.commit()
+    return jsonify({
+        "msg": "Clocked in successfully",
+        "timecard_id": timecard.id,
+        "sequence_no": timecard.sequence_no,
+        "check_in": timecard.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
+    }), 201
+
+@attendance_bp.route('/timecards/<int:timecard_id>/clock-out', methods=['POST'])
+@jwt_required()
+@handle_attendance_errors
+def clock_out(timecard_id):
+    identity = get_jwt_identity()
+    supporter_id = extract_staff_id(identity)
+
+    data = request.get_json() or {}
+    break_minutes = data.get('break_minutes', 0)
+
+    svc = AttendanceService(db.session)
+    timecard = svc.clock_out(supporter_id, timecard_id=timecard_id, break_minutes=break_minutes)
+    db.session.commit()
+    return jsonify({
+        "msg": "Clocked out successfully",
+        "timecard_id": timecard.id,
+        "check_out": timecard.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat()
+    }), 200
+
+@attendance_bp.route('/timecards', methods=['GET'])
+@jwt_required()
+@handle_attendance_errors
+def get_timecards():
+    identity = get_jwt_identity()
+    staff_id = extract_staff_id(identity)
+        
+    date_str = request.args.get('date')
+    if not date_str:
+        return jsonify({"msg": "date is required"}), 400
+        
+    try:
+        target_date = date.fromisoformat(date_str)
+    except ValueError:
+        return jsonify({"msg": "Invalid date format"}), 400
+        
+    claims = get_jwt()
+    role_scopes = claims.get('role_scopes', [])
+
+    scope = resolve_tenant_scope(staff_id, role_scopes)
+
+    query = SupporterTimecard.query.filter(SupporterTimecard.work_date == target_date)
+    query, _, _ = filter_query_by_tenant_scope(scope, query_tcs=query, requester_id=staff_id)
+
+    timecards = query.order_by(SupporterTimecard.sequence_no).all()
+
+    result = []
+    for tc in timecards:
+        result.append({
+            "id": tc.id,
+            "sequence_no": tc.sequence_no,
+            "office_id": tc.office_id,
+            "location_type": tc.location_type,
+            "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
+            "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+            "total_break_minutes": tc.total_break_minutes or 0
+        })
+        
+    return jsonify(result), 200
