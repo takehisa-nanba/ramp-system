@@ -52,6 +52,15 @@ def upgrade():
             postgresql_where=sa.text("status = 'ACTIVE'")
         )
 
+    # retention_support_action_logs に updated_at が欠落していた場合の安全な補完
+    if 'retention_support_action_logs' in existing_tables:
+        cols = {c['name'] for c in insp.get_columns('retention_support_action_logs')}
+        if 'updated_at' not in cols:
+            op.add_column(
+                'retention_support_action_logs',
+                sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.func.now())
+            )
+
 
 def downgrade():
     bind = op.get_bind()
