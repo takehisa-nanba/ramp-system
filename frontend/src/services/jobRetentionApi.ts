@@ -36,9 +36,13 @@ export interface SupportPlanSummary {
   start_date: string;
   review_date?: string | null;
   review_reason?: string | null;
-  next_review_deadline: string;
+  plan_end_date: string;
+  next_plan_start_date: string;
+  next_review_deadline?: string;
   deadline_status: DeadlineStatusCode;
   days_diff: number;
+  days_remaining?: number;
+  days_overdue?: number;
   is_overdue: boolean;
 }
 
@@ -50,7 +54,8 @@ export interface SupportPlan extends SupportPlanSummary {
 
 export interface CreateOrReviewPlanRequest {
   overall_support_goal: string;
-  next_review_deadline: string;
+  plan_end_date?: string;
+  next_review_deadline?: string;
   review_date?: string;
   review_reason?: string;
   start_date?: string;

@@ -163,10 +163,10 @@ export const JobRetentionActionModal: React.FC<Props> = ({
               <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
                 <span className="font-bold text-indigo-900 flex items-center gap-1">
                   <Target className="w-3.5 h-3.5 text-indigo-600" />
-                  現在の支援方針・目標（第{activePlan.version}版）
+                  現在の支援目標（第{activePlan.version}版）
                 </span>
                 <span className="text-slate-500">
-                  次回見直し期限: <strong className="text-slate-700">{activePlan.next_review_deadline}</strong>
+                  計画終了予定日: <strong className="text-slate-700">{activePlan.plan_end_date || activePlan.next_review_deadline}</strong>
                 </span>
               </div>
               <p className="text-xs text-slate-800 font-medium leading-relaxed bg-white/80 p-2 rounded-lg border border-slate-200/50">

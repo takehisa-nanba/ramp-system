@@ -156,3 +156,12 @@ from backend.app.models.compliance.audit_tracking import (
 from backend.app.models.employment.job_placement import (
     EmployerMaster, JobPlacementLog, JobDevelopmentLog
 )
+
+# --- 8. 就労定着支援 (job retention) ---
+from backend.app.models.support.job_retention import (
+    JobRetentionContract, RetentionEmploymentEpisode,
+    RetentionUserVoiceLog, RetentionEmployerFeedbackLog,
+    RetentionSupportActionLog, MonthlyRetentionReport,
+    RetentionSupportPlan, calculate_max_review_deadline,
+    calculate_plan_end_date
+)

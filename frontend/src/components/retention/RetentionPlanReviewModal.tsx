@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jobRetentionApi } from '../../services/jobRetentionApi';
 import type { SupportPlan, SupportPlanSummary } from '../../services/jobRetentionApi';
-import { X, Target, AlertTriangle, AlertCircle, Save, History } from 'lucide-react';
+import { X, Target, AlertTriangle, AlertCircle, Save, History, Calendar } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -30,16 +30,29 @@ export const addCalendarMonths = (dateStr: string, months: number): string => {
 };
 
 /**
- * 基準日から6か月後 - 1日（標準の計画最終日）を算出
+ * 計画開始日から標準の終了予定日（原則: start_date + 6 calendar months - 1 day）を算出
  * 例: 2026-09-01 -> 2027-02-28
- * 例: 2026-09-05 -> 2027-03-04
  */
-export const calculateDefaultPlanDeadline = (dateStr: string): string => {
+export const calculateDefaultPlanEndDate = (dateStr: string): string => {
   if (!dateStr) return '';
   const sixMonthsLater = addCalendarMonths(dateStr, 6);
   const [y, m, d] = sixMonthsLater.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   dt.setDate(dt.getDate() - 1);
+  const resYear = dt.getFullYear();
+  const resMonth = String(dt.getMonth() + 1).padStart(2, '0');
+  const resDay = String(dt.getDate()).padStart(2, '0');
+  return `${resYear}-${resMonth}-${resDay}`;
+};
+
+/**
+ * 指定日の翌日を算出（次計画開始予定日）
+ */
+export const calculateNextDay = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + 1);
   const resYear = dt.getFullYear();
   const resMonth = String(dt.getMonth() + 1).padStart(2, '0');
   const resDay = String(dt.getDate()).padStart(2, '0');
@@ -57,11 +70,11 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   const isReview = Boolean(activePlan);
   const today = new Date().toISOString().split('T')[0];
 
-  const [reviewDate, setReviewDate] = useState(today);
+  const [startDate, setStartDate] = useState(today);
   const [overallGoal, setOverallGoal] = useState('');
   const [reviewReason, setReviewReason] = useState('');
-  const [deadline, setDeadline] = useState('');
-  const [maxDeadline, setMaxDeadline] = useState('');
+  const [planEndDate, setPlanEndDate] = useState('');
+  const [maxEndDate, setMaxEndDate] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -70,11 +83,10 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   useEffect(() => {
     if (isOpen) {
       const initialDate = today;
-      setReviewDate(initialDate);
-      const calculatedMax = addCalendarMonths(initialDate, 6);
-      const defaultDeadline = calculateDefaultPlanDeadline(initialDate);
-      setMaxDeadline(calculatedMax);
-      setDeadline(defaultDeadline);
+      setStartDate(initialDate);
+      const calculatedMax = calculateDefaultPlanEndDate(initialDate);
+      setMaxEndDate(calculatedMax);
+      setPlanEndDate(calculatedMax);
 
       if (isReview && activePlan) {
         setOverallGoal(activePlan.overall_support_goal || '');
@@ -87,42 +99,42 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
     }
   }, [isOpen, activePlan, isReview]);
 
-  // 基準日変更時に最大期限 & デフォルト期限（6か月後-1日）を再計算
-  const handleReviewDateChange = (newDate: string) => {
-    setReviewDate(newDate);
+  // 開始日変更時に上限終了予定日 & デフォルト終了予定日（6か月-1日）を再計算
+  const handleStartDateChange = (newDate: string) => {
+    setStartDate(newDate);
     if (newDate) {
-      const newMax = addCalendarMonths(newDate, 6);
-      const defaultDeadline = calculateDefaultPlanDeadline(newDate);
-      setMaxDeadline(newMax);
-      setDeadline(defaultDeadline);
+      const calculatedMax = calculateDefaultPlanEndDate(newDate);
+      setMaxEndDate(calculatedMax);
+      setPlanEndDate(calculatedMax);
     }
   };
 
   if (!isOpen) return null;
 
-  // バリデーション
-  const isOverdueMax = Boolean(deadline && maxDeadline && deadline > maxDeadline);
+  // 上限チェック (原則 6か月 - 1日)
+  const isOverdueMax = Boolean(planEndDate && maxEndDate && planEndDate > maxEndDate);
+  const nextPlanStartDate = planEndDate ? calculateNextDay(planEndDate) : '';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!overallGoal.trim()) {
-      setErrorMsg('「全体支援目標」は必須です。');
+      setErrorMsg('「現在の支援目標」は必須です。');
       return;
     }
-    if (!reviewDate) {
-      setErrorMsg('「見直し基準日」は必須です。');
+    if (!startDate) {
+      setErrorMsg('「計画開始日」は必須です。');
       return;
     }
-    if (!deadline) {
-      setErrorMsg('「次回見直し期限」は必須です。');
+    if (!planEndDate) {
+      setErrorMsg('「計画終了予定日」は必須です。');
       return;
     }
     if (isOverdueMax) {
-      setErrorMsg(`次回見直し期限は基準日（${reviewDate}）から暦上6か月（${maxDeadline}）以内である必要があります。`);
+      setErrorMsg(`計画終了予定日は開始日（${startDate}）から6か月以内（上限: ${maxEndDate}）である必要があります。`);
       return;
     }
     if (isReview && !reviewReason.trim()) {
-      setErrorMsg('随時見直しを行う際は、「見直しの理由・契機」を必ず記録してください。');
+      setErrorMsg('随時見直しを行う際は、「見直し契機・理由」を必ず記録してください。');
       return;
     }
 
@@ -131,10 +143,11 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       setErrorMsg(null);
       const res = await jobRetentionApi.createOrReviewSupportPlan(contractId, {
         overall_support_goal: overallGoal.trim(),
-        review_date: reviewDate,
-        start_date: reviewDate,
+        start_date: startDate,
+        review_date: startDate,
+        plan_end_date: planEndDate,
+        next_review_deadline: planEndDate, // 互換用
         review_reason: reviewReason.trim(),
-        next_review_deadline: deadline,
       });
 
       onSaved(res.plan);
@@ -190,24 +203,24 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                   <History className="w-3.5 h-3.5 text-slate-400" />
                   現在の計画（第{activePlan.version}版）
                 </span>
-                <span>見直し期限: {activePlan.next_review_deadline}</span>
+                <span>計画終了予定日: {activePlan.plan_end_date || activePlan.next_review_deadline}</span>
               </div>
               <p className="text-slate-700 leading-relaxed font-medium">
                 {activePlan.overall_support_goal}
               </p>
               <p className="text-[11px] text-slate-400">
-                ※見直しが完了すると、第{activePlan.version}版は履歴（ARCHIVED）として保存され、新しい版がACTIVEになります。
+                ※見直しを確定すると、旧版は新計画開始日の前日までの適用期間として履歴（ARCHIVED）に連続して保存され、新しい版がACTIVEになります。
               </p>
             </div>
           )}
 
-          {/* 全体支援目標 */}
+          {/* 現在の支援目標 */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              全体支援目標・支援方針 <span className="text-rose-500">*</span>
+              現在の支援目標・支援方針 <span className="text-rose-500">*</span>
             </label>
             <p className="text-[11px] text-slate-400 mb-2">
-              本人の就労定着に向けた大まかな中長期目標、自律的対処を促進するための方針を記載します。（初月の月次支援目標の初期提案値にも連動します）
+              本人の就労定着に向けた大まかな目標・自律的対処方針を記載します（初月の月次支援目標の初期提案値にも連動します）。
             </p>
             <textarea
               value={overallGoal}
@@ -219,17 +232,17 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
             />
           </div>
 
-          {/* 基準日 & 次回見直し期限 (6か月上限) */}
+          {/* 計画期間（開始日 & 終了予定日） */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                見直し基準日 <span className="text-rose-500">*</span>
+                {isReview ? '新計画の開始日（見直し日）' : '計画開始日'} <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
                   type="date"
-                  value={reviewDate}
-                  onChange={(e) => handleReviewDateChange(e.target.value)}
+                  value={startDate}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
                   className="w-full p-2.5 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500"
                   required
                 />
@@ -238,14 +251,14 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
 
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                次回見直し期限（上限: 基準日+6か月） <span className="text-rose-500">*</span>
+                計画終了予定日（原則: 開始日+6か月-1日） <span className="text-rose-500">*</span>
               </label>
               <div className="relative">
                 <input
                   type="date"
-                  value={deadline}
-                  max={maxDeadline}
-                  onChange={(e) => setDeadline(e.target.value)}
+                  value={planEndDate}
+                  max={maxEndDate}
+                  onChange={(e) => setPlanEndDate(e.target.value)}
                   className={`w-full p-2.5 text-xs rounded-xl border focus:ring-2 ${
                     isOverdueMax
                       ? 'border-rose-300 bg-rose-50/50 focus:ring-rose-500 text-rose-800'
@@ -255,41 +268,44 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 />
               </div>
               <div className="mt-1 text-[11px] text-slate-400 flex items-center justify-between">
-                <span>最大上限: {maxDeadline || '—'}</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setDeadline(calculateDefaultPlanDeadline(reviewDate))}
-                    className="text-indigo-600 hover:text-indigo-800 font-semibold"
-                  >
-                    標準（6か月後-1日）
-                  </button>
-                  <span>|</span>
-                  <button
-                    type="button"
-                    onClick={() => setDeadline(maxDeadline)}
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    上限当日
-                  </button>
-                </div>
+                <span>上限: {maxEndDate || '—'}</span>
+                <button
+                  type="button"
+                  onClick={() => setPlanEndDate(calculateDefaultPlanEndDate(startDate))}
+                  className="text-indigo-600 hover:text-indigo-800 font-semibold"
+                >
+                  標準自動設定（6か月-1日）
+                </button>
               </div>
               {isOverdueMax && (
                 <div className="mt-1 text-[11px] font-bold text-rose-600 flex items-center gap-1">
                   <AlertTriangle className="w-3.5 h-3.5" />
-                  上限（{maxDeadline}）を超過しています
+                  上限（{maxEndDate}）を超過しています
                 </div>
               )}
             </div>
           </div>
 
-          {/* 見直しの理由・契機 */}
+          {/* 計画期間・次計画開始予定日のプレビュー表示 */}
+          {startDate && planEndDate && !isOverdueMax && (
+            <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 text-xs flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5 text-slate-700 font-medium">
+                <Calendar className="w-3.5 h-3.5 text-indigo-600" />
+                <span>計画期間: <strong>{startDate} ～ {planEndDate}</strong></span>
+              </div>
+              <div className="text-slate-600">
+                次計画開始予定日: <strong className="text-indigo-700">{nextPlanStartDate}</strong>
+              </div>
+            </div>
+          )}
+
+          {/* 見直し契機・理由 */}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1.5">
-              見直しの理由・契機 {isReview ? <span className="text-rose-500">* (随時見直し時は必須)</span> : <span className="text-slate-400 font-normal">(任意)</span>}
+              見直し契機・理由 {isReview ? <span className="text-rose-500">* (随時見直し時は必須)</span> : <span className="text-slate-400 font-normal">(任意)</span>}
             </label>
             <p className="text-[11px] text-slate-400 mb-1.5">
-              「業務量増加」「部署異動」「本人の体調改善」「定期見直し」など、計画を更新した背景を記録します。
+              「業務量増加」「本人からの相談」「部署異動」「定期見直し」など、計画を更新した背景を記録します。
             </p>
             <input
               type="text"
@@ -304,7 +320,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
           {/* フッターアクション */}
           <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
             <p className="text-[11px] text-slate-400">
-              ※随時見直しはいつでも実施可能です。6か月は放置できる最大期間です。
+              ※随時見直しはいつでも実施可能です。6か月は見直さずに放置できる最大期間です。
             </p>
             <div className="flex items-center gap-2">
               <button

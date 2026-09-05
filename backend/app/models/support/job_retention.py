@@ -258,15 +258,20 @@ class JobRetentionRecord(db.Model):
 # ====================================================================
 # 8. RetentionSupportPlan (就労定着支援計画 - 版管理)
 # ====================================================================
+def calculate_plan_end_date(start_date: datetime.date) -> datetime.date:
+    """計画開始日から暦上の終了予定日（原則: start_date + 6 calendar months - 1 day）を算出"""
+    return start_date + dateutil.relativedelta.relativedelta(months=6) - datetime.timedelta(days=1)
+
+
 def calculate_max_review_deadline(base_date: datetime.date) -> datetime.date:
-    """見直し基準日から暦上の6か月後（上限）を算出"""
-    return base_date + dateutil.relativedelta.relativedelta(months=6)
+    """後方互換用: calculate_plan_end_date と同等"""
+    return calculate_plan_end_date(base_date)
 
 
 class RetentionSupportPlan(db.Model):
     """
     就労定着支援計画の版管理テーブル。
-    大まかな支援目標と次回見直し期限を保持し、随時見直し履歴を残す。
+    大まかな支援目標と計画終了予定日を保持し、随時見直し履歴を残す。
     """
     __tablename__ = 'retention_support_plans'
     __table_args__ = (
@@ -289,9 +294,9 @@ class RetentionSupportPlan(db.Model):
 
     # 期間・見直し管理
     start_date = Column(Date, nullable=False)           # 当該版の適用開始日
-    review_date = Column(Date, nullable=True)           # 見直し実施日
+    review_date = Column(Date, nullable=True)           # 見直し実施日（随時見直し時）
     review_reason = Column(Text, nullable=True)         # 見直し理由
-    next_review_deadline = Column(Date, nullable=False) # 次回見直し期限 (上限: 基準日+暦上6か月)
+    plan_end_date = Column(Date, nullable=False)        # 当該計画版の終了予定日 (原則: start_date + 6 calendar months - 1 day)
 
     # ステータス: ACTIVE (現在有効・1契約につき1件のみ), ARCHIVED (過去履歴)
     status = Column(String(20), nullable=False, default='ACTIVE', index=True)
@@ -303,26 +308,60 @@ class RetentionSupportPlan(db.Model):
     contract = relationship('JobRetentionContract', back_populates='plans')
     created_by = relationship('Supporter', foreign_keys=[created_by_id])
 
+    @property
+    def next_plan_start_date(self) -> datetime.date:
+        """次版の開始予定日（終了予定日の翌日）"""
+        return self.plan_end_date + datetime.timedelta(days=1)
+
+    @property
+    def next_review_deadline(self) -> datetime.date:
+        """後方互換プロパティ"""
+        return self.plan_end_date
+
+    @next_review_deadline.setter
+    def next_review_deadline(self, val: datetime.date):
+        self.plan_end_date = val
+
     def compute_deadline_status(self, today: Optional[datetime.date] = None) -> Dict[str, Any]:
-        """次回見直し期限のステータスと残日数を計算"""
+        """
+        計画終了予定日および次計画開始予定日を基準とした更新ステータス判定。
+        - today <= plan_end_date: 現行計画期間内 (終了間近なら APPROACHING, 本日なら DUE_TODAY)
+        - today > plan_end_date:
+            - 次計画開始予定日の属する月と同じ月内: OVERDUE_WITHIN_MONTH (当月内更新猶予あり)
+            - その翌月以降: OVERDUE_BILLING_RISK (前月内に更新されていないため請求影響リスクあり)
+        """
         if today is None:
             today = datetime.date.today()
-        days_diff = (self.next_review_deadline - today).days
 
-        if days_diff > 14:
-            status_code = 'NORMAL'
-        elif days_diff > 0:
-            status_code = 'APPROACHING'
-        elif days_diff == 0:
+        next_start = self.next_plan_start_date
+        days_diff = (self.plan_end_date - today).days
+
+        if today < self.plan_end_date:
+            if days_diff <= 14:
+                status_code = 'APPROACHING'
+            else:
+                status_code = 'NORMAL'
+        elif today == self.plan_end_date:
             status_code = 'DUE_TODAY'
-        elif days_diff >= -30:
-            status_code = 'OVERDUE_WITHIN_MONTH'
         else:
-            status_code = 'OVERDUE_BILLING_RISK'
+            # today > plan_end_date (次計画期間突入)
+            if (today.year, today.month) == (next_start.year, next_start.month):
+                status_code = 'OVERDUE_WITHIN_MONTH'
+            elif (today.year, today.month) > (next_start.year, next_start.month):
+                status_code = 'OVERDUE_BILLING_RISK'
+            else:
+                status_code = 'NORMAL'
+
+        days_remaining = max(0, days_diff)
+        days_overdue = max(0, -days_diff)
 
         return {
             "status_code": status_code,
             "days_diff": days_diff,
-            "next_review_deadline": self.next_review_deadline.isoformat(),
-            "is_overdue": days_diff < 0
+            "days_remaining": days_remaining,
+            "days_overdue": days_overdue,
+            "plan_end_date": self.plan_end_date.isoformat(),
+            "next_plan_start_date": next_start.isoformat(),
+            "next_review_deadline": self.plan_end_date.isoformat(),
+            "is_overdue": today > self.plan_end_date
         }

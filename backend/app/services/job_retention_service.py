@@ -9,6 +9,7 @@ from backend.app.models import (
     RetentionUserVoiceLog, RetentionEmployerFeedbackLog,
     RetentionSupportActionLog, MonthlyRetentionReport,
     RetentionSupportPlan, calculate_max_review_deadline,
+    calculate_plan_end_date,
     User, Supporter, AuditActionLog
 )
 
@@ -597,7 +598,8 @@ class JobRetentionService:
     def create_or_review_support_plan(
         contract_id: int,
         overall_support_goal: str,
-        next_review_deadline: datetime.date,
+        plan_end_date: Optional[datetime.date] = None,
+        next_review_deadline: Optional[datetime.date] = None, # 後方互換用
         review_date: Optional[datetime.date] = None,
         review_reason: Optional[str] = None,
         start_date: Optional[datetime.date] = None,
@@ -605,8 +607,12 @@ class JobRetentionService:
     ) -> RetentionSupportPlan:
         """
         支援計画の初回作成または随時見直しを行う。
-        - 初回作成時: version=1, 基準日はstart_date (契約開始日等), 次回見直し期限 <= 基準日+6か月
-        - 見直し時: 以前のACTIVE版をARCHIVEDに変更し、version=前版+1, 基準日は見直し日, 次回見直し期限 <= 見直し日+6か月
+        - plan_end_date: 当該計画版の終了予定日 (原則: start_date + 6 calendar months - 1 day)
+        - 初回作成時: version=1, 基準日はstart_date (契約開始日等), 計画終了予定日 <= 基準日+6か月-1日
+        - 見直し時:
+            - 以前のACTIVE版をARCHIVEDに変更
+            - 早期見直し時 (review_d <= 旧版終了予定日): 旧版の適用期間を前日(review_d - 1日)として連続保持
+            - version=前版+1, 基準日は見直し日, 新計画終了予定日 <= 見直し日+6か月-1日
         - 監査ログを記録 (flush徹底)
         """
         contract = db.session.get(JobRetentionContract, contract_id)
@@ -616,18 +622,23 @@ class JobRetentionService:
         if not overall_support_goal or not overall_support_goal.strip():
             raise ValueError("大まかな支援目標の入力は必須です。")
 
+        # 終了予定日の取得（plan_end_date優先、後方互換でnext_review_deadlineも受付）
+        target_end_date = plan_end_date or next_review_deadline
+
         active_plan = JobRetentionService.get_active_support_plan(contract_id)
 
         if not active_plan:
             # 初回作成
-            base_date = review_date or start_date or contract.contract_start_date or datetime.date.today()
-            max_deadline = calculate_max_review_deadline(base_date)
-            if next_review_deadline > max_deadline:
+            base_date = start_date or review_date or contract.contract_start_date or datetime.date.today()
+            max_allowed = calculate_plan_end_date(base_date)
+            if target_end_date is None:
+                target_end_date = max_allowed
+            elif target_end_date > max_allowed:
                 raise ValueError(
-                    f"次回見直し期限は基準日（{base_date.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_deadline.strftime('%Y/%m/%d')}まで）に設定してください。"
+                    f"計画終了予定日は開始日（{base_date.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_allowed.strftime('%Y/%m/%d')}まで）に設定してください。"
                 )
-            if next_review_deadline < base_date:
-                raise ValueError("次回見直し期限は基準日以降の日付を設定してください。")
+            if target_end_date < base_date:
+                raise ValueError("計画終了予定日は開始日以降の日付を設定してください。")
 
             new_plan = RetentionSupportPlan(
                 contract_id=contract_id,
@@ -636,7 +647,7 @@ class JobRetentionService:
                 start_date=base_date,
                 review_date=review_date,
                 review_reason=review_reason.strip() if review_reason else None,
-                next_review_deadline=next_review_deadline,
+                plan_end_date=target_end_date,
                 status='ACTIVE',
                 created_by_id=supporter_id
             )
@@ -649,25 +660,31 @@ class JobRetentionService:
                 action='CREATE_RETENTION_SUPPORT_PLAN',
                 entity_type='RetentionSupportPlan',
                 entity_id=new_plan.id,
-                after_value=f"Version: 1, Goal: {new_plan.overall_support_goal[:30]}, Deadline: {new_plan.next_review_deadline}",
+                after_value=f"Version: 1, Goal: {new_plan.overall_support_goal[:30]}, PlanEndDate: {new_plan.plan_end_date}",
                 reason="就労定着支援計画の新規作成"
             )
             db.session.add(audit)
             db.session.commit()
             return new_plan
         else:
-            # 随時見直し
+            # 随時見直し（早期見直し含む）
             review_d = review_date or datetime.date.today()
             if not review_reason or not review_reason.strip():
                 raise ValueError("計画見直し時は見直し理由の入力が必須です。")
 
-            max_deadline = calculate_max_review_deadline(review_d)
-            if next_review_deadline > max_deadline:
+            max_allowed = calculate_plan_end_date(review_d)
+            if target_end_date is None:
+                target_end_date = max_allowed
+            elif target_end_date > max_allowed:
                 raise ValueError(
-                    f"次回見直し期限は見直し日（{review_d.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_deadline.strftime('%Y/%m/%d')}まで）に設定してください。"
+                    f"計画終了予定日は見直し日（{review_d.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_allowed.strftime('%Y/%m/%d')}まで）に設定してください。"
                 )
-            if next_review_deadline < review_d:
-                raise ValueError("次回見直し期限は見直し日以降の日付を設定してください。")
+            if target_end_date < review_d:
+                raise ValueError("計画終了予定日は見直し日以降の日付を設定してください。")
+
+            # 早期見直し対応: 旧計画の適用期間を前日までとして連続保持
+            if review_d <= active_plan.plan_end_date:
+                active_plan.plan_end_date = review_d - datetime.timedelta(days=1)
 
             # 旧ACTIVE計画をアーカイブ
             active_plan.status = 'ARCHIVED'
@@ -681,7 +698,7 @@ class JobRetentionService:
                 start_date=review_d,
                 review_date=review_d,
                 review_reason=review_reason.strip(),
-                next_review_deadline=next_review_deadline,
+                plan_end_date=target_end_date,
                 status='ACTIVE',
                 created_by_id=supporter_id
             )
@@ -694,7 +711,7 @@ class JobRetentionService:
                 action='REVIEW_RETENTION_SUPPORT_PLAN',
                 entity_type='RetentionSupportPlan',
                 entity_id=new_plan.id,
-                after_value=f"Version: {new_version} (from {active_plan.version}), Goal: {new_plan.overall_support_goal[:30]}, Deadline: {new_plan.next_review_deadline}",
+                after_value=f"Version: {new_version} (from {active_plan.version}), Goal: {new_plan.overall_support_goal[:30]}, PlanEndDate: {new_plan.plan_end_date}",
                 reason=f"就労定着支援計画の随時見直し（理由: {review_reason.strip()[:50]}）"
             )
             db.session.add(audit)

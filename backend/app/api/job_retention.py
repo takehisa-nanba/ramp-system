@@ -196,7 +196,9 @@ def list_contracts():
                 "start_date": active_plan.start_date.isoformat(),
                 "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
                 "review_reason": active_plan.review_reason,
-                "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+                "plan_end_date": active_plan.plan_end_date.isoformat(),
+                "next_plan_start_date": active_plan.next_plan_start_date.isoformat(),
+                "next_review_deadline": active_plan.plan_end_date.isoformat(),
                 "deadline_status": status_info["status_code"],
                 "days_diff": status_info["days_diff"],
                 "is_overdue": status_info["is_overdue"]
@@ -315,7 +317,9 @@ def get_contract(contract_id: int):
             "start_date": active_plan.start_date.isoformat(),
             "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
             "review_reason": active_plan.review_reason,
-            "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+            "plan_end_date": active_plan.plan_end_date.isoformat(),
+            "next_plan_start_date": active_plan.next_plan_start_date.isoformat(),
+            "next_review_deadline": active_plan.plan_end_date.isoformat(),
             "deadline_status": status_info["status_code"],
             "days_diff": status_info["days_diff"],
             "is_overdue": status_info["is_overdue"]
@@ -708,7 +712,7 @@ def get_active_support_plan(contract_id: int):
         return jsonify({"has_plan": False, "plan": None}), 200
 
     status_info = active_plan.compute_deadline_status()
-    base_d = active_plan.review_date or active_plan.start_date
+    base_d = active_plan.start_date or active_plan.review_date
     max_deadline = calculate_max_review_deadline(base_d)
 
     return jsonify({
@@ -720,7 +724,9 @@ def get_active_support_plan(contract_id: int):
             "start_date": active_plan.start_date.isoformat(),
             "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
             "review_reason": active_plan.review_reason,
-            "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+            "plan_end_date": active_plan.plan_end_date.isoformat(),
+            "next_plan_start_date": active_plan.next_plan_start_date.isoformat(),
+            "next_review_deadline": active_plan.plan_end_date.isoformat(),
             "status": active_plan.status,
             "deadline_status": status_info["status_code"],
             "days_diff": status_info["days_diff"],
@@ -760,7 +766,9 @@ def list_support_plans(contract_id: int):
             "start_date": p.start_date.isoformat(),
             "review_date": p.review_date.isoformat() if p.review_date else None,
             "review_reason": p.review_reason,
-            "next_review_deadline": p.next_review_deadline.isoformat(),
+            "plan_end_date": p.plan_end_date.isoformat(),
+            "next_plan_start_date": p.next_plan_start_date.isoformat(),
+            "next_review_deadline": p.plan_end_date.isoformat(),
             "status": p.status,
             "deadline_status": status_info["status_code"],
             "days_diff": status_info["days_diff"],
@@ -785,13 +793,13 @@ def create_or_review_support_plan(contract_id: int):
 
     data = request.get_json() or {}
     overall_support_goal = data.get('overall_support_goal')
-    next_review_deadline_str = data.get('next_review_deadline')
+    plan_end_date_str = data.get('plan_end_date') or data.get('next_review_deadline')
 
-    if not overall_support_goal or not next_review_deadline_str:
-        return jsonify({"msg": "overall_support_goal, next_review_deadline は必須です。"}), 400
+    if not overall_support_goal:
+        return jsonify({"msg": "overall_support_goal は必須です。"}), 400
 
     try:
-        next_review_deadline = _parse_date(next_review_deadline_str)
+        plan_end_date = _parse_date(plan_end_date_str)
         review_date = _parse_date(data.get('review_date'))
         start_date = _parse_date(data.get('start_date'))
         review_reason = data.get('review_reason')
@@ -799,7 +807,7 @@ def create_or_review_support_plan(contract_id: int):
         plan = JobRetentionService.create_or_review_support_plan(
             contract_id=contract_id,
             overall_support_goal=overall_support_goal,
-            next_review_deadline=next_review_deadline,
+            plan_end_date=plan_end_date,
             review_date=review_date,
             review_reason=review_reason,
             start_date=start_date,
@@ -815,7 +823,9 @@ def create_or_review_support_plan(contract_id: int):
                 "start_date": plan.start_date.isoformat(),
                 "review_date": plan.review_date.isoformat() if plan.review_date else None,
                 "review_reason": plan.review_reason,
-                "next_review_deadline": plan.next_review_deadline.isoformat(),
+                "plan_end_date": plan.plan_end_date.isoformat(),
+                "next_plan_start_date": plan.next_plan_start_date.isoformat(),
+                "next_review_deadline": plan.plan_end_date.isoformat(),
                 "status": plan.status,
                 "deadline_status": status_info["status_code"],
                 "days_diff": status_info["days_diff"],
