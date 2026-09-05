@@ -9,7 +9,10 @@ from backend.app.services.job_retention_service import JobRetentionService, JobR
 from backend.app.services.core_service import check_permission
 from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope
 from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
-from backend.app.models import Supporter, User, OfficeSetting, OfficeServiceConfiguration, ServiceCertificate, JobRetentionContract
+from backend.app.models import (
+    Supporter, User, OfficeSetting, OfficeServiceConfiguration,
+    ServiceCertificate, JobRetentionContract, calculate_max_review_deadline
+)
 from backend.app.extensions import db
 
 job_retention_bp = Blueprint('job_retention', __name__, url_prefix='/api/job-retention')
@@ -182,6 +185,23 @@ def list_contracts():
             continue
 
         latest_ep = c.episodes[-1] if c.episodes else None
+        active_plan = JobRetentionService.get_active_support_plan(c.id)
+        plan_summary = None
+        if active_plan:
+            status_info = active_plan.compute_deadline_status()
+            plan_summary = {
+                "id": active_plan.id,
+                "version": active_plan.version,
+                "overall_support_goal": active_plan.overall_support_goal,
+                "start_date": active_plan.start_date.isoformat(),
+                "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
+                "review_reason": active_plan.review_reason,
+                "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+                "deadline_status": status_info["status_code"],
+                "days_diff": status_info["days_diff"],
+                "is_overdue": status_info["is_overdue"]
+            }
+
         result.append({
             "id": c.id,
             "user_id": c.user_id,
@@ -195,7 +215,8 @@ def list_contracts():
             "latest_workplace": latest_ep.workplace_name if latest_ep else "未登録",
             "latest_job_title": latest_ep.job_title if latest_ep else None,
             "voice_count": len(c.voice_logs),
-            "action_count": len(c.action_logs)
+            "action_count": len(c.action_logs),
+            "active_plan": plan_summary
         })
     return jsonify(result), 200
 
@@ -283,6 +304,23 @@ def get_contract(contract_id: int):
             "resignation_reason": ep.resignation_reason
         })
 
+    active_plan = JobRetentionService.get_active_support_plan(contract.id)
+    plan_summary = None
+    if active_plan:
+        status_info = active_plan.compute_deadline_status()
+        plan_summary = {
+            "id": active_plan.id,
+            "version": active_plan.version,
+            "overall_support_goal": active_plan.overall_support_goal,
+            "start_date": active_plan.start_date.isoformat(),
+            "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
+            "review_reason": active_plan.review_reason,
+            "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+            "deadline_status": status_info["status_code"],
+            "days_diff": status_info["days_diff"],
+            "is_overdue": status_info["is_overdue"]
+        }
+
     return jsonify({
         "id": contract.id,
         "user_id": contract.user_id,
@@ -294,7 +332,8 @@ def get_contract(contract_id: int):
         "is_company_involved": contract.is_company_involved,
         "consent_status": contract.consent_status,
         "contract_details": contract.contract_details,
-        "episodes": episodes
+        "episodes": episodes,
+        "active_plan": plan_summary
     }), 200
 
 # ====================================================================
@@ -636,6 +675,153 @@ def save_monthly_report(contract_id: int, year_month: str):
     except IntegrityError:
         db.session.rollback()
         return jsonify({"msg": "同一契約・同一年月のレポートが既に存在するか、同時に作成されたため競合しました。"}), 409
+    except ValueError as e:
+        return jsonify({"msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"msg": f"エラーが発生しました: {str(e)}"}), 500
+
+
+# ====================================================================
+# 支援計画 (随時見直し & 6か月上限ガード & 版管理)
+# ====================================================================
+@job_retention_bp.route('/contracts/<int:contract_id>/support-plan/active', methods=['GET'])
+@jwt_required()
+def get_active_support_plan(contract_id: int):
+    """現在有効な支援計画の取得（支援員または本人）"""
+    identity = get_jwt_identity()
+    actor_type, actor_id = extract_actor_info(identity)
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+
+    if actor_type == 'staff':
+        require_staff_permission(actor_id, 'JOB_RETENTION_VIEW')
+        validate_supporter_access_to_contract(actor_id, contract)
+    elif actor_type == 'user':
+        validate_user_access_to_contract(actor_id, contract)
+    else:
+        return jsonify({"msg": "権限がありません。"}), 403
+
+    active_plan = JobRetentionService.get_active_support_plan(contract_id)
+    if not active_plan:
+        return jsonify({"has_plan": False, "plan": None}), 200
+
+    status_info = active_plan.compute_deadline_status()
+    base_d = active_plan.review_date or active_plan.start_date
+    max_deadline = calculate_max_review_deadline(base_d)
+
+    return jsonify({
+        "has_plan": True,
+        "plan": {
+            "id": active_plan.id,
+            "version": active_plan.version,
+            "overall_support_goal": active_plan.overall_support_goal,
+            "start_date": active_plan.start_date.isoformat(),
+            "review_date": active_plan.review_date.isoformat() if active_plan.review_date else None,
+            "review_reason": active_plan.review_reason,
+            "next_review_deadline": active_plan.next_review_deadline.isoformat(),
+            "status": active_plan.status,
+            "deadline_status": status_info["status_code"],
+            "days_diff": status_info["days_diff"],
+            "is_overdue": status_info["is_overdue"],
+            "max_allowed_deadline": max_deadline.isoformat()
+        }
+    }), 200
+
+
+@job_retention_bp.route('/contracts/<int:contract_id>/support-plans', methods=['GET'])
+@jwt_required()
+def list_support_plans(contract_id: int):
+    """支援計画の全版履歴の取得（支援員または本人）"""
+    identity = get_jwt_identity()
+    actor_type, actor_id = extract_actor_info(identity)
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+
+    if actor_type == 'staff':
+        require_staff_permission(actor_id, 'JOB_RETENTION_VIEW')
+        validate_supporter_access_to_contract(actor_id, contract)
+    elif actor_type == 'user':
+        validate_user_access_to_contract(actor_id, contract)
+    else:
+        return jsonify({"msg": "権限がありません。"}), 403
+
+    plans = JobRetentionService.list_support_plans(contract_id)
+    items = []
+    for p in plans:
+        status_info = p.compute_deadline_status()
+        items.append({
+            "id": p.id,
+            "version": p.version,
+            "overall_support_goal": p.overall_support_goal,
+            "start_date": p.start_date.isoformat(),
+            "review_date": p.review_date.isoformat() if p.review_date else None,
+            "review_reason": p.review_reason,
+            "next_review_deadline": p.next_review_deadline.isoformat(),
+            "status": p.status,
+            "deadline_status": status_info["status_code"],
+            "days_diff": status_info["days_diff"],
+            "is_overdue": status_info["is_overdue"],
+            "created_at": p.created_at.isoformat() if p.created_at else None
+        })
+    return jsonify(items), 200
+
+
+@job_retention_bp.route('/contracts/<int:contract_id>/support-plans', methods=['POST'])
+@jwt_required()
+def create_or_review_support_plan(contract_id: int):
+    """支援計画の新規作成または随時見直し（支援員専用・JOB_RETENTION_EDIT必須）"""
+    identity = get_jwt_identity()
+    supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+    validate_supporter_access_to_contract(supporter_id, contract)
+
+    data = request.get_json() or {}
+    overall_support_goal = data.get('overall_support_goal')
+    next_review_deadline_str = data.get('next_review_deadline')
+
+    if not overall_support_goal or not next_review_deadline_str:
+        return jsonify({"msg": "overall_support_goal, next_review_deadline は必須です。"}), 400
+
+    try:
+        next_review_deadline = _parse_date(next_review_deadline_str)
+        review_date = _parse_date(data.get('review_date'))
+        start_date = _parse_date(data.get('start_date'))
+        review_reason = data.get('review_reason')
+
+        plan = JobRetentionService.create_or_review_support_plan(
+            contract_id=contract_id,
+            overall_support_goal=overall_support_goal,
+            next_review_deadline=next_review_deadline,
+            review_date=review_date,
+            review_reason=review_reason,
+            start_date=start_date,
+            supporter_id=supporter_id
+        )
+        status_info = plan.compute_deadline_status()
+        return jsonify({
+            "msg": f"支援計画（Version {plan.version}）を確定しました。",
+            "plan": {
+                "id": plan.id,
+                "version": plan.version,
+                "overall_support_goal": plan.overall_support_goal,
+                "start_date": plan.start_date.isoformat(),
+                "review_date": plan.review_date.isoformat() if plan.review_date else None,
+                "review_reason": plan.review_reason,
+                "next_review_deadline": plan.next_review_deadline.isoformat(),
+                "status": plan.status,
+                "deadline_status": status_info["status_code"],
+                "days_diff": status_info["days_diff"],
+                "is_overdue": status_info["is_overdue"]
+            }
+        }), 201
     except ValueError as e:
         return jsonify({"msg": str(e)}), 400
     except Exception as e:

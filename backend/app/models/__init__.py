@@ -90,7 +90,8 @@ from backend.app.models.support.job_retention import (
     JobRetentionContract, JobRetentionRecord,
     RetentionEmploymentEpisode, RetentionUserVoiceLog,
     RetentionEmployerFeedbackLog, RetentionSupportActionLog,
-    MonthlyRetentionReport
+    MonthlyRetentionReport, RetentionSupportPlan,
+    calculate_max_review_deadline
 )
 from backend.app.models.support.follow_up import (
     PostTransitionFollowUp

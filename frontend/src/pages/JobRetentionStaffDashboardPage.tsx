@@ -3,8 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { jobRetentionApi } from '../services/jobRetentionApi';
-import type { RetentionContract, UserVoiceLog } from '../services/jobRetentionApi';
+import type { RetentionContract, UserVoiceLog, SupportPlan, SupportPlanSummary } from '../services/jobRetentionApi';
 import { JobRetentionActionModal } from './JobRetentionActionModal';
+import { RetentionPlanBanner } from '../components/retention/RetentionPlanBanner';
+import { RetentionPlanReviewModal } from '../components/retention/RetentionPlanReviewModal';
 import { 
   Building2, Plus, MessageSquare, FileText, 
   Calendar, AlertCircle, ChevronDown, ChevronUp, UserCheck
@@ -18,6 +20,16 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
 
   // 支援記録モーダル
   const [activeModalContract, setActiveModalContract] = useState<{ id: number; name: string } | null>(null);
+
+  // 支援計画見直し・作成モーダル
+  const [reviewModalContract, setReviewModalContract] = useState<{
+    id: number;
+    name: string;
+    activePlan?: SupportPlanSummary | null;
+  } | null>(null);
+
+  // 支援計画の過去版履歴
+  const [historyMap, setHistoryMap] = useState<{ [contractId: number]: SupportPlan[] }>({});
 
   // 本人の声展開状態
   const [expandedVoices, setExpandedVoices] = useState<{ [contractId: number]: UserVoiceLog[] }>({});
@@ -45,6 +57,15 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
       setErrorMsg(err?.response?.data?.msg || '契約一覧の取得に失敗しました。');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadHistory = async (contractId: number) => {
+    try {
+      const plans = await jobRetentionApi.listSupportPlans(contractId);
+      setHistoryMap(prev => ({ ...prev, [contractId]: plans }));
+    } catch (err) {
+      console.error('Failed to load plan history', err);
     }
   };
 
@@ -197,6 +218,16 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {/* 支援計画（全体目標 & 見直し期限 & 期限状態）常時表示バナー */}
+              <div className="py-3">
+                <RetentionPlanBanner
+                  plan={c.active_plan}
+                  onOpenReviewModal={() => setReviewModalContract({ id: c.id, name: c.user_name, activePlan: c.active_plan })}
+                  historyPlans={historyMap[c.id]}
+                  onLoadHistory={() => loadHistory(c.id)}
+                />
+              </div>
+
               {/* フッター情報 & 声のアコーディオン */}
               <div className="pt-3 flex items-center justify-between text-xs text-slate-500">
                 <div className="flex items-center gap-4">
@@ -347,6 +378,23 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
             </form>
           </div>
         </div>
+      )}
+
+      {/* 支援計画の新規作成・随時見直しモーダル */}
+      {reviewModalContract && (
+        <RetentionPlanReviewModal
+          isOpen={Boolean(reviewModalContract)}
+          onClose={() => setReviewModalContract(null)}
+          contractId={reviewModalContract.id}
+          userName={reviewModalContract.name}
+          activePlan={reviewModalContract.activePlan}
+          onSaved={(_newPlan) => {
+            loadContracts();
+            if (reviewModalContract.id) {
+              loadHistory(reviewModalContract.id);
+            }
+          }}
+        />
       )}
     </div>
   );

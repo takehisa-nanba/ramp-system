@@ -1,8 +1,11 @@
 # backend/app/models/support/job_retention.py
 
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, UniqueConstraint, Index
 from sqlalchemy.orm import relationship
+import dateutil.relativedelta
+import datetime
+from typing import Optional, Dict, Any
 
 # ====================================================================
 # 1. JobRetentionContract (就労定着支援 - 契約)
@@ -43,6 +46,9 @@ class JobRetentionContract(db.Model):
     # 就労エピソード履歴 (1対多)
     episodes = relationship('RetentionEmploymentEpisode', back_populates='contract', order_by='RetentionEmploymentEpisode.episode_number', cascade="all, delete-orphan")
     
+    # 支援計画版履歴 (1対多)
+    plans = relationship('RetentionSupportPlan', back_populates='contract', order_by='RetentionSupportPlan.version.asc()', cascade="all, delete-orphan")
+
     # 一次情報ログ
     voice_logs = relationship('RetentionUserVoiceLog', back_populates='contract', order_by='desc(RetentionUserVoiceLog.logged_at)', cascade="all, delete-orphan")
     employer_feedback_logs = relationship('RetentionEmployerFeedbackLog', back_populates='contract', order_by='desc(RetentionEmployerFeedbackLog.logged_at)', cascade="all, delete-orphan")
@@ -246,4 +252,77 @@ class JobRetentionRecord(db.Model):
     document_url = Column(String(500))
     
     contract = relationship('JobRetentionContract', back_populates='retention_records')
-    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+
+
+# ====================================================================
+# 8. RetentionSupportPlan (就労定着支援計画 - 版管理)
+# ====================================================================
+def calculate_max_review_deadline(base_date: datetime.date) -> datetime.date:
+    """見直し基準日から暦上の6か月後（上限）を算出"""
+    return base_date + dateutil.relativedelta.relativedelta(months=6)
+
+
+class RetentionSupportPlan(db.Model):
+    """
+    就労定着支援計画の版管理テーブル。
+    大まかな支援目標と次回見直し期限を保持し、随時見直し履歴を残す。
+    """
+    __tablename__ = 'retention_support_plans'
+    __table_args__ = (
+        UniqueConstraint('contract_id', 'version', name='uq_retention_plan_contract_version'),
+        Index(
+            'uq_active_retention_plan',
+            'contract_id',
+            unique=True,
+            postgresql_where=db.text("status = 'ACTIVE'"),
+            sqlite_where=db.text("status = 'ACTIVE'")
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id', ondelete='CASCADE'), nullable=False, index=True)
+    version = Column(Integer, nullable=False, default=1)
+
+    # 支援方針
+    overall_support_goal = Column(Text, nullable=False) # 現在の大まかな支援目標
+
+    # 期間・見直し管理
+    start_date = Column(Date, nullable=False)           # 当該版の適用開始日
+    review_date = Column(Date, nullable=True)           # 見直し実施日
+    review_reason = Column(Text, nullable=True)         # 見直し理由
+    next_review_deadline = Column(Date, nullable=False) # 次回見直し期限 (上限: 基準日+暦上6か月)
+
+    # ステータス: ACTIVE (現在有効・1契約につき1件のみ), ARCHIVED (過去履歴)
+    status = Column(String(20), nullable=False, default='ACTIVE', index=True)
+
+    created_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='plans')
+    created_by = relationship('Supporter', foreign_keys=[created_by_id])
+
+    def compute_deadline_status(self, today: Optional[datetime.date] = None) -> Dict[str, Any]:
+        """次回見直し期限のステータスと残日数を計算"""
+        if today is None:
+            today = datetime.date.today()
+        days_diff = (self.next_review_deadline - today).days
+
+        if days_diff > 14:
+            status_code = 'NORMAL'
+        elif days_diff > 0:
+            status_code = 'APPROACHING'
+        elif days_diff == 0:
+            status_code = 'DUE_TODAY'
+        elif days_diff >= -30:
+            status_code = 'OVERDUE_WITHIN_MONTH'
+        else:
+            status_code = 'OVERDUE_BILLING_RISK'
+
+        return {
+            "status_code": status_code,
+            "days_diff": days_diff,
+            "next_review_deadline": self.next_review_deadline.isoformat(),
+            "is_overdue": days_diff < 0
+        }

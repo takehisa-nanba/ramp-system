@@ -19,6 +19,41 @@ export interface RetentionContract {
   contract_details?: string;
   office_service_configuration_id?: number;
   episodes?: EmploymentEpisode[];
+  active_plan?: SupportPlanSummary | null;
+}
+
+export type DeadlineStatusCode =
+  | 'NORMAL'
+  | 'APPROACHING'
+  | 'DUE_TODAY'
+  | 'OVERDUE_WITHIN_MONTH'
+  | 'OVERDUE_BILLING_RISK';
+
+export interface SupportPlanSummary {
+  id: number;
+  version: number;
+  overall_support_goal: string;
+  start_date: string;
+  review_date?: string | null;
+  review_reason?: string | null;
+  next_review_deadline: string;
+  deadline_status: DeadlineStatusCode;
+  days_diff: number;
+  is_overdue: boolean;
+}
+
+export interface SupportPlan extends SupportPlanSummary {
+  status: 'ACTIVE' | 'ARCHIVED';
+  max_allowed_deadline?: string;
+  created_at?: string;
+}
+
+export interface CreateOrReviewPlanRequest {
+  overall_support_goal: string;
+  next_review_deadline: string;
+  review_date?: string;
+  review_reason?: string;
+  start_date?: string;
 }
 
 export interface EmploymentEpisode {
@@ -151,6 +186,30 @@ export const jobRetentionApi = {
     const res = await apiClient.post<{ id: number; msg: string; status: string }>(
       `/job-retention/contracts/${contractId}/monthly-reports/${yearMonth}`,
       { ...data, finalize }
+    );
+    return res.data;
+  },
+
+  // 支援計画 (随時見直し & 6か月上限ガード & 版管理)
+  async getActiveSupportPlan(contractId: number): Promise<{ has_plan: boolean; plan: SupportPlan | null }> {
+    const res = await apiClient.get<{ has_plan: boolean; plan: SupportPlan | null }>(
+      `/job-retention/contracts/${contractId}/support-plan/active`
+    );
+    return res.data;
+  },
+
+  async listSupportPlans(contractId: number): Promise<SupportPlan[]> {
+    const res = await apiClient.get<SupportPlan[]>(`/job-retention/contracts/${contractId}/support-plans`);
+    return res.data;
+  },
+
+  async createOrReviewSupportPlan(
+    contractId: number,
+    data: CreateOrReviewPlanRequest
+  ): Promise<{ msg: string; plan: SupportPlan }> {
+    const res = await apiClient.post<{ msg: string; plan: SupportPlan }>(
+      `/job-retention/contracts/${contractId}/support-plans`,
+      data
     );
     return res.data;
   }

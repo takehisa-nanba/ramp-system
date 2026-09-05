@@ -1,8 +1,7 @@
-// frontend/src/pages/JobRetentionActionModal.tsx
-
 import React, { useState, useEffect } from 'react';
 import { jobRetentionApi } from '../services/jobRetentionApi';
-import { X, Calendar, Building2, UserCheck, Shuffle, Save } from 'lucide-react';
+import type { SupportPlan } from '../services/jobRetentionApi';
+import { X, Calendar, Building2, UserCheck, Shuffle, Save, Target, AlertCircle } from 'lucide-react';
 
 interface Props {
   isOpen: boolean;
@@ -21,6 +20,8 @@ export const JobRetentionActionModal: React.FC<Props> = ({
 }) => {
   const today = new Date().toISOString().split('T')[0];
   const [actionDate, setActionDate] = useState(today);
+  const [activePlan, setActivePlan] = useState<SupportPlan | null>(null);
+  const [hasLoadedPlan, setHasLoadedPlan] = useState(false);
 
   // 複数支援種別フラグ
   const [hasUserInterview, setHasUserInterview] = useState(true);
@@ -43,7 +44,19 @@ export const JobRetentionActionModal: React.FC<Props> = ({
   const draftKey = `retention_action_draft_${contractId}`;
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && contractId) {
+      // 支援計画の取得
+      jobRetentionApi.getActiveSupportPlan(contractId)
+        .then((res) => {
+          setActivePlan(res.plan);
+          setHasLoadedPlan(true);
+        })
+        .catch((err) => {
+          console.error('Failed to load active support plan', err);
+          setActivePlan(null);
+          setHasLoadedPlan(true);
+        });
+
       const saved = sessionStorage.getItem(draftKey);
       if (saved) {
         try {
@@ -144,6 +157,31 @@ export const JobRetentionActionModal: React.FC<Props> = ({
 
         {/* フォーム */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4 text-sm">
+          {/* 現在の支援目標ピン留め表示 */}
+          {activePlan ? (
+            <div className="p-3.5 rounded-xl bg-indigo-50/70 border border-indigo-100 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px]">
+                <span className="font-bold text-indigo-900 flex items-center gap-1">
+                  <Target className="w-3.5 h-3.5 text-indigo-600" />
+                  現在の支援方針・目標（第{activePlan.version}版）
+                </span>
+                <span className="text-slate-500">
+                  次回見直し期限: <strong className="text-slate-700">{activePlan.next_review_deadline}</strong>
+                </span>
+              </div>
+              <p className="text-xs text-slate-800 font-medium leading-relaxed bg-white/80 p-2 rounded-lg border border-slate-200/50">
+                {activePlan.overall_support_goal}
+              </p>
+            </div>
+          ) : hasLoadedPlan ? (
+            <div className="p-3 rounded-xl bg-amber-50/70 border border-amber-200 text-xs flex items-center justify-between text-amber-900">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>支援計画未作成（支援記録は継続して登録できます）</span>
+              </div>
+            </div>
+          ) : null}
+
           {/* 日付 */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1 flex items-center gap-1.5">

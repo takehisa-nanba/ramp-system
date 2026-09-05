@@ -1,10 +1,10 @@
-// frontend/src/pages/JobRetentionMonthlyReportPage.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { jobRetentionApi } from '../services/jobRetentionApi';
-import type { RetentionContract, MonthlyRetentionReportData } from '../services/jobRetentionApi';
-import { FileText, Save, CheckCircle2, ArrowLeft, Calendar, Sparkles, AlertCircle } from 'lucide-react';
+import type { RetentionContract, MonthlyRetentionReportData, SupportPlan } from '../services/jobRetentionApi';
+import { RetentionPlanBanner } from '../components/retention/RetentionPlanBanner';
+import { RetentionPlanReviewModal } from '../components/retention/RetentionPlanReviewModal';
+import { FileText, Save, CheckCircle2, ArrowLeft, Calendar, Sparkles, AlertCircle, Target, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const JobRetentionMonthlyReportPage: React.FC = () => {
   const { contractId } = useParams<{ contractId: string }>();
@@ -16,6 +16,9 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
 
   const [contract, setContract] = useState<RetentionContract | null>(null);
   const [reportData, setReportData] = useState<MonthlyRetentionReportData | null>(null);
+  const [activePlan, setActivePlan] = useState<SupportPlan | null>(null);
+  const [historyPlans, setHistoryPlans] = useState<SupportPlan[]>([]);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -32,11 +35,16 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
     try {
       setLoading(true);
       setErrorMsg(null);
-      const c = await jobRetentionApi.getContract(cid);
+      const [c, preview, planRes, plans] = await Promise.all([
+        jobRetentionApi.getContract(cid),
+        jobRetentionApi.previewMonthlyReport(cid, yearMonth),
+        jobRetentionApi.getActiveSupportPlan(cid),
+        jobRetentionApi.listSupportPlans(cid).catch(() => []),
+      ]);
       setContract(c);
-
-      const preview = await jobRetentionApi.previewMonthlyReport(cid, yearMonth);
       setReportData(preview);
+      setActivePlan(planRes.plan);
+      setHistoryPlans(plans);
     } catch (err: any) {
       setErrorMsg(err?.response?.data?.msg || 'レポートデータの取得に失敗しました。');
     } finally {
@@ -124,6 +132,19 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
         </div>
       </div>
 
+      {/* 支援計画（全体目標 & 見直し期限）常時表示バナー */}
+      <div className="mb-6">
+        <RetentionPlanBanner
+          plan={activePlan}
+          onOpenReviewModal={() => setIsReviewModalOpen(true)}
+          historyPlans={historyPlans}
+          onLoadHistory={async () => {
+            const plans = await jobRetentionApi.listSupportPlans(cid);
+            setHistoryPlans(plans);
+          }}
+        />
+      </div>
+
       {successMsg && (
         <div className="mb-4 p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm flex items-center gap-2">
           <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
@@ -138,6 +159,118 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
         </div>
       )}
 
+      {/* 公式帳票 標準項目セクション */}
+      {reportData && (
+        <div className="mb-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+            <h2 className="text-sm font-bold text-slate-800 flex items-center gap-2">
+              <ShieldCheck className="w-4 h-4 text-indigo-600" />
+              就労定着支援状況報告書 公式必須項目
+            </h2>
+            <span className="text-[11px] text-slate-400">
+              ※当月目標は前月確定値または全体目標から初期提案（編集可能）
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* 当月の主な支援目標 */}
+            <div className="space-y-1 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-indigo-600" />
+                  当月の主な支援目標（初期提案値・編集可能）
+                </label>
+                {reportData.support_goal ? (
+                  <span className="text-[11px] text-indigo-600 font-semibold">目標設定済み</span>
+                ) : (
+                  <span className="text-[11px] text-slate-400">未入力</span>
+                )}
+              </div>
+              <textarea
+                value={reportData.support_goal || ''}
+                onChange={(e) => handleFieldChange('support_goal', e.target.value)}
+                rows={2}
+                placeholder="初月は全体計画の目標から、通常月は前月確定レポートの今後の支援内容から提案されます。"
+                className="w-full p-3 text-xs rounded-xl border border-indigo-200 bg-indigo-50/20 focus:bg-white focus:ring-2 focus:ring-indigo-500 leading-relaxed font-medium"
+              />
+            </div>
+
+            {/* 支援内容 */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">
+                当月実施した支援内容（公式記載用）
+              </label>
+              <textarea
+                value={reportData.support_content || ''}
+                onChange={(e) => handleFieldChange('support_content', e.target.value)}
+                rows={3}
+                placeholder="本人への定期面談、職場訪問等の具体的な支援内容"
+                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              />
+            </div>
+
+            {/* 支援結果 */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">
+                支援結果・本人の状況変化（公式記載用）
+              </label>
+              <textarea
+                value={reportData.support_result || ''}
+                onChange={(e) => handleFieldChange('support_result', e.target.value)}
+                rows={3}
+                placeholder="支援の結果確認された状況、本人の安定度・変化"
+                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              />
+            </div>
+
+            {/* 今後の支援内容（翌月引き継ぎ） */}
+            <div className="space-y-1 md:col-span-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+                  <ArrowRight className="w-3.5 h-3.5 text-indigo-600" />
+                  今後の支援内容（確定後、翌月の「当月の主な支援目標」に自動引き継ぎ）
+                </label>
+              </div>
+              <textarea
+                value={reportData.future_support_plan || ''}
+                onChange={(e) => handleFieldChange('future_support_plan', e.target.value)}
+                rows={2}
+                placeholder="次月に向けて継続・強化する支援方針（確定すると次月の当月目標に引き継がれます）"
+                className="w-full p-3 text-xs rounded-xl border border-emerald-200 bg-emerald-50/20 focus:bg-white focus:ring-2 focus:ring-emerald-500 leading-relaxed font-medium"
+              />
+            </div>
+
+            {/* 関係機関等との連携調整 */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">
+                関係機関等との連携調整（医療機関・企業等）
+              </label>
+              <textarea
+                value={reportData.stakeholder_efforts || ''}
+                onChange={(e) => handleFieldChange('stakeholder_efforts', e.target.value)}
+                rows={2}
+                placeholder="主治医、ハローワーク、職場担当者等との連携内容"
+                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              />
+            </div>
+
+            {/* 情報共有メモ */}
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-slate-700 block">
+                情報共有・申し送り事項（内部メモ）
+              </label>
+              <textarea
+                value={reportData.sharing_notes || ''}
+                onChange={(e) => handleFieldChange('sharing_notes', e.target.value)}
+                rows={2}
+                placeholder="事業所内スタッフ間の特記事項・申し送り"
+                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 自動生成ヒント */}
       <div className="mb-6 p-4 rounded-2xl bg-indigo-50/70 border border-indigo-100 flex items-start gap-3">
         <Sparkles className="w-5 h-5 text-indigo-600 shrink-0 mt-0.5" />
@@ -148,9 +281,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
         </div>
       </div>
 
-      {/* 公式項目フォーム */}
+      {/* 詳細記録・一次情報整理項目フォーム */}
       {reportData && (
         <div className="space-y-5">
+          <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+            日々の記録からの抽出・整理項目
+          </div>
           {/* 1. 面談実施状況 & 企業訪問状況 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100">
@@ -274,6 +410,20 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* 計画見直し・新規作成モーダル */}
+      {isReviewModalOpen && cid > 0 && (
+        <RetentionPlanReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => setIsReviewModalOpen(false)}
+          contractId={cid}
+          userName={contract?.user_name || ''}
+          activePlan={activePlan}
+          onSaved={(_newPlan) => {
+            loadData();
+          }}
+        />
       )}
     </div>
   );
