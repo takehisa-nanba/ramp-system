@@ -2,9 +2,11 @@
 
 import pytest
 import datetime
+import uuid
 from backend.app.extensions import db
 from backend.app.models import (
-    User, Supporter, StatusMaster, OfficeSetting,
+    User, Supporter, StatusMaster, OfficeSetting, Corporation, MunicipalityMaster,
+    ServiceTypeMaster, OfficeServiceConfiguration,
     JobRetentionContract, RetentionEmploymentEpisode,
     RetentionUserVoiceLog, RetentionSupportActionLog,
     MonthlyRetentionReport
@@ -14,6 +16,45 @@ from backend.app.services.job_retention_service import JobRetentionService
 @pytest.fixture
 def setup_data(app):
     with app.app_context():
+        # 自治体マスタ
+        muni = MunicipalityMaster.query.first()
+        if not muni:
+            muni = MunicipalityMaster(municipality_code="131016", name="東京都千代田区")
+            db.session.add(muni)
+            db.session.flush()
+
+        # 法人
+        corp = Corporation(corporation_name=f"テスト法人_{uuid.uuid4().hex[:4]}", corporation_type="株式会社")
+        db.session.add(corp)
+        db.session.flush()
+
+        # 事業所
+        office = OfficeSetting(
+            office_name="テスト事業所",
+            corporation_id=corp.id,
+            municipality_id=muni.id,
+            full_time_weekly_minutes=2400
+        )
+        db.session.add(office)
+        db.session.flush()
+
+        # サービス種別
+        st = ServiceTypeMaster.query.first()
+        if not st:
+            st = ServiceTypeMaster(name="就労定着支援", service_code="RET")
+            db.session.add(st)
+            db.session.flush()
+
+        # サービス設定
+        osc = OfficeServiceConfiguration(
+            office_id=office.id,
+            service_type_master_id=st.id,
+            jigyosho_bango=f"13{uuid.uuid4().hex[:8]}",
+            capacity=20
+        )
+        db.session.add(osc)
+        db.session.flush()
+
         # ステータスマスタ
         status = StatusMaster.query.filter_by(name='定着支援中').first()
         if not status:
@@ -24,18 +65,19 @@ def setup_data(app):
         # 利用者
         user = User(
             display_name='山田 太郎',
-            user_code='USER_RET_001',
+            user_code=f'USER_RET_{uuid.uuid4().hex[:4]}',
             status_id=status.id
         )
         db.session.add(user)
 
         # 支援員
         supporter = Supporter(
-            staff_code='STAFF_RET_001',
+            staff_code=f'STAFF_RET_{uuid.uuid4().hex[:4]}',
             first_name='花子',
             last_name='佐藤',
             first_name_kana='ハナコ',
             last_name_kana='サトウ',
+            office_id=office.id,
             hire_date=datetime.date(2025, 4, 1),
             employment_type='FULL_TIME',
             weekly_scheduled_minutes=2400
@@ -43,14 +85,14 @@ def setup_data(app):
         db.session.add(supporter)
         db.session.commit()
 
-        yield user, supporter
+        yield user, supporter, osc
 
 def test_vertical_slice_1_full_flow(app, setup_data):
     """
     Vertical Slice 1: コア支援フローの貫通テスト
     定着支援開始 → 本人の声入力 → 複数支援種別の支援員記録 → レポート自動マッピング生成・保存
     """
-    user, supporter = setup_data
+    user, supporter, osc = setup_data
     with app.app_context():
         start_date = datetime.date(2026, 9, 1)
         end_date = datetime.date(2029, 8, 31)
@@ -58,21 +100,22 @@ def test_vertical_slice_1_full_flow(app, setup_data):
         # 1. 契約作成（就労先エピソード含む）
         contract = JobRetentionService.create_contract(
             user_id=user.id,
-            office_service_configuration_id=None,
+            office_service_configuration_id=osc.id,
             contract_start_date=start_date,
             contract_end_date=end_date,
             is_company_involved=True,
+            consent_status='NOT_SET', # 初期値は未同意
             initial_workplace_name='株式会社テクノロジーズ',
             job_start_date=start_date,
             job_title='事務補助・データ入力',
             actor_supporter_id=supporter.id
         )
         assert contract.id is not None
-        assert contract.status == 'ACTIVE'
+        assert contract.office_service_configuration_id == osc.id
         assert len(contract.episodes) == 1
         assert contract.episodes[0].workplace_name == '株式会社テクノロジーズ'
 
-        # 2. 本人の声（できごと）登録 (mood_scoreは必須とせず、生の声・対処)
+        # 2. 本人の声入力（一次情報・生の声）
         voice1 = JobRetentionService.record_user_voice(
             contract_id=contract.id,
             raw_voice='新しいExcel作業に少し戸惑ったけど、質問して進められた。',
@@ -80,12 +123,13 @@ def test_vertical_slice_1_full_flow(app, setup_data):
             success_point='隣の先輩に自分から声をかけて確認できた。',
             self_coping_action='深呼吸してマニュアルの更新日付を確認し、先輩に「今よろしいでしょうか」と聞いた。',
             self_coping_result='疑問が解消し、午後には予定通りの入力件数を達成できた。',
-            needs_help=False
+            needs_help=False,
+            input_channel='USER_DIRECT'
         )
         assert voice1.id is not None
-        assert voice1.contract_id == contract.id
+        assert voice1.input_channel == 'USER_DIRECT'
 
-        # 3. 支援員の支援実施記録 (1回で企業訪問＋本人面談＋調整を同時記録)
+        # 3. 支援員の支援実施記録（複数支援種別フラグを保持）
         action1 = JobRetentionService.record_support_action(
             contract_id=contract.id,
             supporter_id=supporter.id,
@@ -94,9 +138,9 @@ def test_vertical_slice_1_full_flow(app, setup_data):
             interview_method='FACE_TO_FACE',
             has_company_visit=True,
             has_coordination=True,
-            confirmed_situation='職場訪問にて上司と面談後、本人と会議室で対面面談を実施。勤務リズム安定、勤怠問題なし。',
-            provided_support='上司との間で業務指示の出し方（タスクごとの締め切り明示）を再確認し、本人の相談しやすい環境を調整した。',
-            user_action_observed='不明点を自ら付箋にメモし、まとめて先輩に質問できている。',
+            confirmed_situation='業務の進捗状況は安定。周囲への質問もできており良好。',
+            provided_support='上司との間で業務指示の出し方について調整を行い、優先順位を番号で明記するよう依頼した。',
+            user_action_observed='不明点を自ら付箋にメモしてまとめて質問していた。',
             staff_intervention_boundary='企業側への配慮依頼の文言整理のみ支援員が介在し、日々の質問は本人が自力で行えている。',
             next_step='来月は業務量増加の予定があるため、疲れの蓄積がないか電話で中間確認予定。'
         )
@@ -122,8 +166,12 @@ def test_vertical_slice_1_full_flow(app, setup_data):
         assert '上司との間で業務指示の出し方' in preview['support_details']
         assert '本人が自力で行えている' in preview['support_details']
 
+        # 公式帳票項目へのマッピング
+        assert '上司との間で業務指示の出し方' in preview['support_content']
+        assert '来月は業務量増加' in preview['future_support_plan']
+
         # 一次情報そのものは変更・上書きされていないこと
-        v_check = RetentionUserVoiceLog.query.get(voice1.id)
+        v_check = db.session.get(RetentionUserVoiceLog, voice1.id)
         assert v_check.raw_voice == '新しいExcel作業に少し戸惑ったけど、質問して進められた。'
 
         # 5. 月次レポートの確定保存
@@ -147,6 +195,6 @@ def test_vertical_slice_1_full_flow(app, setup_data):
             actor_supporter_id=supporter.id
         )
         # 契約が自動終了(TERMINATED)されず、TRANSITION_PENDINGになっていること
-        c_check = JobRetentionContract.query.get(contract.id)
+        c_check = db.session.get(JobRetentionContract, contract.id)
         assert c_check.status == 'TRANSITION_PENDING'
         assert end_ep.job_end_date == datetime.date(2026, 9, 30)

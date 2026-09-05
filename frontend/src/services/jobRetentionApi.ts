@@ -17,6 +17,7 @@ export interface RetentionContract {
   action_count?: number;
   consent_status?: string;
   contract_details?: string;
+  office_service_configuration_id?: number;
   episodes?: EmploymentEpisode[];
 }
 
@@ -42,6 +43,7 @@ export interface UserVoiceLog {
   self_coping_result?: string;
   needs_help?: boolean;
   help_topic?: string;
+  input_channel?: string;
 }
 
 export interface SupportActionLog {
@@ -63,6 +65,7 @@ export interface SupportActionLog {
 export interface MonthlyRetentionReportData {
   contract_id: number;
   report_year_month: string;
+  // 内部整理項目
   interview_records?: string;
   company_visit_records?: string;
   work_status_summary?: string;
@@ -71,6 +74,13 @@ export interface MonthlyRetentionReportData {
   employer_feedback_summary?: string;
   support_details?: string;
   future_support_policy?: string;
+  // 公式帳票標準項目
+  support_goal?: string;
+  support_content?: string;
+  support_result?: string;
+  future_support_plan?: string;
+  stakeholder_efforts?: string;
+  sharing_notes?: string;
   status?: 'DRAFT' | 'FINALIZED';
   is_existing?: boolean;
 }

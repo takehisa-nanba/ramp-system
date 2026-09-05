@@ -16,11 +16,11 @@ class JobRetentionService:
     @staticmethod
     def create_contract(
         user_id: int,
-        office_service_configuration_id: Optional[int],
+        office_service_configuration_id: int,
         contract_start_date: datetime.date,
         contract_end_date: datetime.date,
         is_company_involved: bool = False,
-        consent_status: str = 'CONSENTED_ALL',
+        consent_status: str = 'NOT_SET',
         initial_workplace_name: Optional[str] = None,
         job_start_date: Optional[datetime.date] = None,
         job_title: Optional[str] = None,
@@ -29,6 +29,9 @@ class JobRetentionService:
         actor_supporter_id: Optional[int] = None
     ) -> JobRetentionContract:
         """定着支援契約を作成し、初期就労エピソードを登録する"""
+        if not office_service_configuration_id:
+            raise ValueError("office_service_configuration_id は必須です。")
+
         user = db.session.get(User, user_id)
         if not user:
             raise ValueError("利用者が見つかりません。")
@@ -181,7 +184,8 @@ class JobRetentionService:
         self_coping_action: Optional[str] = None,
         self_coping_result: Optional[str] = None,
         needs_help: bool = False,
-        help_topic: Optional[str] = None
+        help_topic: Optional[str] = None,
+        input_channel: str = 'USER_DIRECT'
     ) -> RetentionUserVoiceLog:
         """本人がスマホ等から日記感覚で一次情報（できごと・対処）を登録"""
         contract = db.session.get(JobRetentionContract, contract_id)
@@ -196,7 +200,8 @@ class JobRetentionService:
             self_coping_action=self_coping_action,
             self_coping_result=self_coping_result,
             needs_help=needs_help,
-            help_topic=help_topic
+            help_topic=help_topic,
+            input_channel=input_channel
         )
         db.session.add(log)
         db.session.commit()
@@ -323,16 +328,16 @@ class JobRetentionService:
                     'PHONE': '電話面談'
                 }.get(a.interview_method, a.interview_method or '面談')
                 interview_lines.append(f"・{a.action_date.strftime('%Y/%m/%d')} ({method_ja}) 担当: {a.supporter.last_name if a.supporter else ''}")
-        interview_records_str = "\n".join(interview_lines) if interview_lines else "当月面談記録なし"
+        interview_records_str = "\n".join(interview_lines) if interview_lines else ""
 
         # 2. 企業訪問実施状況マッピング
         visit_lines = []
         for a in actions:
             if a.has_company_visit:
                 visit_lines.append(f"・{a.action_date.strftime('%Y/%m/%d')} 企業訪問・職場状況把握")
-        visit_records_str = "\n".join(visit_lines) if visit_lines else "当月企業訪問記録なし"
+        visit_records_str = "\n".join(visit_lines) if visit_lines else ""
 
-        # 3. 就労状況マッピング
+        # 3. 就労状況マッピング（一次情報のみ・推測補完禁止）
         work_lines = []
         latest_ep = contract.episodes[-1] if contract.episodes else None
         if latest_ep:
@@ -340,16 +345,16 @@ class JobRetentionService:
         for a in actions:
             if a.confirmed_situation:
                 work_lines.append(f"・[{a.action_date.strftime('%m/%d')}] {a.confirmed_situation}")
-        work_status_str = "\n".join(work_lines) if work_lines else "特記すべき変化なし"
+        work_status_str = "\n".join(work_lines) if work_lines else ""
 
-        # 4. 生活状況マッピング
+        # 4. 生活状況マッピング（一次情報のみ・推測補完禁止）
         life_lines = []
         for v in voices:
             if v.trouble_point:
                 life_lines.append(f"・困りごと: {v.trouble_point}")
-        life_status_str = "\n".join(life_lines) if life_lines else "安定して生活を維持できている"
+        life_status_str = "\n".join(life_lines) if life_lines else ""
 
-        # 5. 本人の状況・自力対処の状況・意向マッピング
+        # 5. 本人の状況・自力対処の状況・意向マッピング（一次情報のみ・推測補完禁止）
         coping_lines = []
         for v in voices:
             voice_parts = []
@@ -363,9 +368,9 @@ class JobRetentionService:
         for a in actions:
             if a.user_action_observed:
                 coping_lines.append(f"・[支援員観察 {a.action_date.strftime('%m/%d')}] {a.user_action_observed}")
-        user_coping_str = "\n".join(coping_lines) if coping_lines else "本人からの特記事項なし"
+        user_coping_str = "\n".join(coping_lines) if coping_lines else ""
 
-        # 6. 企業の状況・評価・要望マッピング
+        # 6. 企業の状況・評価・要望マッピング（一次情報のみ・推測補完禁止）
         employer_lines = []
         for fb in feedbacks:
             parts = []
@@ -377,27 +382,73 @@ class JobRetentionService:
                 parts.append(f"本人調整: {fb.direct_coordination_status}")
             if parts:
                 employer_lines.append(f"・[{fb.logged_at.strftime('%m/%d')}] " + " / ".join(parts))
-        employer_feedback_str = "\n".join(employer_lines) if employer_lines else "企業からの相談・要望特になし"
+        employer_feedback_str = "\n".join(employer_lines) if employer_lines else ""
 
-        # 7. 今月実施した支援・調整内容マッピング
+        # 7. 今月実施した支援・調整内容マッピング（一次情報のみ・推測補完禁止）
         support_lines = []
         for a in actions:
             parts = [f"・[{a.action_date.strftime('%m/%d')}] {a.provided_support}"]
             if a.staff_intervention_boundary:
                 parts.append(f"(介在範囲: {a.staff_intervention_boundary})")
             support_lines.append(" ".join(parts))
-        support_details_str = "\n".join(support_lines) if support_lines else "定期確認実施"
+        support_details_str = "\n".join(support_lines) if support_lines else ""
 
-        # 8. 今後の支援方針・次回課題マッピング
+        # 8. 今後の支援方針・次回課題マッピング（一次情報のみ・推測補完禁止）
         future_lines = []
         for a in actions:
             if a.next_step:
                 future_lines.append(f"・{a.next_step}")
-        future_policy_str = "\n".join(future_lines) if future_lines else "引き続き本人の自力対処を尊重し、必要な部分の伴走支援を継続する。"
+        future_policy_str = "\n".join(future_lines) if future_lines else ""
+
+        # --- 公式帳票標準項目マッピング (出所関係を維持・推測補完禁止) ---
+        # 1. 主な支援目標: actionsの次回方針や設定課題から抽出
+        support_goal_str = "\n".join(future_lines[:1]) if future_lines else ""
+
+        # 2. 支援実施内容: provided_supportと訪問/面談情報
+        support_content_parts = []
+        if interview_records_str:
+            support_content_parts.append(f"【面談】\n{interview_records_str}")
+        if visit_records_str:
+            support_content_parts.append(f"【企業訪問】\n{visit_records_str}")
+        if support_details_str:
+            support_content_parts.append(f"【実施内容】\n{support_details_str}")
+        support_content_str = "\n\n".join(support_content_parts) if support_content_parts else ""
+
+        # 3. 支援結果: confirmed_situationや本人の対処結果
+        result_lines = []
+        for a in actions:
+            if a.confirmed_situation:
+                result_lines.append(f"・{a.action_date.strftime('%m/%d')}: {a.confirmed_situation}")
+        for v in voices:
+            if v.self_coping_result:
+                result_lines.append(f"・本人の対処結果: {v.self_coping_result}")
+        support_result_str = "\n".join(result_lines) if result_lines else ""
+
+        # 4. 今後の支援内容: future_lines
+        future_support_plan_str = "\n".join(future_lines) if future_lines else ""
+
+        # 5. 対象者・事業主・関係機関等の取組: 本人の対処(voices)と企業の取組(feedbacks)
+        stakeholder_parts = []
+        if user_coping_str:
+            stakeholder_parts.append(f"【本人の取組】\n{user_coping_str}")
+        if employer_feedback_str:
+            stakeholder_parts.append(f"【事業主・職場】\n{employer_feedback_str}")
+        stakeholder_efforts_str = "\n\n".join(stakeholder_parts) if stakeholder_parts else ""
+
+        # 6. 共有事項: 相談希望(voices.help_topic)や企業相談(feedbacks.consultation_topic)
+        sharing_lines = []
+        for v in voices:
+            if v.needs_help and v.help_topic:
+                sharing_lines.append(f"・本人相談希望: {v.help_topic}")
+        for fb in feedbacks:
+            if fb.consultation_topic:
+                sharing_lines.append(f"・企業相談事項: {fb.consultation_topic}")
+        sharing_notes_str = "\n".join(sharing_lines) if sharing_lines else ""
 
         return {
             "contract_id": contract_id,
             "report_year_month": year_month,
+            # 内部整理項目
             "interview_records": interview_records_str,
             "company_visit_records": visit_records_str,
             "work_status_summary": work_status_str,
@@ -406,6 +457,13 @@ class JobRetentionService:
             "employer_feedback_summary": employer_feedback_str,
             "support_details": support_details_str,
             "future_support_policy": future_policy_str,
+            # 公式帳票項目
+            "support_goal": support_goal_str,
+            "support_content": support_content_str,
+            "support_result": support_result_str,
+            "future_support_plan": future_support_plan_str,
+            "stakeholder_efforts": stakeholder_efforts_str,
+            "sharing_notes": sharing_notes_str,
             "status": "DRAFT"
         }
 
@@ -435,6 +493,7 @@ class JobRetentionService:
             )
             db.session.add(report)
 
+        # 内部整理項目
         report.interview_records = report_data.get('interview_records')
         report.company_visit_records = report_data.get('company_visit_records')
         report.work_status_summary = report_data.get('work_status_summary')
@@ -443,6 +502,15 @@ class JobRetentionService:
         report.employer_feedback_summary = report_data.get('employer_feedback_summary')
         report.support_details = report_data.get('support_details')
         report.future_support_policy = report_data.get('future_support_policy')
+
+        # 公式帳票標準項目
+        report.support_goal = report_data.get('support_goal')
+        report.support_content = report_data.get('support_content')
+        report.support_result = report_data.get('support_result')
+        report.future_support_plan = report_data.get('future_support_plan')
+        report.stakeholder_efforts = report_data.get('stakeholder_efforts')
+        report.sharing_notes = report_data.get('sharing_notes')
+
         report.status = 'FINALIZED' if finalize else 'DRAFT'
 
         audit = AuditActionLog(

@@ -3,7 +3,9 @@
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import datetime
+from typing import List
 from backend.app.services.job_retention_service import JobRetentionService
+from backend.app.services.core_service import check_permission
 from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope
 from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
 from backend.app.models import Supporter, User, OfficeSetting, OfficeServiceConfiguration, ServiceCertificate, JobRetentionContract
@@ -57,41 +59,89 @@ def require_user_actor(identity: str) -> int:
         raise AttendanceForbiddenError("本人（利用者）アカウントでのみアクセス可能です。")
     return actor_id
 
-def validate_supporter_access_to_user(supporter_id: int, user: User):
-    """支援員が該当の利用者にアクセスできるか（事業所・担当・法人スコープ）を検証"""
+def require_staff_permission(supporter_id: int, permission_name: str):
+    """
+    支援員が指定の定着支援RBACパーミッションを持っているかを検証 (Fail Closed)。
+    権限未定義・不足時は即座に403。
+    """
+    if not check_permission(f"staff:{supporter_id}", permission_name):
+        raise AttendanceForbiddenError(f"必要な定着支援権限 ({permission_name}) を保持していません。")
+
+def validate_supporter_access_to_contract(supporter_id: int, contract: JobRetentionContract):
+    """
+    支援員が定着支援契約にアクセス可能かを検証。
+    認可判定の中心は JobRetentionContract.office_service_configuration_id。
+    利用者が同じ事業所の別サービスを利用しているだけではアクセス不可。
+    """
     supporter = db.session.get(Supporter, supporter_id)
     if not supporter or not supporter.office_id:
         raise AttendanceForbiddenError("支援員の所属事業所が確認できません。")
 
-    if user.primary_supporter_id == supporter_id:
+    if not contract.office_service_configuration_id:
+        raise AttendanceForbiddenError("契約の所属事業所サービス設定が確認できません。")
+
+    service_config = db.session.get(OfficeServiceConfiguration, contract.office_service_configuration_id)
+    if not service_config or not service_config.office_id:
+        raise AttendanceForbiddenError("契約の所属事業所サービス設定が存在しないか無効です。")
+
+    contract_office_id = service_config.office_id
+
+    # 1. 支援員の所属事業所と契約事業所が一致する場合
+    if supporter.office_id == contract_office_id:
+        return True
+
+    # 2. 支援員が CORPORATE スコープの場合
+    claims = get_jwt()
+    scopes = claims.get('role_scopes', [])
+    scope_info = resolve_tenant_scope(supporter_id, scopes)
+
+    if scope_info.get('level') == 'CORPORATE':
+        contract_office = db.session.get(OfficeSetting, contract_office_id)
+        supp_office = db.session.get(OfficeSetting, supporter.office_id)
+        if not contract_office or not supp_office:
+            raise AttendanceForbiddenError("事業所の法人情報を確認できません。")
+
+        # 支援員の所属法人と、対象契約側の事業所が同一法人に属することを確認
+        if (
+            contract_office.corporation_id and 
+            supp_office.corporation_id and 
+            contract_office.corporation_id == supp_office.corporation_id
+        ):
+            return True
+        else:
+            raise AttendanceForbiddenError("対象契約の事業所は同一法人に属していません。")
+
+    if scope_info.get('level') == 'SYSTEM':
+        return True
+
+    raise AttendanceForbiddenError("対象定着支援契約に対するアクセス権限がありません。")
+
+def validate_supporter_access_to_service_config(supporter_id: int, service_config_id: int):
+    """支援員が指定の OfficeServiceConfiguration を管轄しているか検証"""
+    supporter = db.session.get(Supporter, supporter_id)
+    if not supporter or not supporter.office_id:
+        raise AttendanceForbiddenError("支援員の所属事業所が確認できません。")
+
+    service_config = db.session.get(OfficeServiceConfiguration, service_config_id)
+    if not service_config or not service_config.office_id:
+        raise AttendanceForbiddenError("事業所サービス設定が存在しません。")
+
+    if supporter.office_id == service_config.office_id:
         return True
 
     claims = get_jwt()
     scopes = claims.get('role_scopes', [])
     scope_info = resolve_tenant_scope(supporter_id, scopes)
-    if scope_info['level'] == 'CORPORATE':
+    if scope_info.get('level') == 'CORPORATE':
+        target_office = db.session.get(OfficeSetting, service_config.office_id)
         supp_office = db.session.get(OfficeSetting, supporter.office_id)
-        if supp_office and supp_office.corporation_id == scope_info['corp_id']:
+        if target_office and supp_office and target_office.corporation_id == supp_office.corporation_id:
             return True
 
-    # 同じ事業所所属か確認
-    accessible_user_ids = db.session.query(ServiceCertificate.user_id).join(
-        OfficeServiceConfiguration, ServiceCertificate.office_service_configuration_id == OfficeServiceConfiguration.id
-    ).filter(
-        OfficeServiceConfiguration.office_id == supporter.office_id
-    ).all()
-    accessible_ids = {uid for (uid,) in accessible_user_ids}
-    if user.id in accessible_ids:
+    if scope_info.get('level') == 'SYSTEM':
         return True
 
-    raise AttendanceForbiddenError("対象利用者に対するアクセス権限がありません。")
-
-def validate_supporter_access_to_contract(supporter_id: int, contract: JobRetentionContract):
-    """支援員が契約にアクセス可能か検証"""
-    user = contract.user
-    if not user:
-        raise AttendanceForbiddenError("契約対象の利用者が存在しません。")
-    return validate_supporter_access_to_user(supporter_id, user)
+    raise AttendanceForbiddenError("指定された事業所サービス設定に対する操作権限がありません。")
 
 def validate_user_access_to_contract(user_id: int, contract: JobRetentionContract):
     """本人が自分の契約にアクセスしているかを厳格に検証（他者アクセスは即座に403）"""
@@ -110,12 +160,10 @@ def handle_forbidden(e):
 @job_retention_bp.route('/contracts', methods=['GET'])
 @jwt_required()
 def list_contracts():
-    """定着支援契約の一覧取得（支援員専用・テナント分離）"""
+    """定着支援契約の一覧取得（支援員専用・テナント分離・JOB_RETENTION_VIEW必須）"""
     identity = get_jwt_identity()
-    try:
-        supporter_id = require_staff_actor(identity)
-    except AttendanceForbiddenError as e:
-        return jsonify({"msg": str(e)}), 403
+    supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_VIEW')
 
     supporter = db.session.get(Supporter, supporter_id)
     if not supporter or not supporter.office_id:
@@ -124,13 +172,9 @@ def list_contracts():
     status = request.args.get('status')
     contracts = JobRetentionService.list_contracts(status=status)
 
-    claims = get_jwt()
-    scopes = claims.get('role_scopes', [])
-    scope_info = resolve_tenant_scope(supporter_id, scopes)
-
     result = []
     for c in contracts:
-        # アクセス権のある契約のみに絞り込み
+        # アクセス権のある契約のみに絞り込み (Fail Closed)
         try:
             validate_supporter_access_to_contract(supporter_id, c)
         except AttendanceForbiddenError:
@@ -141,10 +185,12 @@ def list_contracts():
             "id": c.id,
             "user_id": c.user_id,
             "user_name": c.user.display_name if c.user else f"User#{c.user_id}",
+            "office_service_configuration_id": c.office_service_configuration_id,
             "contract_start_date": c.contract_start_date.isoformat(),
             "contract_end_date": c.contract_end_date.isoformat(),
             "status": c.status,
             "is_company_involved": c.is_company_involved,
+            "consent_status": c.consent_status,
             "latest_workplace": latest_ep.workplace_name if latest_ep else "未登録",
             "latest_job_title": latest_ep.job_title if latest_ep else None,
             "voice_count": len(c.voice_logs),
@@ -155,42 +201,40 @@ def list_contracts():
 @job_retention_bp.route('/contracts', methods=['POST'])
 @jwt_required()
 def create_contract():
-    """新規定着支援契約の作成（支援員専用）"""
+    """新規定着支援契約の作成（支援員専用・JOB_RETENTION_EDIT必須）"""
     identity = get_jwt_identity()
-    try:
-        supporter_id = require_staff_actor(identity)
-    except AttendanceForbiddenError as e:
-        return jsonify({"msg": str(e)}), 403
+    supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
 
     data = request.get_json() or {}
     user_id = data.get('user_id')
+    office_service_config_id = data.get('office_service_configuration_id')
     start_date_str = data.get('contract_start_date')
     end_date_str = data.get('contract_end_date')
 
-    if not user_id or not start_date_str or not end_date_str:
-        return jsonify({"msg": "user_id, contract_start_date, contract_end_date は必須です。"}), 400
+    if not user_id or not office_service_config_id or not start_date_str or not end_date_str:
+        return jsonify({"msg": "user_id, office_service_configuration_id, contract_start_date, contract_end_date は必須です。"}), 400
 
     user = db.session.get(User, int(user_id))
     if not user:
         return jsonify({"msg": "利用者が存在しません。"}), 404
 
-    try:
-        validate_supporter_access_to_user(supporter_id, user)
-    except AttendanceForbiddenError as e:
-        return jsonify({"msg": str(e)}), 403
+    # 支援員が指定の office_service_configuration_id にアクセス可能か検証
+    validate_supporter_access_to_service_config(supporter_id, int(office_service_config_id))
 
     try:
         start_date = _parse_date(start_date_str)
         end_date = _parse_date(end_date_str)
         job_start_date = _parse_date(data.get('job_start_date'))
 
+        # 情報共有同意の初期値は Fail Closed (NOT_SET), is_company_involved初期値はFalse
         contract = JobRetentionService.create_contract(
             user_id=int(user_id),
-            office_service_configuration_id=data.get('office_service_configuration_id'),
+            office_service_configuration_id=int(office_service_config_id),
             contract_start_date=start_date,
             contract_end_date=end_date,
             is_company_involved=bool(data.get('is_company_involved', False)),
-            consent_status=data.get('consent_status', 'CONSENTED_ALL'),
+            consent_status=data.get('consent_status', 'NOT_SET'),
             initial_workplace_name=data.get('workplace_name'),
             job_start_date=job_start_date,
             job_title=data.get('job_title'),
@@ -217,6 +261,7 @@ def get_contract(contract_id: int):
 
     # 認可チェック
     if actor_type == 'staff':
+        require_staff_permission(actor_id, 'JOB_RETENTION_VIEW')
         validate_supporter_access_to_contract(actor_id, contract)
     elif actor_type == 'user':
         validate_user_access_to_contract(actor_id, contract)
@@ -241,6 +286,7 @@ def get_contract(contract_id: int):
         "id": contract.id,
         "user_id": contract.user_id,
         "user_name": contract.user.display_name if contract.user else f"User#{contract.user_id}",
+        "office_service_configuration_id": contract.office_service_configuration_id,
         "contract_start_date": contract.contract_start_date.isoformat(),
         "contract_end_date": contract.contract_end_date.isoformat(),
         "status": contract.status,
@@ -262,7 +308,6 @@ def get_my_contract():
 
     contract = JobRetentionService.get_contract_by_user(user_id)
     if not contract:
-        # アクティブな契約がなければ最新の契約を探す
         contracts = JobRetentionContract.query.filter_by(user_id=user_id).order_by(JobRetentionContract.created_at.desc()).all()
         if not contracts:
             return jsonify({"msg": "定着支援の利用情報が見つかりません。"}), 404
@@ -273,9 +318,12 @@ def get_my_contract():
         "id": contract.id,
         "user_id": contract.user_id,
         "user_name": contract.user.display_name if contract.user else "",
+        "office_service_configuration_id": contract.office_service_configuration_id,
         "contract_start_date": contract.contract_start_date.isoformat(),
         "contract_end_date": contract.contract_end_date.isoformat(),
         "status": contract.status,
+        "is_company_involved": contract.is_company_involved,
+        "consent_status": contract.consent_status,
         "workplace_name": latest_ep.workplace_name if latest_ep else "",
         "job_title": latest_ep.job_title if latest_ep else None,
         "work_conditions": latest_ep.work_conditions if latest_ep else None
@@ -287,9 +335,10 @@ def get_my_contract():
 @job_retention_bp.route('/contracts/<int:contract_id>/episodes', methods=['POST'])
 @jwt_required()
 def add_episode(contract_id: int):
-    """新しい就労エピソード（転職先）を追加（支援員専用）"""
+    """新しい就労エピソード（転職先）を追加（支援員専用・JOB_RETENTION_EDIT必須）"""
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
@@ -320,9 +369,10 @@ def add_episode(contract_id: int):
 @job_retention_bp.route('/episodes/<int:episode_id>/end', methods=['POST'])
 @jwt_required()
 def end_episode(episode_id: int):
-    """退職の記録（支援員専用）"""
+    """退職の記録（支援員専用・JOB_RETENTION_EDIT必須）"""
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
 
     from backend.app.models import RetentionEmploymentEpisode
     episode = db.session.get(RetentionEmploymentEpisode, episode_id)
@@ -352,21 +402,19 @@ def end_episode(episode_id: int):
 @job_retention_bp.route('/contracts/<int:contract_id>/voices', methods=['POST'])
 @jwt_required()
 def record_voice(contract_id: int):
-    """本人の一次情報（最近のできごと・困りごと・対処）を登録"""
+    """
+    本人の一次情報（最近のできごと・困りごと・対処）を登録。
+    ★ 本人の生の声という一次情報のため、本人アクターのみ作成可能（支援員は403）。
+    """
     identity = get_jwt_identity()
-    actor_type, actor_id = extract_actor_info(identity)
+    user_id = require_user_actor(identity)
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
         return jsonify({"msg": "契約が見つかりません。"}), 404
 
-    # 認可チェック: 本人なら自分の契約か、支援員なら担当事業所か
-    if actor_type == 'user':
-        validate_user_access_to_contract(actor_id, contract)
-    elif actor_type == 'staff':
-        validate_supporter_access_to_contract(actor_id, contract)
-    else:
-        return jsonify({"msg": "権限がありません。"}), 403
+    # 本人が自身の契約にアクセスしているか検証 (他利用者の契約は403)
+    validate_user_access_to_contract(user_id, contract)
 
     data = request.get_json() or {}
     try:
@@ -378,7 +426,8 @@ def record_voice(contract_id: int):
             self_coping_action=data.get('self_coping_action'),
             self_coping_result=data.get('self_coping_result'),
             needs_help=bool(data.get('needs_help', False)),
-            help_topic=data.get('help_topic')
+            help_topic=data.get('help_topic'),
+            input_channel='USER_DIRECT'
         )
         return jsonify({"msg": "できごとを記録しました。", "id": log.id}), 201
     except ValueError as e:
@@ -387,7 +436,7 @@ def record_voice(contract_id: int):
 @job_retention_bp.route('/contracts/<int:contract_id>/voices', methods=['GET'])
 @jwt_required()
 def list_voices(contract_id: int):
-    """本人の声一覧を取得"""
+    """本人の声一覧を取得（本人または閲覧権限を持つ支援員）"""
     identity = get_jwt_identity()
     actor_type, actor_id = extract_actor_info(identity)
 
@@ -398,6 +447,7 @@ def list_voices(contract_id: int):
     if actor_type == 'user':
         validate_user_access_to_contract(actor_id, contract)
     elif actor_type == 'staff':
+        require_staff_permission(actor_id, 'JOB_RETENTION_VIEW')
         validate_supporter_access_to_contract(actor_id, contract)
     else:
         return jsonify({"msg": "権限がありません。"}), 403
@@ -414,7 +464,8 @@ def list_voices(contract_id: int):
             "self_coping_action": l.self_coping_action,
             "self_coping_result": l.self_coping_result,
             "needs_help": l.needs_help,
-            "help_topic": l.help_topic
+            "help_topic": l.help_topic,
+            "input_channel": getattr(l, 'input_channel', 'USER_DIRECT')
         })
     return jsonify(result), 200
 
@@ -424,9 +475,10 @@ def list_voices(contract_id: int):
 @job_retention_bp.route('/contracts/<int:contract_id>/actions', methods=['POST'])
 @jwt_required()
 def record_action(contract_id: int):
-    """支援員の支援実施記録を登録（支援員専用・フォールバック禁止）"""
+    """支援員の支援実施記録を登録（支援員専用・JOB_RETENTION_EDIT必須・フォールバック禁止）"""
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
@@ -464,9 +516,10 @@ def record_action(contract_id: int):
 @job_retention_bp.route('/contracts/<int:contract_id>/actions', methods=['GET'])
 @jwt_required()
 def list_actions(contract_id: int):
-    """支援実施記録一覧を取得（支援員専用）"""
+    """支援実施記録一覧を取得（支援員専用・JOB_RETENTION_VIEW必須）"""
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_VIEW')
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
@@ -499,9 +552,10 @@ def list_actions(contract_id: int):
 @job_retention_bp.route('/contracts/<int:contract_id>/monthly-reports/<year_month>/preview', methods=['GET'])
 @jwt_required()
 def preview_monthly_report(contract_id: int, year_month: str):
-    """一次情報から公式項目へマッピングした初期プレビューを生成（支援員専用）"""
+    """一次情報から公式項目へマッピングした初期プレビューを生成（支援員専用・JOB_RETENTION_VIEW必須）"""
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_VIEW')
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
@@ -515,6 +569,7 @@ def preview_monthly_report(contract_id: int, year_month: str):
             return jsonify({
                 "contract_id": contract_id,
                 "report_year_month": year_month,
+                # 内部整理項目
                 "interview_records": existing.interview_records,
                 "company_visit_records": existing.company_visit_records,
                 "work_status_summary": existing.work_status_summary,
@@ -523,6 +578,13 @@ def preview_monthly_report(contract_id: int, year_month: str):
                 "employer_feedback_summary": existing.employer_feedback_summary,
                 "support_details": existing.support_details,
                 "future_support_policy": existing.future_support_policy,
+                # 公式帳票項目
+                "support_goal": getattr(existing, 'support_goal', None),
+                "support_content": getattr(existing, 'support_content', None),
+                "support_result": getattr(existing, 'support_result', None),
+                "future_support_plan": getattr(existing, 'future_support_plan', None),
+                "stakeholder_efforts": getattr(existing, 'stakeholder_efforts', None),
+                "sharing_notes": getattr(existing, 'sharing_notes', None),
                 "status": existing.status,
                 "is_existing": True
             }), 200
@@ -534,17 +596,26 @@ def preview_monthly_report(contract_id: int, year_month: str):
 @job_retention_bp.route('/contracts/<int:contract_id>/monthly-reports/<year_month>', methods=['POST'])
 @jwt_required()
 def save_monthly_report(contract_id: int, year_month: str):
-    """月次支援レポートを保存または確定（支援員専用・フォールバック禁止）"""
+    """
+    月次支援レポートを保存または確定。
+    - 下書き保存 (finalize=False): JOB_RETENTION_EDIT 必須
+    - 確定 (finalize=True): JOB_RETENTION_APPROVE 必須
+    """
     identity = get_jwt_identity()
     supporter_id = require_staff_actor(identity)
+
+    data = request.get_json() or {}
+    finalize = bool(data.get('finalize', False))
+
+    if finalize:
+        require_staff_permission(supporter_id, 'JOB_RETENTION_APPROVE')
+    else:
+        require_staff_permission(supporter_id, 'JOB_RETENTION_EDIT')
 
     contract = JobRetentionService.get_contract(contract_id)
     if not contract:
         return jsonify({"msg": "契約が見つかりません。"}), 404
     validate_supporter_access_to_contract(supporter_id, contract)
-
-    data = request.get_json() or {}
-    finalize = bool(data.get('finalize', False))
 
     try:
         report = JobRetentionService.save_monthly_report(

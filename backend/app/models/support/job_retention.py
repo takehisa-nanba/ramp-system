@@ -26,8 +26,8 @@ class JobRetentionContract(db.Model):
     status = Column(String(30), nullable=False, default='ACTIVE', index=True)
     
     # 企業参加・同意設定
-    is_company_involved = Column(Boolean, default=False, nullable=False) # 企業連携あり/なし
-    consent_status = Column(String(50), default='CONSENTED_ALL', nullable=False) # 同意状況
+    is_company_involved = Column(Boolean, default=False, nullable=False) # 企業連携あり/なし (初期値False)
+    consent_status = Column(String(50), default='NOT_SET', nullable=False) # 同意状況 (初期値NOT_SET: Fail Closed)
     
     # 補足・特記事項
     contract_details = Column(Text, nullable=True)
@@ -110,6 +110,9 @@ class RetentionUserVoiceLog(db.Model):
     
     needs_help = Column(Boolean, default=False, nullable=False) # 支援員に相談したいか
     help_topic = Column(String(200), nullable=True)             # 相談したい内容（任意）
+    
+    # 入力元プロベナンス: USER_DIRECT (本人直接入力), STAFF_HEARING (支援員聞き取り等)
+    input_channel = Column(String(30), default='USER_DIRECT', nullable=False)
     
     created_at = Column(DateTime, default=func.now(), nullable=False)
 
@@ -198,7 +201,7 @@ class MonthlyRetentionReport(db.Model):
     
     status = Column(String(20), default='DRAFT', nullable=False) # 'DRAFT', 'FINALIZED'
     
-    # 公式レポートの構造化項目
+    # 内部整理項目（一次情報のまとめ）
     interview_records = Column(Text, nullable=True)         # 面談実施状況（実施日、方法、時間等）
     company_visit_records = Column(Text, nullable=True)     # 企業訪問実施状況（実施日、対応者、職場状況）
     work_status_summary = Column(Text, nullable=True)       # 就労状況（勤務時間・出勤、業務内容・環境変化）
@@ -207,6 +210,14 @@ class MonthlyRetentionReport(db.Model):
     employer_feedback_summary = Column(Text, nullable=True) # 企業の状況・評価・要望
     support_details = Column(Text, nullable=True)           # 今月実施した支援・調整内容
     future_support_policy = Column(Text, nullable=True)     # 今後の支援方針・次回課題
+    
+    # 公式帳票標準項目（就労定着支援状況報告書・実績記録票）
+    support_goal = Column(Text, nullable=True)              # 当月の主な支援目標
+    support_content = Column(Text, nullable=True)           # 支援実施内容
+    support_result = Column(Text, nullable=True)            # 支援結果
+    future_support_plan = Column(Text, nullable=True)       # 今後の支援内容
+    stakeholder_efforts = Column(Text, nullable=True)       # 対象者・事業主・関係機関等の取組
+    sharing_notes = Column(Text, nullable=True)             # 共有事項
     
     created_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
