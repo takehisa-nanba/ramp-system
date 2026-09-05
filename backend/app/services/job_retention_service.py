@@ -620,7 +620,7 @@ class JobRetentionService:
 
         if not active_plan:
             # 初回作成
-            base_date = start_date or contract.contract_start_date or datetime.date.today()
+            base_date = review_date or start_date or contract.contract_start_date or datetime.date.today()
             max_deadline = calculate_max_review_deadline(base_date)
             if next_review_deadline > max_deadline:
                 raise ValueError(

@@ -116,6 +116,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       const res = await jobRetentionApi.createOrReviewSupportPlan(contractId, {
         overall_support_goal: overallGoal.trim(),
         review_date: reviewDate,
+        start_date: reviewDate,
         review_reason: reviewReason.trim(),
         next_review_deadline: deadline,
       });
