@@ -29,6 +29,23 @@ export const addCalendarMonths = (dateStr: string, months: number): string => {
   return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
 };
 
+/**
+ * 基準日から6か月後 - 1日（標準の計画最終日）を算出
+ * 例: 2026-09-01 -> 2027-02-28
+ * 例: 2026-09-05 -> 2027-03-04
+ */
+export const calculateDefaultPlanDeadline = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const sixMonthsLater = addCalendarMonths(dateStr, 6);
+  const [y, m, d] = sixMonthsLater.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() - 1);
+  const resYear = dt.getFullYear();
+  const resMonth = String(dt.getMonth() + 1).padStart(2, '0');
+  const resDay = String(dt.getDate()).padStart(2, '0');
+  return `${resYear}-${resMonth}-${resDay}`;
+};
+
 export const RetentionPlanReviewModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -55,8 +72,9 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       const initialDate = today;
       setReviewDate(initialDate);
       const calculatedMax = addCalendarMonths(initialDate, 6);
+      const defaultDeadline = calculateDefaultPlanDeadline(initialDate);
       setMaxDeadline(calculatedMax);
-      setDeadline(calculatedMax);
+      setDeadline(defaultDeadline);
 
       if (isReview && activePlan) {
         setOverallGoal(activePlan.overall_support_goal || '');
@@ -69,16 +87,14 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
     }
   }, [isOpen, activePlan, isReview]);
 
-  // 基準日変更時に最大期限を再計算
+  // 基準日変更時に最大期限 & デフォルト期限（6か月後-1日）を再計算
   const handleReviewDateChange = (newDate: string) => {
     setReviewDate(newDate);
     if (newDate) {
       const newMax = addCalendarMonths(newDate, 6);
+      const defaultDeadline = calculateDefaultPlanDeadline(newDate);
       setMaxDeadline(newMax);
-      // もし現在の期限が空、または旧最大値と同じなら新しい最大値に追従
-      if (!deadline || deadline === maxDeadline || deadline > newMax) {
-        setDeadline(newMax);
-      }
+      setDeadline(defaultDeadline);
     }
   };
 
@@ -240,13 +256,23 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
               </div>
               <div className="mt-1 text-[11px] text-slate-400 flex items-center justify-between">
                 <span>最大上限: {maxDeadline || '—'}</span>
-                <button
-                  type="button"
-                  onClick={() => setDeadline(maxDeadline)}
-                  className="text-indigo-600 hover:text-indigo-800 font-semibold"
-                >
-                  6か月後に設定
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setDeadline(calculateDefaultPlanDeadline(reviewDate))}
+                    className="text-indigo-600 hover:text-indigo-800 font-semibold"
+                  >
+                    標準（6か月後-1日）
+                  </button>
+                  <span>|</span>
+                  <button
+                    type="button"
+                    onClick={() => setDeadline(maxDeadline)}
+                    className="text-slate-500 hover:text-slate-700"
+                  >
+                    上限当日
+                  </button>
+                </div>
               </div>
               {isOverdueMax && (
                 <div className="mt-1 text-[11px] font-bold text-rose-600 flex items-center gap-1">
