@@ -3,7 +3,7 @@ import { NavLink, Outlet } from 'react-router-dom';
 import { 
   Menu, X, LayoutDashboard, Users, 
   LogOut, Bell, Search, Settings,
-  MessageSquare, Calendar, Clock, PenTool, FileEdit
+  MessageSquare, Calendar, Clock, PenTool, FileEdit, Building2
 } from 'lucide-react';
 import { SupportRecordModal } from '../records/SupportRecordModal';
 
@@ -34,6 +34,8 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
   const navItems: NavItem[] = [
     { name: 'ホーム', path: '/dashboard', icon: <LayoutDashboard size={18} /> },
     { name: '支援記録', path: '/records', icon: <FileEdit size={18} /> },
+    { name: '就労定着支援', path: '/job-retention', icon: <Building2 size={18} /> },
+    { name: 'できごとを残す', path: '/job-retention/voice', icon: <PenTool size={18} /> },
     { name: '勤怠・シフト', path: '/attendance', icon: <Clock size={18} /> },
     { name: '日別予定・実績', path: '/daily-schedules', icon: <Calendar size={18} /> },
     { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },

@@ -1,57 +1,235 @@
 # backend/app/models/support/job_retention.py
 
-# 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
 from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
+from sqlalchemy.orm import relationship
 
 # ====================================================================
 # 1. JobRetentionContract (就労定着支援 - 契約)
 # ====================================================================
 class JobRetentionContract(db.Model):
     """
-    就労定着支援の契約情報（親モデル）。
-    就職後6ヶ月経過後の、独立した請求サービス（原理3）の土台。
-    User.status_id = '定着支援中' の期間を管理する。
+    就労定着支援の契約情報。
+    就職後の定着支援期間（最長3年）とステータスを管理する独立ドメイン。
     """
     __tablename__ = 'job_retention_contracts'
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
     
+    # 契約期間
     contract_start_date = Column(Date, nullable=False) # 契約開始日
-    contract_end_date = Column(Date, nullable=False) # 契約終了日 (最長3年)
+    contract_end_date = Column(Date, nullable=False)   # 契約終了日 (最長3年)
     
-    # 契約内容（支援頻度、費用など）の詳細情報
-    contract_details = Column(Text)
+    # ステータス: ACTIVE (支援中), TRANSITION_PENDING (転職移行期間), COMPLETED (満了終了), TERMINATED (中途終了)
+    status = Column(String(30), nullable=False, default='ACTIVE', index=True)
+    
+    # 企業参加・同意設定
+    is_company_involved = Column(Boolean, default=False, nullable=False) # 企業連携あり/なし
+    consent_status = Column(String(50), default='CONSENTED_ALL', nullable=False) # 同意状況
+    
+    # 補足・特記事項
+    contract_details = Column(Text, nullable=True)
+    
+    # タイムスタンプ
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
     
     # --- リレーションシップ ---
-    user = db.relationship('User', back_populates='retention_contracts')
-    retention_records = db.relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
+    user = relationship('User', back_populates='retention_contracts')
+    office_service_configuration = relationship('OfficeServiceConfiguration', foreign_keys=[office_service_configuration_id])
+    
+    # 就労エピソード履歴 (1対多)
+    episodes = relationship('RetentionEmploymentEpisode', back_populates='contract', order_by='RetentionEmploymentEpisode.episode_number', cascade="all, delete-orphan")
+    
+    # 一次情報ログ
+    voice_logs = relationship('RetentionUserVoiceLog', back_populates='contract', order_by='desc(RetentionUserVoiceLog.logged_at)', cascade="all, delete-orphan")
+    employer_feedback_logs = relationship('RetentionEmployerFeedbackLog', back_populates='contract', order_by='desc(RetentionEmployerFeedbackLog.logged_at)', cascade="all, delete-orphan")
+    action_logs = relationship('RetentionSupportActionLog', back_populates='contract', order_by='desc(RetentionSupportActionLog.action_date)', cascade="all, delete-orphan")
+    monthly_reports = relationship('MonthlyRetentionReport', back_populates='contract', order_by='desc(MonthlyRetentionReport.report_year_month)', cascade="all, delete-orphan")
+    
+    # 既存コードとの互換用 (旧JobRetentionRecord)
+    retention_records = relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
+
 
 # ====================================================================
-# 2. JobRetentionRecord (就労定着支援 - 実施記録)
+# 2. RetentionEmploymentEpisode (就労エピソード履歴)
+# ====================================================================
+class RetentionEmploymentEpisode(db.Model):
+    """
+    定着支援期間中の就労先ごとのエピソード履歴。
+    退職の事実だけで自動終了せず、前職と次職の連続性を一次情報として保持する。
+    """
+    __tablename__ = 'retention_employment_episodes'
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
+    
+    episode_number = Column(Integer, nullable=False, default=1) # 第1期, 第2期...
+    employer_id = Column(Integer, ForeignKey('employer_master.id'), nullable=True, index=True) # 既存企業マスタ
+    workplace_name = Column(String(200), nullable=False) # 勤務先企業・事業所名
+    department_name = Column(String(100), nullable=True) # 配属部署
+    job_title = Column(String(100), nullable=True)        # 職種・業務内容
+    
+    job_start_date = Column(Date, nullable=False) # 就職日
+    job_end_date = Column(Date, nullable=True)    # 退職日 (在職中はNULL)
+    
+    work_conditions = Column(Text, nullable=True) # 勤務形態・労働時間・配慮事項など
+    resignation_reason = Column(Text, nullable=True) # 退職理由・経緯
+    
+    previous_episode_id = Column(Integer, ForeignKey('retention_employment_episodes.id'), nullable=True)
+    
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='episodes')
+    previous_episode = relationship('RetentionEmploymentEpisode', remote_side=[id])
+
+
+# ====================================================================
+# 3. RetentionUserVoiceLog (本人の生の声・行動ログ) — 一次情報
+# ====================================================================
+class RetentionUserVoiceLog(db.Model):
+    """
+    本人がスマホ等から日記感覚で短時間で残す一次情報ログ。
+    数値スコアの強要は行わず、生の声・困りごと・対処を保持する。
+    """
+    __tablename__ = 'retention_user_voice_logs'
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
+    
+    logged_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+    
+    raw_voice = Column(Text, nullable=True)           # 最近あったこと・生の声・つぶやき
+    trouble_point = Column(Text, nullable=True)       # 困ったこと・気になったこと
+    success_point = Column(Text, nullable=True)       # うまくいったこと・嬉しかったこと
+    self_coping_action = Column(Text, nullable=True)  # 自分でやってみた対処・工夫
+    self_coping_result = Column(Text, nullable=True)  # その結果どうだったか
+    
+    needs_help = Column(Boolean, default=False, nullable=False) # 支援員に相談したいか
+    help_topic = Column(String(200), nullable=True)             # 相談したい内容（任意）
+    
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='voice_logs')
+
+
+# ====================================================================
+# 4. RetentionEmployerFeedbackLog (企業の声・職場観測) — 一次情報 (補助)
+# ====================================================================
+class RetentionEmployerFeedbackLog(db.Model):
+    """
+    企業担当者から提供される職場の様子・フィードバック（本人同意に基づく補助情報）。
+    """
+    __tablename__ = 'retention_employer_feedback_logs'
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
+    
+    logged_at = Column(DateTime, default=func.now(), nullable=False, index=True)
+    contact_person = Column(String(100), nullable=True) # 企業担当者名・役職
+    
+    workplace_observation = Column(Text, nullable=True)   # 職場で気になっていること・勤務の様子
+    positive_changes = Column(Text, nullable=True)        # 本人の良い変化・評価
+    direct_coordination_status = Column(Text, nullable=True) # 本人との直接の調整状況
+    consultation_topic = Column(Text, nullable=True)      # 支援員へ共有・相談したいこと
+    
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='employer_feedback_logs')
+
+
+# ====================================================================
+# 5. RetentionSupportActionLog (支援員の面談・訪問・介入記録) — 一次情報
+# ====================================================================
+class RetentionSupportActionLog(db.Model):
+    """
+    支援員による月次面談・企業訪問・調整などの実施記録。
+    1回の支援実施で「企業訪問＋本人面談＋調整」など複数の実施内容を保持可能。
+    """
+    __tablename__ = 'retention_support_action_logs'
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
+    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False, index=True)
+    
+    action_date = Column(Date, nullable=False, index=True)
+    
+    # 複数支援種別フラグ (1回で訪問＋面談＋調整を同時に実施可能)
+    has_user_interview = Column(Boolean, default=False, nullable=False) # 本人面談を実施したか
+    interview_method = Column(String(30), nullable=True) # 'FACE_TO_FACE', 'ONLINE', 'PHONE'
+    
+    has_company_visit = Column(Boolean, default=False, nullable=False)  # 企業訪問を実施したか
+    has_coordination = Column(Boolean, default=False, nullable=False)   # 関係機関・企業等との連絡・調整
+    has_other_support = Column(Boolean, default=False, nullable=False)  # その他支援
+    
+    # 現場で確認・実施した内容（一次情報）
+    confirmed_situation = Column(Text, nullable=False) # 面談・訪問で確認した状況（就労面・生活面）
+    provided_support = Column(Text, nullable=False)    # 実際に行った支援・調整内容
+    
+    # 本人の対処と支援員の介在境界（客観的事実）
+    user_action_observed = Column(Text, nullable=True)         # 本人がどこまで自分で対処したか
+    staff_intervention_boundary = Column(Text, nullable=True)  # 支援員がどこから介在したか
+    
+    next_step = Column(Text, nullable=True) # 次回予定・確認事項
+    
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='action_logs')
+    supporter = relationship('Supporter', foreign_keys=[supporter_id])
+
+
+# ====================================================================
+# 6. MonthlyRetentionReport (月次就労定着支援レポート)
+# ====================================================================
+class MonthlyRetentionReport(db.Model):
+    """
+    公式の就労定着支援状況報告書の各項目へ一次情報をルールベースで構造化マッピング。
+    本人・企業・支援員の一次情報そのものは変更・上書きせず、報告書項目として保持・微調整する。
+    """
+    __tablename__ = 'monthly_retention_reports'
+
+    id = Column(Integer, primary_key=True)
+    contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
+    report_year_month = Column(String(7), nullable=False, index=True) # 'YYYY-MM'
+    
+    status = Column(String(20), default='DRAFT', nullable=False) # 'DRAFT', 'FINALIZED'
+    
+    # 公式レポートの構造化項目
+    interview_records = Column(Text, nullable=True)         # 面談実施状況（実施日、方法、時間等）
+    company_visit_records = Column(Text, nullable=True)     # 企業訪問実施状況（実施日、対応者、職場状況）
+    work_status_summary = Column(Text, nullable=True)       # 就労状況（勤務時間・出勤、業務内容・環境変化）
+    life_status_summary = Column(Text, nullable=True)       # 生活状況（生活リズム、健康管理等）
+    user_coping_summary = Column(Text, nullable=True)       # 本人の状況・自力対処の状況・本人の意向
+    employer_feedback_summary = Column(Text, nullable=True) # 企業の状況・評価・要望
+    support_details = Column(Text, nullable=True)           # 今月実施した支援・調整内容
+    future_support_policy = Column(Text, nullable=True)     # 今後の支援方針・次回課題
+    
+    created_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    contract = relationship('JobRetentionContract', back_populates='monthly_reports')
+    created_by = relationship('Supporter', foreign_keys=[created_by_id])
+
+
+# ====================================================================
+# 7. JobRetentionRecord (既存互換モデル)
 # ====================================================================
 class JobRetentionRecord(db.Model):
-    """
-    就労定着支援の実施記録（JobRetentionContractと1対多）。
-    請求対象となる支援の監査証跡（原理1）。
-    """
+    """旧JobRetentionRecord互換用"""
     __tablename__ = 'job_retention_records'
     
     id = Column(Integer, primary_key=True)
     contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)
-    
     record_date = Column(Date, nullable=False)
-    
-    # 支援方法 (例: '企業訪問', '利用者面談（対面）', '利用者面談（電話/オンライン）')
     support_method = Column(String(50), nullable=False) 
+    support_details = Column(Text, nullable=False)
+    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False)
+    document_url = Column(String(500))
     
-    support_details = Column(Text, nullable=False) # 実施した支援の詳細 (NULL禁止)
-    supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False) # 担当職員
-    
-    # --- 証憑（原理1） ---
-    document_url = Column(String(500)) # 詳細な面談記録票や確認書などのファイルURL
-    
-    # --- リレーションシップ ---
-    contract = db.relationship('JobRetentionContract', back_populates='retention_records')
-    supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
+    contract = relationship('JobRetentionContract', back_populates='retention_records')
+    supporter = relationship('Supporter', foreign_keys=[supporter_id])

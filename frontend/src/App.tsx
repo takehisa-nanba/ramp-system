@@ -18,6 +18,9 @@ import { DailyScheduleActualPage } from './pages/DailyScheduleActualPage';
 import AITestPage from './pages/AITestPage';
 import StaffAttendancePage from './pages/StaffAttendancePage';
 import SupportRecordsPage from './pages/SupportRecordsPage';
+import JobRetentionStaffDashboardPage from './pages/JobRetentionStaffDashboardPage';
+import JobRetentionVoicePage from './pages/JobRetentionVoicePage';
+import JobRetentionMonthlyReportPage from './pages/JobRetentionMonthlyReportPage';
 
 // =================================================================
 // App コンポーネント (ルーター/レイアウトの役割のみ)
@@ -61,6 +64,11 @@ const App: React.FC = () => {
           <Route path="attendance" element={<StaffAttendancePage />} />
           <Route path="records" element={<SupportRecordsPage />} />
           <Route path="settings" element={<SettingsPage />} />
+
+          {/* 就労定着支援ドメイン */}
+          <Route path="job-retention" element={<JobRetentionStaffDashboardPage />} />
+          <Route path="job-retention/voice" element={<JobRetentionVoicePage />} />
+          <Route path="job-retention/:contractId/monthly-report" element={<JobRetentionMonthlyReportPage />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/dashboard" replace />} />

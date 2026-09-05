@@ -87,7 +87,10 @@ from backend.app.models.support.schedule import (
     Schedule, UserScheduleTemplate, UserDailySchedule, UserScheduleRequest
 )
 from backend.app.models.support.job_retention import (
-    JobRetentionContract, JobRetentionRecord
+    JobRetentionContract, JobRetentionRecord,
+    RetentionEmploymentEpisode, RetentionUserVoiceLog,
+    RetentionEmployerFeedbackLog, RetentionSupportActionLog,
+    MonthlyRetentionReport
 )
 from backend.app.models.support.follow_up import (
     PostTransitionFollowUp
