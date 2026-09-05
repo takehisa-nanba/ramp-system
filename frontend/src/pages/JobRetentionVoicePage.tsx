@@ -5,14 +5,22 @@ import { jobRetentionApi } from '../services/jobRetentionApi';
 import type { RetentionContract, UserVoiceLog } from '../services/jobRetentionApi';
 import { MessageSquare, CheckCircle2, AlertCircle, Sparkles, Send, History, HeartHandshake } from 'lucide-react';
 
-export const JobRetentionVoicePage: React.FC = () => {
+interface JobRetentionVoicePageProps {
+  defaultTab?: 'create' | 'history';
+}
+
+export const JobRetentionVoicePage: React.FC<JobRetentionVoicePageProps> = ({ defaultTab = 'create' }) => {
   const [contract, setContract] = useState<RetentionContract | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [pastLogs, setPastLogs] = useState<UserVoiceLog[]>([]);
-  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
+  const [activeTab, setActiveTab] = useState<'create' | 'history'>(defaultTab);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    setActiveTab(defaultTab);
+  }, [defaultTab]);
 
   // フォームステート
   const [rawVoice, setRawVoice] = useState('');
