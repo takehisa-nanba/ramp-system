@@ -4,7 +4,8 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity, get_jwt
 import datetime
 from typing import List
-from backend.app.services.job_retention_service import JobRetentionService
+from sqlalchemy.exc import IntegrityError
+from backend.app.services.job_retention_service import JobRetentionService, JobRetentionConflictError
 from backend.app.services.core_service import check_permission
 from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope
 from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
@@ -630,5 +631,12 @@ def save_monthly_report(contract_id: int, year_month: str):
             "id": report.id,
             "status": report.status
         }), 200
+    except JobRetentionConflictError as e:
+        return jsonify({"msg": str(e)}), 409
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"msg": "同一契約・同一年月のレポートが既に存在するか、同時に作成されたため競合しました。"}), 409
     except ValueError as e:
         return jsonify({"msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"msg": f"エラーが発生しました: {str(e)}"}), 500

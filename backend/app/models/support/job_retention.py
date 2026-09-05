@@ -1,7 +1,7 @@
 # backend/app/models/support/job_retention.py
 
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 # ====================================================================
@@ -16,7 +16,7 @@ class JobRetentionContract(db.Model):
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
-    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=False, index=True)
     
     # 契約期間
     contract_start_date = Column(Date, nullable=False) # 契約開始日
@@ -194,6 +194,9 @@ class MonthlyRetentionReport(db.Model):
     本人・企業・支援員の一次情報そのものは変更・上書きせず、報告書項目として保持・微調整する。
     """
     __tablename__ = 'monthly_retention_reports'
+    __table_args__ = (
+        UniqueConstraint('contract_id', 'report_year_month', name='uq_monthly_retention_report_contract_month'),
+    )
 
     id = Column(Integer, primary_key=True)
     contract_id = Column(Integer, ForeignKey('job_retention_contracts.id'), nullable=False, index=True)

@@ -473,3 +473,299 @@ def test_report_preview_does_not_infer_non_existent_facts(app, auth_setup):
     assert preview["future_support_plan"] == ""
     assert preview["stakeholder_efforts"] == ""
     assert preview["sharing_notes"] == ""
+
+# ====================================================================
+# 6. 目標循環・非推測・DB制約・監査ログ entity_id 確実保存の検証
+# ====================================================================
+from sqlalchemy.exc import IntegrityError
+from backend.app.models import AuditActionLog, MonthlyRetentionReport
+
+def test_monthly_report_goal_cycle(app, auth_setup):
+    """
+    【受入条件】目標循環:
+    - 前月FINALIZEDレポートの future_support_plan が翌月の support_goal 初期値になる
+    - 前月がDRAFTの場合は翌月目標へ自動採用しない
+    - 前月レポートがない初月では、勝手に目標を生成しない
+    - 個別支援記録の next_step を同月の support_goal に直接入れない
+    - next_step は当月の future_support_plan を作成する材料として扱う
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 1. 前月レポートがない初月(2026-08) -> support_goal は空文字
+    preview_aug = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-08")
+    assert preview_aug["support_goal"] == ""
+
+    # 2. 9月レポートを下書き(DRAFT)で保存
+    JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-09",
+        report_data={
+            "future_support_plan": "業務量増加後の疲労状況を確認する"
+        },
+        finalize=False
+    )
+    # 前月が DRAFT の場合、10月目標には引き継がれない
+    preview_oct = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    assert preview_oct["support_goal"] == ""
+
+    # 3. 9月レポートを確定(FINALIZED)にする
+    JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-09",
+        report_data={
+            "future_support_plan": "業務量増加後の疲労状況を確認する"
+        },
+        finalize=True
+    )
+    # 確定後は 10月プレビューの support_goal に引き継がれる
+    preview_oct = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    assert preview_oct["support_goal"] == "業務量増加後の疲労状況を確認する"
+
+    # 4. 10月に個別支援記録を登録 (next_step あり)
+    JobRetentionService.record_support_action(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        action_date=datetime.date(2026, 10, 15),
+        confirmed_situation="業務負荷の確認",
+        provided_support="休憩の取り方を助言",
+        has_user_interview=True,
+        interview_method="FACE_TO_FACE",
+        next_step="11月の定期通院後の疲労度を確認する"
+    )
+
+    # 10月のプレビューを再取得
+    preview_oct_after_action = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    # 同月の support_goal は前月からの引き継ぎ目標のままであり、next_step で上書きされない
+    assert preview_oct_after_action["support_goal"] == "業務量増加後の疲労状況を確認する"
+    # next_step は当月の future_support_plan (今後の支援内容) の材料として使われる
+    assert "11月の定期通院後の疲労度を確認する" in preview_oct_after_action["future_support_plan"]
+
+def test_report_preview_no_speculative_defaults(app, auth_setup):
+    """【受入条件】対処結果未入力時に「経過観察」、職種未入力時に「一般就労」を生成しない"""
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 職種なしのエピソードを追加
+    ep = JobRetentionService.add_employment_episode(
+        contract_id=contract_a.id,
+        workplace_name="株式会社サンプルテスト",
+        job_start_date=datetime.date(2026, 10, 1),
+        job_title=None,
+        actor_supporter_id=staff_a.id
+    )
+
+    # 対処結果なしの本人の声を追加
+    voice = JobRetentionService.record_user_voice(
+        contract_id=contract_a.id,
+        self_coping_action="水分を補給した",
+        self_coping_result=None
+    )
+    voice.logged_at = datetime.datetime(2026, 10, 5, 12, 0, 0)
+    db.session.commit()
+
+    preview = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+
+    # 「一般就労」は自動付与されない
+    assert "一般就労" not in preview["work_status_summary"]
+    assert "株式会社サンプルテスト" in preview["work_status_summary"]
+
+    # 「経過観察」は自動付与されない
+    assert "経過観察" not in preview["user_coping_summary"]
+    assert "本人の対処: 水分を補給した" in preview["user_coping_summary"]
+
+def test_audit_log_has_real_entity_id(app, auth_setup):
+    """【受入条件】新規エンティティ作成時、監査ログの entity_id が必ず実IDになる (entity_id=None禁止)"""
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 1. 就労エピソード
+    ep = JobRetentionService.add_employment_episode(
+        contract_id=contract_a.id,
+        workplace_name="テスト事業所XYZ",
+        job_start_date=datetime.date(2026, 11, 1),
+        actor_supporter_id=staff_a.id
+    )
+    audit_ep = AuditActionLog.query.filter_by(
+        action='ADD_EMPLOYMENT_EPISODE',
+        user_id=contract_a.user_id
+    ).order_by(AuditActionLog.id.desc()).first()
+    assert audit_ep is not None
+    assert audit_ep.entity_id is not None
+    assert audit_ep.entity_id == ep.id
+
+    # 2. 支援実施記録
+    action = JobRetentionService.record_support_action(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        action_date=datetime.date(2026, 11, 5),
+        confirmed_situation="状況確認",
+        provided_support="支援実施"
+    )
+    audit_action = AuditActionLog.query.filter_by(
+        action='RECORD_RETENTION_SUPPORT_ACTION',
+        user_id=contract_a.user_id
+    ).order_by(AuditActionLog.id.desc()).first()
+    assert audit_action is not None
+    assert audit_action.entity_id is not None
+    assert audit_action.entity_id == action.id
+
+    # 3. 新規月次レポート
+    report = JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-11",
+        report_data={"support_goal": "テスト目標"},
+        finalize=False
+    )
+    audit_report = AuditActionLog.query.filter_by(
+        action='SAVE_MONTHLY_RETENTION_REPORT',
+        user_id=contract_a.user_id
+    ).order_by(AuditActionLog.id.desc()).first()
+    assert audit_report is not None
+    assert audit_report.entity_id is not None
+    assert audit_report.entity_id == report.id
+
+def test_db_constraints_enforced(app, auth_setup):
+    """
+    【受入条件】DB整合性:
+    - office_service_configuration_id が NULL の契約はDBでも作成できない
+    - 同一契約・同一年月の月次レポートを2件作成できない (一意制約違反)
+    """
+    user_a = auth_setup["user_a"]
+    contract_a = auth_setup["contract_a"]
+
+    # 1. office_service_configuration_id = None での作成禁止
+    with pytest.raises(IntegrityError):
+        invalid_contract = JobRetentionContract(
+            user_id=user_a.id,
+            office_service_configuration_id=None,
+            contract_start_date=datetime.date(2026, 1, 1),
+            contract_end_date=datetime.date(2028, 12, 31)
+        )
+        db.session.add(invalid_contract)
+        db.session.commit()
+    db.session.rollback()
+
+    # 2. 同一契約・同一年月での重複レポート作成禁止
+    report1 = MonthlyRetentionReport(
+        contract_id=contract_a.id,
+        report_year_month="2027-01",
+        status="DRAFT"
+    )
+    db.session.add(report1)
+    db.session.commit()
+
+    with pytest.raises(IntegrityError):
+        report2 = MonthlyRetentionReport(
+            contract_id=contract_a.id,
+            report_year_month="2027-01",
+            status="FINALIZED"
+        )
+        db.session.add(report2)
+        db.session.commit()
+    db.session.rollback()
+
+def test_finalized_report_is_immutable(app, auth_setup):
+    """
+    【受入条件】FINALIZED月次レポートの変更不可:
+    - FINALIZEDレポートを再保存すると拒否される
+    - FINALIZEDレポートをDRAFTへ戻せない
+    - FINALIZED拒否後も内容（support_goal, future_support_plan, status等）が不変である
+    """
+    client = app.test_client()
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+    headers = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_a.id}')}"}
+
+    # 1. 確定済みレポートを作成
+    res = client.post(
+        f"/api/job-retention/contracts/{contract_a.id}/monthly-reports/2026-12",
+        headers=headers,
+        json={
+            "support_goal": "確定済み目標A",
+            "future_support_plan": "確定済み方針A",
+            "finalize": True
+        }
+    )
+    assert res.status_code == 200
+    report_id = res.get_json()["id"]
+
+    # 2. DRAFTに戻そうとする (finalize=False) -> 400 で拒否される
+    res_draft = client.post(
+        f"/api/job-retention/contracts/{contract_a.id}/monthly-reports/2026-12",
+        headers=headers,
+        json={
+            "support_goal": "改ざん目標B",
+            "finalize": False
+        }
+    )
+    assert res_draft.status_code == 400
+    assert "確定済みの月次支援レポートは変更できません" in res_draft.get_json()["msg"]
+
+    # 3. 再確定で上書きしようとする (finalize=True) -> 400 で拒否される
+    res_overwrite = client.post(
+        f"/api/job-retention/contracts/{contract_a.id}/monthly-reports/2026-12",
+        headers=headers,
+        json={
+            "support_goal": "改ざん目標C",
+            "future_support_plan": "改ざん方針C",
+            "finalize": True
+        }
+    )
+    assert res_overwrite.status_code == 400
+    assert "確定済みの月次支援レポートは変更できません" in res_overwrite.get_json()["msg"]
+
+    # 4. 拒否後もDBの値が不変であることを確認
+    report = db.session.get(MonthlyRetentionReport, report_id)
+    assert report.status == "FINALIZED"
+    assert report.support_goal == "確定済み目標A"
+    assert report.future_support_plan == "確定済み方針A"
+
+def test_concurrent_monthly_report_creation_handled(app, auth_setup, monkeypatch):
+    """
+    【受入条件】月次レポート同時作成競合の処理:
+    - 同一契約・同一年月で同時作成が発生し IntegrityError となった場合、
+      未処理500にならず 409 Conflict が返り、セッションが正常に保たれる
+    """
+    client = app.test_client()
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+    headers = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_a.id}')}"}
+
+    # 一意制約違反(IntegrityError)が発生する状況をシミュレート
+    from sqlalchemy.exc import IntegrityError
+    orig_commit = db.session.commit
+
+    fail_once = {"triggered": False}
+    def mock_commit():
+        if not fail_once["triggered"]:
+            fail_once["triggered"] = True
+            raise IntegrityError("duplicate key value violates unique constraint", params=None, orig=None)
+        return orig_commit()
+
+    monkeypatch.setattr(db.session, "commit", mock_commit)
+
+    res = client.post(
+        f"/api/job-retention/contracts/{contract_a.id}/monthly-reports/2027-02",
+        headers=headers,
+        json={
+            "support_goal": "競合テスト目標",
+            "finalize": False
+        }
+    )
+    # 未処理500ではなく 409 Conflict が返る
+    assert res.status_code == 409
+    assert "競合" in res.get_json()["msg"]
+
+    # セッションが正常に保たれ、その後のDBクエリが正常に実行できる
+    monkeypatch.undo()
+    report = MonthlyRetentionReport.query.filter_by(
+        contract_id=contract_a.id,
+        report_year_month="2027-02"
+    ).first()
+    assert report is None
+
+

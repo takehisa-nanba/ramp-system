@@ -2,6 +2,7 @@
 
 import datetime
 from typing import Dict, Any, List, Optional
+from sqlalchemy.exc import IntegrityError
 from backend.app.extensions import db
 from backend.app.models import (
     JobRetentionContract, RetentionEmploymentEpisode,
@@ -9,6 +10,10 @@ from backend.app.models import (
     RetentionSupportActionLog, MonthlyRetentionReport,
     User, Supporter, AuditActionLog
 )
+
+class JobRetentionConflictError(Exception):
+    """就労定着支援でのリソース重複・競合例外"""
+    pass
 
 class JobRetentionService:
     """就労定着支援ドメインの業務ロジック層"""
@@ -126,6 +131,7 @@ class JobRetentionService:
             contract.status = 'ACTIVE'
 
         db.session.add(episode)
+        db.session.flush()
 
         audit = AuditActionLog(
             actor_supporter_id=actor_supporter_id,
@@ -253,6 +259,7 @@ class JobRetentionService:
             next_step=next_step
         )
         db.session.add(action_log)
+        db.session.flush()
 
         audit = AuditActionLog(
             actor_supporter_id=supporter_id,
@@ -341,7 +348,8 @@ class JobRetentionService:
         work_lines = []
         latest_ep = contract.episodes[-1] if contract.episodes else None
         if latest_ep:
-            work_lines.append(f"【勤務先】{latest_ep.workplace_name} ({latest_ep.job_title or '一般就労'})")
+            title_part = f" ({latest_ep.job_title})" if latest_ep.job_title else ""
+            work_lines.append(f"【勤務先】{latest_ep.workplace_name}{title_part}")
         for a in actions:
             if a.confirmed_situation:
                 work_lines.append(f"・[{a.action_date.strftime('%m/%d')}] {a.confirmed_situation}")
@@ -361,7 +369,8 @@ class JobRetentionService:
             if v.raw_voice:
                 voice_parts.append(f"「{v.raw_voice}」")
             if v.self_coping_action:
-                voice_parts.append(f"本人の対処: {v.self_coping_action} (結果: {v.self_coping_result or '経過観察'})")
+                result_part = f" (結果: {v.self_coping_result})" if v.self_coping_result else ""
+                voice_parts.append(f"本人の対処: {v.self_coping_action}{result_part}")
             if voice_parts:
                 coping_lines.append(f"・[{v.logged_at.strftime('%m/%d')}] " + " / ".join(voice_parts))
         
@@ -401,8 +410,23 @@ class JobRetentionService:
         future_policy_str = "\n".join(future_lines) if future_lines else ""
 
         # --- 公式帳票標準項目マッピング (出所関係を維持・推測補完禁止) ---
-        # 1. 主な支援目標: actionsの次回方針や設定課題から抽出
-        support_goal_str = "\n".join(future_lines[:1]) if future_lines else ""
+        # 1. 主な支援目標: 前月の確定済み(FINALIZED)レポートの今後の支援内容(future_support_plan)を初期値として引き継ぐ
+        # 前月が存在しない初月や前月がDRAFTの場合は空欄とする（推測補完禁止）
+        # 個別支援記録の next_step は当月の support_goal に直接使用せず、当月の future_support_plan の材料とする
+        if month == 1:
+            prev_year_month = f"{year - 1}-12"
+        else:
+            prev_year_month = f"{year}-{month - 1:02d}"
+
+        prev_report = MonthlyRetentionReport.query.filter_by(
+            contract_id=contract_id,
+            report_year_month=prev_year_month
+        ).first()
+
+        if prev_report and prev_report.status == 'FINALIZED' and prev_report.future_support_plan:
+            support_goal_str = prev_report.future_support_plan
+        else:
+            support_goal_str = ""
 
         # 2. 支援実施内容: provided_supportと訪問/面談情報
         support_content_parts = []
@@ -424,7 +448,7 @@ class JobRetentionService:
                 result_lines.append(f"・本人の対処結果: {v.self_coping_result}")
         support_result_str = "\n".join(result_lines) if result_lines else ""
 
-        # 4. 今後の支援内容: future_lines
+        # 4. 今後の支援内容: future_lines (個別支援記録の next_step を材料として反映)
         future_support_plan_str = "\n".join(future_lines) if future_lines else ""
 
         # 5. 対象者・事業主・関係機関等の取組: 本人の対処(voices)と企業の取組(feedbacks)
@@ -485,6 +509,9 @@ class JobRetentionService:
             report_year_month=year_month
         ).first()
 
+        if report and report.status == 'FINALIZED':
+            raise ValueError("確定済みの月次支援レポートは変更できません。")
+
         if not report:
             report = MonthlyRetentionReport(
                 contract_id=contract_id,
@@ -513,18 +540,27 @@ class JobRetentionService:
 
         report.status = 'FINALIZED' if finalize else 'DRAFT'
 
-        audit = AuditActionLog(
-            actor_supporter_id=supporter_id,
-            user_id=contract.user_id,
-            action='FINALIZE_MONTHLY_RETENTION_REPORT' if finalize else 'SAVE_MONTHLY_RETENTION_REPORT',
-            entity_type='MonthlyRetentionReport',
-            entity_id=report.id,
-            after_value=f"YearMonth: {year_month}, Status: {report.status}",
-            reason=f"就労定着支援レポートの{'確定' if finalize else '下書き保存'}"
-        )
-        db.session.add(audit)
-        db.session.commit()
-        return report
+        try:
+            # 監査ログ記録前に flush して実 entity_id を確定する
+            db.session.flush()
+
+            audit = AuditActionLog(
+                actor_supporter_id=supporter_id,
+                user_id=contract.user_id,
+                action='FINALIZE_MONTHLY_RETENTION_REPORT' if finalize else 'SAVE_MONTHLY_RETENTION_REPORT',
+                entity_type='MonthlyRetentionReport',
+                entity_id=report.id,
+                after_value=f"YearMonth: {year_month}, Status: {report.status}",
+                reason=f"就労定着支援レポートの{'確定' if finalize else '下書き保存'}"
+            )
+            db.session.add(audit)
+            db.session.commit()
+            return report
+        except IntegrityError as e:
+            db.session.rollback()
+            raise JobRetentionConflictError(
+                f"契約ID {contract_id} の {year_month} レポートは既に存在するか、同時作成競合が発生しました。"
+            ) from e
 
     @staticmethod
     def get_monthly_report(contract_id: int, year_month: str) -> Optional[MonthlyRetentionReport]:
