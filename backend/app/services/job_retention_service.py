@@ -667,24 +667,30 @@ class JobRetentionService:
             db.session.commit()
             return new_plan
         else:
-            # 随時見直し（早期見直し含む）
+            # 随時見直し（早期見直し・遅延見直し）
             review_d = review_date or datetime.date.today()
             if not review_reason or not review_reason.strip():
                 raise ValueError("計画見直し時は見直し理由の入力が必須です。")
 
-            max_allowed = calculate_plan_end_date(review_d)
+            # 早期見直し vs 終了予定日後の遅延見直し
+            if review_d <= active_plan.plan_end_date:
+                # 早期見直し (終了予定日以前または当日)
+                new_start_date = review_d
+                active_plan.plan_end_date = new_start_date - datetime.timedelta(days=1)
+            else:
+                # 終了予定日後の遅延見直し (旧版終了予定日の翌日を起点とし、期間の空白を作らない)
+                new_start_date = active_plan.plan_end_date + datetime.timedelta(days=1)
+
+            # 新版の標準 plan_end_date および6か月上限は new_start_date から計算
+            max_allowed = calculate_plan_end_date(new_start_date)
             if target_end_date is None:
                 target_end_date = max_allowed
             elif target_end_date > max_allowed:
                 raise ValueError(
-                    f"計画終了予定日は見直し日（{review_d.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_allowed.strftime('%Y/%m/%d')}まで）に設定してください。"
+                    f"計画終了予定日は計画開始日（{new_start_date.strftime('%Y/%m/%d')}）から暦上の6か月以内（{max_allowed.strftime('%Y/%m/%d')}まで）に設定してください。"
                 )
-            if target_end_date < review_d:
-                raise ValueError("計画終了予定日は見直し日以降の日付を設定してください。")
-
-            # 早期見直し対応: 旧計画の適用期間を前日までとして連続保持
-            if review_d <= active_plan.plan_end_date:
-                active_plan.plan_end_date = review_d - datetime.timedelta(days=1)
+            if target_end_date < new_start_date:
+                raise ValueError("計画終了予定日は計画開始日以降の日付を設定してください。")
 
             # 旧ACTIVE計画をアーカイブ
             active_plan.status = 'ARCHIVED'
@@ -695,7 +701,7 @@ class JobRetentionService:
                 contract_id=contract_id,
                 version=new_version,
                 overall_support_goal=overall_support_goal.strip(),
-                start_date=review_d,
+                start_date=new_start_date,
                 review_date=review_d,
                 review_reason=review_reason.strip(),
                 plan_end_date=target_end_date,

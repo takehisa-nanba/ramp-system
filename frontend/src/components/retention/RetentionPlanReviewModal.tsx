@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jobRetentionApi } from '../../services/jobRetentionApi';
 import type { SupportPlan, SupportPlanSummary } from '../../services/jobRetentionApi';
+import { getLocalDateString, calculateDefaultPlanEndDate, calculateNextDay } from '../../utils/dateUtils';
 import { X, Target, AlertTriangle, AlertCircle, Save, History, Calendar } from 'lucide-react';
 
 interface Props {
@@ -12,53 +13,6 @@ interface Props {
   onSaved: (newPlan: SupportPlan) => void;
 }
 
-/**
- * 暦上のnか月後を計算するヘルパー（Pythonの relativedelta(months=n) と同等）
- * 例: 2026-08-31 + 6 months -> 2027-02-28
- */
-export const addCalendarMonths = (dateStr: string, months: number): string => {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const targetMonthIndex = m - 1 + months;
-  const targetYear = y + Math.floor(targetMonthIndex / 12);
-  const targetMonth = ((targetMonthIndex % 12) + 12) % 12 + 1;
-
-  const lastDayOfTargetMonth = new Date(targetYear, targetMonth, 0).getDate();
-  const clampedDay = Math.min(d, lastDayOfTargetMonth);
-
-  return `${targetYear}-${String(targetMonth).padStart(2, '0')}-${String(clampedDay).padStart(2, '0')}`;
-};
-
-/**
- * 計画開始日から標準の終了予定日（原則: start_date + 6 calendar months - 1 day）を算出
- * 例: 2026-09-01 -> 2027-02-28
- */
-export const calculateDefaultPlanEndDate = (dateStr: string): string => {
-  if (!dateStr) return '';
-  const sixMonthsLater = addCalendarMonths(dateStr, 6);
-  const [y, m, d] = sixMonthsLater.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() - 1);
-  const resYear = dt.getFullYear();
-  const resMonth = String(dt.getMonth() + 1).padStart(2, '0');
-  const resDay = String(dt.getDate()).padStart(2, '0');
-  return `${resYear}-${resMonth}-${resDay}`;
-};
-
-/**
- * 指定日の翌日を算出（次計画開始予定日）
- */
-export const calculateNextDay = (dateStr: string): string => {
-  if (!dateStr) return '';
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const dt = new Date(y, m - 1, d);
-  dt.setDate(dt.getDate() + 1);
-  const resYear = dt.getFullYear();
-  const resMonth = String(dt.getMonth() + 1).padStart(2, '0');
-  const resDay = String(dt.getDate()).padStart(2, '0');
-  return `${resYear}-${resMonth}-${resDay}`;
-};
-
 export const RetentionPlanReviewModal: React.FC<Props> = ({
   isOpen,
   onClose,
@@ -68,7 +22,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   onSaved,
 }) => {
   const isReview = Boolean(activePlan);
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
 
   const [startDate, setStartDate] = useState(today);
   const [overallGoal, setOverallGoal] = useState('');
@@ -82,16 +36,22 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   // 初期化
   useEffect(() => {
     if (isOpen) {
-      const initialDate = today;
-      setStartDate(initialDate);
-      const calculatedMax = calculateDefaultPlanEndDate(initialDate);
-      setMaxEndDate(calculatedMax);
-      setPlanEndDate(calculatedMax);
-
       if (isReview && activePlan) {
+        const prevEnd = activePlan.plan_end_date || activePlan.next_review_deadline;
+        // 終了予定日後の遅延見直しの場合は旧終了予定日の翌日を初期開始日とし、期間の空白を作らない
+        const defaultStart = (prevEnd && today > prevEnd) ? calculateNextDay(prevEnd) : today;
+        setStartDate(defaultStart);
+        const calculatedMax = calculateDefaultPlanEndDate(defaultStart);
+        setMaxEndDate(calculatedMax);
+        setPlanEndDate(calculatedMax);
         setOverallGoal(activePlan.overall_support_goal || '');
         setReviewReason('');
       } else {
+        const initialDate = today;
+        setStartDate(initialDate);
+        const calculatedMax = calculateDefaultPlanEndDate(initialDate);
+        setMaxEndDate(calculatedMax);
+        setPlanEndDate(calculatedMax);
         setOverallGoal('');
         setReviewReason('初回策定');
       }
@@ -144,7 +104,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       const res = await jobRetentionApi.createOrReviewSupportPlan(contractId, {
         overall_support_goal: overallGoal.trim(),
         start_date: startDate,
-        review_date: startDate,
+        review_date: today,
         plan_end_date: planEndDate,
         next_review_deadline: planEndDate, // 互換用
         review_reason: reviewReason.trim(),

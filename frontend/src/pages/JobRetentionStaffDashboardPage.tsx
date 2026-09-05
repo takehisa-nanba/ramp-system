@@ -11,6 +11,7 @@ import {
   Building2, Plus, MessageSquare, FileText, 
   Calendar, AlertCircle, ChevronDown, ChevronUp, UserCheck
 } from 'lucide-react';
+import { getLocalDateString } from '../utils/dateUtils';
 
 export const JobRetentionStaffDashboardPage: React.FC = () => {
   const navigate = useNavigate();
@@ -40,7 +41,7 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
   const [newUserId, setNewUserId] = useState('');
   const [newWorkplace, setNewWorkplace] = useState('');
   const [newJobTitle, setNewJobTitle] = useState('');
-  const [newStartDate, setNewStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [newStartDate, setNewStartDate] = useState(getLocalDateString());
   const [isCompanyInvolved, setIsCompanyInvolved] = useState(true);
   const [creatingContract, setCreatingContract] = useState(false);
 
@@ -94,10 +95,9 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
 
     try {
       setCreatingContract(true);
-      const startD = new Date(newStartDate);
-      const endD = new Date(startD);
-      endD.setFullYear(endD.getFullYear() + 3); // 3年契約
-      const endStr = endD.toISOString().split('T')[0];
+      const [y, m, d] = newStartDate.split('-').map(Number);
+      const endD = new Date(y + 3, m - 1, d);
+      const endStr = getLocalDateString(endD);
 
       await jobRetentionApi.createContract({
         user_id: parseInt(newUserId, 10),

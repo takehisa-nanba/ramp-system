@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { jobRetentionApi } from '../services/jobRetentionApi';
 import type { SupportPlan } from '../services/jobRetentionApi';
+import { getLocalDateString } from '../utils/dateUtils';
 import { X, Calendar, Building2, UserCheck, Shuffle, Save, Target, AlertCircle } from 'lucide-react';
 
 interface Props {
@@ -18,7 +19,7 @@ export const JobRetentionActionModal: React.FC<Props> = ({
   userName,
   onSaved
 }) => {
-  const today = new Date().toISOString().split('T')[0];
+  const today = getLocalDateString();
   const [actionDate, setActionDate] = useState(today);
   const [activePlan, setActivePlan] = useState<SupportPlan | null>(null);
   const [hasLoadedPlan, setHasLoadedPlan] = useState(false);

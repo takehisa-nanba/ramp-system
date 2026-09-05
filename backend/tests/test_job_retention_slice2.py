@@ -258,6 +258,73 @@ def test_review_support_plan_early_review_continuous_history(app, auth_setup):
     assert history[1]["plan_end_date"] == "2026-10-31"
 
 
+def test_review_support_plan_delayed_review_continuous_history(app, auth_setup):
+    """
+    【受入条件】終了予定日後の遅延見直しにおける計画期間の連続性:
+    - 旧計画終了予定日: 2027/02/28
+    - 見直し実施日: 2027/03/15
+    - 新版の開始日は旧計画終了日の翌日 (2027/03/01) となり、期間の空白を作らない
+    - 新版の標準 plan_end_date は 2027/03/01 + 6か月 - 1日 = 2027/08/31
+    - 新版の review_date は実際の見直し日 2027/03/15
+    - 旧版は 2026/09/01 ～ 2027/02/28 のまま維持される
+    """
+    client = app.test_client()
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+    headers = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_a.id}')}"}
+
+    # 1. Version 1 を作成 (2026/09/01 ～ 2027/02/28)
+    JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="初期目標: 職場定着と基本ルーチンの確立",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id
+    )
+
+    # 2. 終了予定日後の遅延見直し実行 (見直し日: 2027-03-15)
+    res_review = client.post(
+        f"/api/job-retention/contracts/{contract_a.id}/support-plans",
+        headers=headers,
+        json={
+            "overall_support_goal": "新目標: 遅延見直し後の業務自律化",
+            "review_date": "2027-03-15",
+            "review_reason": "定期見直しの遅延実施"
+        }
+    )
+    assert res_review.status_code == 201
+    new_plan = res_review.get_json()["plan"]
+    assert new_plan["version"] == 2
+    assert new_plan["status"] == "ACTIVE"
+    # 新版 start_date は旧版終了予定日の翌日 (2027/03/01)
+    assert new_plan["start_date"] == "2027-03-01"
+    # 新版 review_date は実際の見直し日 (2027/03/15)
+    assert new_plan["review_date"] == "2027-03-15"
+    # 新版 plan_end_date は 2027/03/01 + 6か月 - 1日 = 2027/08/31
+    assert new_plan["plan_end_date"] == "2027-08-31"
+    assert new_plan["next_plan_start_date"] == "2027-09-01"
+
+    # 3. 履歴を確認
+    res_history = client.get(
+        f"/api/job-retention/contracts/{contract_a.id}/support-plans",
+        headers=headers
+    )
+    assert res_history.status_code == 200
+    history = res_history.get_json()
+    assert len(history) == 2
+
+    # 新版
+    assert history[0]["version"] == 2
+    assert history[0]["start_date"] == "2027-03-01"
+    assert history[0]["plan_end_date"] == "2027-08-31"
+
+    # 旧版 (2026/09/01 ～ 2027/02/28 が維持される)
+    assert history[1]["version"] == 1
+    assert history[1]["status"] == "ARCHIVED"
+    assert history[1]["start_date"] == "2026-09-01"
+    assert history[1]["plan_end_date"] == "2027-02-28"
+
+
 # ====================================================================
 # 5. ACTIVE計画1件制約 (DBレベル部分一意インデックス)
 # ====================================================================
