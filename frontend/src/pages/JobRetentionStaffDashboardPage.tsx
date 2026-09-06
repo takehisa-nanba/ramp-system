@@ -200,6 +200,26 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
 
                 {/* アクションボタン */}
                 <div className="flex items-center gap-2 flex-wrap">
+                  {c.current_month_report_status && (
+                    <button
+                      onClick={() => navigate(`/job-retention/${c.id}/reports`)}
+                      className={`px-2.5 py-1.5 rounded-xl text-xs font-semibold border flex items-center gap-1 transition-all ${
+                        c.current_month_report_status === 'FINALIZED'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
+                          : c.current_month_report_status === 'DRAFT'
+                          ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                      }`}
+                      title="支援レポート一覧を開く"
+                    >
+                      <FileText className="w-3.5 h-3.5" />
+                      今月: {
+                        c.current_month_report_status === 'FINALIZED' ? '確定済み' :
+                        c.current_month_report_status === 'DRAFT' ? '下書き' : '未作成'
+                      }
+                    </button>
+                  )}
+
                   <button
                     onClick={() => setActiveModalContract({ id: c.id, name: c.user_name })}
                     className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-semibold rounded-xl flex items-center gap-1.5 transition-all"
@@ -209,11 +229,11 @@ export const JobRetentionStaffDashboardPage: React.FC = () => {
                   </button>
 
                   <button
-                    onClick={() => navigate(`/job-retention/${c.id}/monthly-report`)}
+                    onClick={() => navigate(`/job-retention/${c.id}/reports`)}
                     className="px-3.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-semibold rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    支援レポート作成
+                    支援レポート
                   </button>
                 </div>
               </div>

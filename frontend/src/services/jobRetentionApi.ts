@@ -20,6 +20,8 @@ export interface RetentionContract {
   office_service_configuration_id?: number;
   episodes?: EmploymentEpisode[];
   active_plan?: SupportPlanSummary | null;
+  current_month_report_status?: 'DRAFT' | 'FINALIZED' | 'NOT_CREATED';
+  current_year_month?: string;
 }
 
 export type DeadlineStatusCode =
@@ -254,8 +256,22 @@ export interface MonthlyRetentionReportData {
   is_existing?: boolean;
 }
 
+export interface MonthlyReportSummaryItem {
+  id: number;
+  report_year_month: string;
+  status: 'DRAFT' | 'FINALIZED';
+  total_actions: number;
+  face_to_face_count: number;
+  created_at?: string;
+  updated_at?: string;
+  finalized_at?: string | null;
+  has_snapshot: boolean;
+  document_status?: any;
+}
+
 export const jobRetentionApi = {
   // 契約
+
   async listContracts(status?: string): Promise<RetentionContract[]> {
     const params = status ? { status } : {};
     const res = await apiClient.get<RetentionContract[]>('/job-retention/contracts', { params });
@@ -320,6 +336,13 @@ export const jobRetentionApi = {
     const res = await apiClient.post<{ id: number; msg: string; status: string }>(
       `/job-retention/contracts/${contractId}/monthly-reports/${yearMonth}`,
       { ...data, finalize }
+    );
+    return res.data;
+  },
+
+  async listMonthlyReports(contractId: number): Promise<MonthlyReportSummaryItem[]> {
+    const res = await apiClient.get<MonthlyReportSummaryItem[]>(
+      `/job-retention/contracts/${contractId}/monthly-reports`
     );
     return res.data;
   },

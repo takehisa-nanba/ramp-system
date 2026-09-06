@@ -11,8 +11,9 @@ from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope
 from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
 from backend.app.models import (
     Supporter, User, OfficeSetting, OfficeServiceConfiguration,
-    ServiceCertificate, JobRetentionContract, calculate_max_review_deadline
+    ServiceCertificate, JobRetentionContract, MonthlyRetentionReport, calculate_max_review_deadline
 )
+from backend.app.utils.timezone import get_jst_today
 from backend.app.extensions import db
 
 job_retention_bp = Blueprint('job_retention', __name__, url_prefix='/api/job-retention')
@@ -176,14 +177,29 @@ def list_contracts():
     status = request.args.get('status')
     contracts = JobRetentionService.list_contracts(status=status)
 
-    result = []
+    # 認可済み契約の抽出 (Fail Closed)
+    accessible_contracts = []
     for c in contracts:
-        # アクセス権のある契約のみに絞り込み (Fail Closed)
         try:
             validate_supporter_access_to_contract(supporter_id, c)
+            accessible_contracts.append(c)
         except AttendanceForbiddenError:
             continue
 
+    # 当月レポート状態取得のN+1を回避 (日本時間JST基準で一括クエリ)
+    current_ym = get_jst_today().strftime('%Y-%m')
+    accessible_contract_ids = [c.id for c in accessible_contracts]
+    if accessible_contract_ids:
+        reports = MonthlyRetentionReport.query.filter(
+            MonthlyRetentionReport.contract_id.in_(accessible_contract_ids),
+            MonthlyRetentionReport.report_year_month == current_ym
+        ).all()
+        status_map = {r.contract_id: r.status for r in reports}
+    else:
+        status_map = {}
+
+    result = []
+    for c in accessible_contracts:
         latest_ep = c.episodes[-1] if c.episodes else None
         active_plan = JobRetentionService.get_active_support_plan(c.id)
         plan_summary = None
@@ -218,7 +234,9 @@ def list_contracts():
             "latest_job_title": latest_ep.job_title if latest_ep else None,
             "voice_count": len(c.voice_logs),
             "action_count": len(c.action_logs),
-            "active_plan": plan_summary
+            "active_plan": plan_summary,
+            "current_month_report_status": status_map.get(c.id, "NOT_CREATED"),
+            "current_year_month": current_ym
         })
     return jsonify(result), 200
 
@@ -593,6 +611,31 @@ def list_actions(contract_id: int):
 # ====================================================================
 # 支援レポート (支援員専用)
 # ====================================================================
+@job_retention_bp.route('/contracts/<int:contract_id>/monthly-reports', methods=['GET'])
+@jwt_required()
+def list_monthly_reports(contract_id: int):
+    """指定契約の月次支援レポート一覧（支援員専用・JOB_RETENTION_VIEW必須）"""
+    identity = get_jwt_identity()
+    supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_VIEW')
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+    validate_supporter_access_to_contract(supporter_id, contract)
+
+    reports = JobRetentionService.list_monthly_reports(contract_id)
+    result = []
+    for r in reports:
+        result.append({
+            "id": r.id,
+            "report_year_month": r.report_year_month,
+            "status": r.status,
+            "updated_at": r.updated_at.isoformat() if getattr(r, 'updated_at', None) else None,
+            "created_at": r.created_at.isoformat() if getattr(r, 'created_at', None) else None
+        })
+    return jsonify(result), 200
+
 @job_retention_bp.route('/contracts/<int:contract_id>/monthly-reports/<year_month>/preview', methods=['GET'])
 @jwt_required()
 def preview_monthly_report(contract_id: int, year_month: str):

@@ -3,7 +3,9 @@
 import React, { useState, useEffect } from 'react';
 import { jobRetentionApi } from '../services/jobRetentionApi';
 import type { RetentionContract, UserVoiceLog } from '../services/jobRetentionApi';
-import { MessageSquare, CheckCircle2, AlertCircle, Sparkles, Send, History, HeartHandshake } from 'lucide-react';
+import { MessageSquare, CheckCircle2, AlertCircle, Sparkles, Send, History, HeartHandshake, FileText, Eye } from 'lucide-react';
+import { useUserDocuments } from '../hooks/useUserDocuments';
+import { A4PrintDocumentView } from '../components/documents/A4PrintDocumentView';
 
 interface JobRetentionVoicePageProps {
   defaultTab?: 'create' | 'history';
@@ -17,6 +19,16 @@ export const JobRetentionVoicePage: React.FC<JobRetentionVoicePageProps> = ({ de
   const [activeTab, setActiveTab] = useState<'create' | 'history'>(defaultTab);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // これまでの文書アーカイブ用 hook
+  const {
+    deliveredDocs,
+    previewSnapshot,
+    previewConsent,
+    showPreviewModal,
+    setShowPreviewModal,
+    handleOpenRenderedDocument,
+  } = useUserDocuments();
 
   useEffect(() => {
     setActiveTab(defaultTab);
@@ -326,68 +338,131 @@ export const JobRetentionVoicePage: React.FC<JobRetentionVoicePageProps> = ({ de
         </form>
       )}
 
-      {/* タブ2: わたしの歩み（タイムライン） */}
+      {/* タブ2: わたしの歩み（タイムライン & これまでの確定文書） */}
       {activeTab === 'history' && (
-        <div className="space-y-3">
-          {pastLogs.length === 0 ? (
-            <div className="bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-100">
-              まだ記録がありません。日常のできごとを気軽に残してみてください。
+        <div className="space-y-6">
+          {/* これまでの確定文書アーカイブ */}
+          <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-3">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2.5">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5 text-teal-600" />
+                <h3 className="font-bold text-slate-800 text-sm sm:text-base">これまでの確定文書</h3>
+              </div>
+              <span className="text-xs text-slate-400">{deliveredDocs.length} 件</span>
             </div>
-          ) : (
-            pastLogs.map((log) => (
-              <div key={log.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
-                <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>
-                    {log.logged_at ? new Date(log.logged_at).toLocaleDateString('ja-JP', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
-                    }) : ''}
-                  </span>
-                  {log.needs_help && (
-                    <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-600">
-                      相談希望
+
+            {deliveredDocs.length === 0 ? (
+              <p className="text-xs text-slate-400 py-3 text-center">
+                これまでに交付された確定文書はありません。
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {deliveredDocs.map((doc) => (
+                  <div
+                    key={doc.delivery_id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50 rounded-xl border border-slate-100 hover:bg-slate-100/80 transition-colors gap-2"
+                  >
+                    <div>
+                      <div className="font-bold text-slate-800 text-xs sm:text-sm">{doc.title}</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5 flex items-center gap-3">
+                        <span>交付日: {doc.delivered_at ? new Date(doc.delivered_at).toLocaleDateString('ja-JP') : '-'}</span>
+                        {doc.is_signed ? (
+                          <span className="text-emerald-600 font-semibold flex items-center gap-1">
+                            <CheckCircle2 className="w-3 h-3" /> 署名済み
+                          </span>
+                        ) : (
+                          <span className="text-amber-600 font-semibold">確認済み</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleOpenRenderedDocument(doc.document_type, doc.document_id)}
+                      className="self-end sm:self-center px-3 py-1.5 text-xs font-semibold text-teal-700 bg-white border border-teal-200 hover:bg-teal-50 rounded-lg flex items-center gap-1 transition-colors shadow-2xs"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      A4文書を表示
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* できごとの記録タイムライン */}
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider pl-1">
+              できごとの記録タイムライン
+            </h3>
+            {pastLogs.length === 0 ? (
+              <div className="bg-white rounded-2xl p-8 text-center text-slate-500 border border-slate-100">
+                まだできごとの記録がありません。日常のひとことや気持ちを気軽に残してみてください。
+              </div>
+            ) : (
+              pastLogs.map((log) => (
+                <div key={log.id} className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span>
+                      {log.logged_at ? new Date(log.logged_at).toLocaleDateString('ja-JP', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric',
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      }) : ''}
                     </span>
+                    {log.needs_help && (
+                      <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-50 text-rose-600">
+                        相談希望
+                      </span>
+                    )}
+                  </div>
+
+                  {log.raw_voice && (
+                    <p className="text-sm font-medium text-slate-800 bg-slate-50 p-3 rounded-xl">
+                      「{log.raw_voice}」
+                    </p>
+                  )}
+
+                  {(log.trouble_point || log.self_coping_action) && (
+                    <div className="text-xs space-y-1 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
+                      {log.trouble_point && (
+                        <p className="text-slate-700">
+                          <span className="font-semibold text-amber-800">困ったこと:</span> {log.trouble_point}
+                        </p>
+                      )}
+                      {log.self_coping_action && (
+                        <p className="text-slate-700">
+                          <span className="font-semibold text-emerald-800">自分でやってみたこと:</span> {log.self_coping_action}
+                        </p>
+                      )}
+                      {log.self_coping_result && (
+                        <p className="text-slate-500">
+                          <span className="font-semibold">結果:</span> {log.self_coping_result}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {log.success_point && (
+                    <div className="text-xs text-emerald-800 bg-emerald-50 p-2.5 rounded-xl font-medium">
+                      ✨ できたこと: {log.success_point}
+                    </div>
                   )}
                 </div>
-
-                {log.raw_voice && (
-                  <p className="text-sm font-medium text-slate-800 bg-slate-50 p-3 rounded-xl">
-                    「{log.raw_voice}」
-                  </p>
-                )}
-
-                {(log.trouble_point || log.self_coping_action) && (
-                  <div className="text-xs space-y-1 bg-amber-50/50 p-3 rounded-xl border border-amber-100">
-                    {log.trouble_point && (
-                      <p className="text-slate-700">
-                        <span className="font-semibold text-amber-800">困ったこと:</span> {log.trouble_point}
-                      </p>
-                    )}
-                    {log.self_coping_action && (
-                      <p className="text-slate-700">
-                        <span className="font-semibold text-emerald-800">自分でやってみたこと:</span> {log.self_coping_action}
-                      </p>
-                    )}
-                    {log.self_coping_result && (
-                      <p className="text-slate-500">
-                        <span className="font-semibold">結果:</span> {log.self_coping_result}
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {log.success_point && (
-                  <div className="text-xs text-emerald-800 bg-emerald-50 p-2.5 rounded-xl font-medium">
-                    ✨ できたこと: {log.success_point}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
+              ))
+            )}
+          </div>
         </div>
+      )}
+
+      {/* A4 プレビュー Modal */}
+      {showPreviewModal && previewSnapshot && (
+        <A4PrintDocumentView
+          snapshot={previewSnapshot}
+          consentInfo={previewConsent}
+          onClose={() => setShowPreviewModal(false)}
+        />
       )}
     </div>
   );

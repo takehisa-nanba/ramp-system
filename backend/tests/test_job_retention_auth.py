@@ -98,18 +98,18 @@ def auth_setup(app):
         db.session.flush()
 
         # ロール1: 定着支援フル権限ロール (VIEW + EDIT + APPROVE)
-        role_full = RoleMaster(name=f"RETENTION_FULL_{uuid.uuid4().hex[:4]}", role_scope="OFFICE")
+        role_full = RoleMaster(name=f"RETENTION_FULL_{uuid.uuid4().hex}", role_scope="OFFICE")
         role_full.permissions.extend([perm_view, perm_edit, perm_approve])
 
         # ロール2: 閲覧限定ロール (VIEW のみ)
-        role_view_only = RoleMaster(name=f"RETENTION_VIEW_ONLY_{uuid.uuid4().hex[:4]}", role_scope="OFFICE")
+        role_view_only = RoleMaster(name=f"RETENTION_VIEW_ONLY_{uuid.uuid4().hex}", role_scope="OFFICE")
         role_view_only.permissions.append(perm_view)
 
         # ロール3: 権限なしロール
-        role_none = RoleMaster(name=f"RETENTION_NONE_{uuid.uuid4().hex[:4]}", role_scope="OFFICE")
+        role_none = RoleMaster(name=f"RETENTION_NONE_{uuid.uuid4().hex}", role_scope="OFFICE")
 
         # ロール4: CORPORATE権限ロール (法人スコープ)
-        role_corporate = RoleMaster(name=f"RETENTION_CORP_{uuid.uuid4().hex[:4]}", role_scope="CORPORATE")
+        role_corporate = RoleMaster(name=f"RETENTION_CORP_{uuid.uuid4().hex}", role_scope="CORPORATE")
         role_corporate.permissions.extend([perm_view, perm_edit, perm_approve])
 
         db.session.add_all([role_full, role_view_only, role_none, role_corporate])
@@ -767,5 +767,68 @@ def test_concurrent_monthly_report_creation_handled(app, auth_setup, monkeypatch
         report_year_month="2027-02"
     ).first()
     assert report is None
+
+
+def test_list_monthly_reports_api_auth_and_results(auth_setup, client):
+    """月次レポート一覧APIの認可・テナント分離・返却データ検証"""
+    contract_a = auth_setup["contract_a"]
+    contract_b = auth_setup["contract_b"]
+    staff_a = auth_setup["staff_a"]
+    staff_b = auth_setup["staff_b"]
+    staff_none = auth_setup["staff_no_perm"]
+    user_a = auth_setup["user_a"]
+
+    h_staff_a = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_a.id}')}"}
+    h_staff_b = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_b.id}')}"}
+    h_staff_none = {"Authorization": f"Bearer {create_access_token(identity=f'staff:{staff_none.id}')}"}
+    h_user_a = {"Authorization": f"Bearer {create_access_token(identity=f'user:{user_a.id}')}"}
+
+    # 1. 2ヶ月分のレポートを投入 (2026-08: FINALIZED, 2026-09: DRAFT)
+    JobRetentionService.save_monthly_report(
+        contract_a.id, staff_a.id, "2026-08", {"support_goal": "8月目標"}, finalize=True
+    )
+    JobRetentionService.save_monthly_report(
+        contract_a.id, staff_a.id, "2026-09", {"support_goal": "9月目標"}, finalize=False
+    )
+
+    # 2. 正常系: 支援員Aが自分の事業所契約のレポート一覧を取得 (年月降順)
+    res = client.get(f"/api/job-retention/contracts/{contract_a.id}/monthly-reports", headers=h_staff_a)
+    assert res.status_code == 200
+    data = res.get_json()
+    assert len(data) >= 2
+    assert data[0]["report_year_month"] == "2026-09"
+    assert data[0]["status"] == "DRAFT"
+    assert "id" in data[0]
+    assert "updated_at" in data[0]
+
+    assert data[1]["report_year_month"] == "2026-08"
+    assert data[1]["status"] == "FINALIZED"
+
+    # 3. 認可検証: 他事業所の支援員Bからのアクセスは 403
+    res_b = client.get(f"/api/job-retention/contracts/{contract_a.id}/monthly-reports", headers=h_staff_b)
+    assert res_b.status_code == 403
+
+    # 4. 権限検証: VIEW権限のない支援員は 403
+    res_none = client.get(f"/api/job-retention/contracts/{contract_a.id}/monthly-reports", headers=h_staff_none)
+    assert res_none.status_code == 403
+
+    # 5. アクター検証: 本人(USER)トークンでの職員APIアクセスは 403
+    res_user = client.get(f"/api/job-retention/contracts/{contract_a.id}/monthly-reports", headers=h_user_a)
+    assert res_user.status_code == 403
+
+    # 6. 存在しない契約IDは 404
+    res_404 = client.get("/api/job-retention/contracts/999999/monthly-reports", headers=h_staff_a)
+    assert res_404.status_code == 404
+
+    # 7. list_contracts API に当月ステータスが付与されていることを検証 (N+1回避)
+    res_contracts = client.get("/api/job-retention/contracts", headers=h_staff_a)
+    assert res_contracts.status_code == 200
+    c_list = res_contracts.get_json()
+    target_c = next((c for c in c_list if c["id"] == contract_a.id), None)
+    assert target_c is not None
+    assert "current_month_report_status" in target_c
+    assert "current_year_month" in target_c
+    assert target_c["current_month_report_status"] in ("DRAFT", "FINALIZED", "NOT_CREATED")
+
 
 

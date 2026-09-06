@@ -3,9 +3,10 @@
 import React, { useState } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { 
+  Home,
   PenTool, 
   History, 
-  Building2, 
+  FileText,
   LogOut, 
   Menu, 
   X, 
@@ -23,22 +24,28 @@ export const UserLayout: React.FC<UserLayoutProps> = ({ userName, onLogout }) =>
 
   const navItems = [
     { 
-      name: 'できごとを残す', 
+      name: 'ホーム', 
+      path: '/user/home', 
+      icon: <Home size={18} />,
+      desc: '大切なお知らせと今の支援'
+    },
+    { 
+      name: '伝える', 
       path: '/user/voice', 
       icon: <PenTool size={18} />,
-      desc: '今日のこと・気持ち・相談を記録'
+      desc: '今日のこと・相談を記録'
     },
     { 
-      name: '過去の記録を見る', 
+      name: '支援を見る', 
+      path: '/user/support', 
+      icon: <FileText size={18} />,
+      desc: '今の目標・新しい計画・レポート'
+    },
+    { 
+      name: 'これまで', 
       path: '/user/history', 
       icon: <History size={18} />,
-      desc: 'これまでのメモと対処の歩み'
-    },
-    { 
-      name: '定着支援情報', 
-      path: '/user/retention-info', 
-      icon: <Building2 size={18} />,
-      desc: '就業先・契約期間・支援計画'
+      desc: 'これまでのメモと確定文書'
     },
   ];
 

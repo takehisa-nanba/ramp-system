@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useSearchParams, Link } from 'react-router-dom';
 import { jobRetentionApi } from '../services/jobRetentionApi';
 import type { RetentionContract, MonthlyRetentionReportData, SupportPlan } from '../services/jobRetentionApi';
 import { RetentionPlanBanner } from '../components/retention/RetentionPlanBanner';
@@ -10,11 +10,12 @@ import { FileText, Save, CheckCircle2, ArrowLeft, Calendar, Sparkles, AlertCircl
 
 export const JobRetentionMonthlyReportPage: React.FC = () => {
   const { contractId } = useParams<{ contractId: string }>();
-  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   const now = new Date();
   const defaultYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const [yearMonth, setYearMonth] = useState(defaultYearMonth);
+  const queryMonth = searchParams.get('month');
+  const [yearMonth, setYearMonth] = useState(queryMonth || defaultYearMonth);
 
   const [contract, setContract] = useState<RetentionContract | null>(null);
   const [reportData, setReportData] = useState<MonthlyRetentionReportData | null>(null);
@@ -103,12 +104,21 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
       {/* 戻るボタン & タイトル */}
       <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <button
-            onClick={() => navigate(-1)}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 mb-2"
-          >
-            <ArrowLeft className="w-4 h-4" /> 定着支援管理に戻る
-          </button>
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500 mb-2">
+            <Link
+              to="/job-retention"
+              className="hover:text-slate-800 transition-colors"
+            >
+              定着支援管理
+            </Link>
+            <span>/</span>
+            <Link
+              to={`/job-retention/${cid}/reports`}
+              className="inline-flex items-center gap-1 hover:text-indigo-600 transition-colors"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> 支援レポート一覧
+            </Link>
+          </div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-bold text-slate-800 flex items-center gap-2">
               <FileText className="w-6 h-6 text-indigo-600" />

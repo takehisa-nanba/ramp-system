@@ -20,9 +20,12 @@ import AITestPage from './pages/AITestPage';
 import StaffAttendancePage from './pages/StaffAttendancePage';
 import SupportRecordsPage from './pages/SupportRecordsPage';
 import JobRetentionStaffDashboardPage from './pages/JobRetentionStaffDashboardPage';
+import { JobRetentionReportShelfPage } from './pages/JobRetentionReportShelfPage';
 import JobRetentionMonthlyReportPage from './pages/JobRetentionMonthlyReportPage';
 
 // Pages (User)
+import { UserHomePage } from './pages/user/UserHomePage';
+import { UserSupportViewPage } from './pages/user/UserSupportViewPage';
 import { JobRetentionVoicePage } from './pages/JobRetentionVoicePage';
 import { JobRetentionUserInfoPage } from './pages/JobRetentionUserInfoPage';
 
@@ -32,7 +35,7 @@ import { JobRetentionUserInfoPage } from './pages/JobRetentionUserInfoPage';
 const StaffRoute: React.FC<{ role?: string | null }> = ({ role }) => {
   if (role !== 'STAFF') {
     // 本人や他権限からのアクセスは遮断して本人画面へ
-    return <Navigate to="/user/voice" replace />;
+    return <Navigate to="/user/home" replace />;
   }
   return <Outlet />;
 };
@@ -72,7 +75,7 @@ const App: React.FC = () => {
         {/* ルートアクセス時のロール別振り分け */}
         <Route 
           path="/" 
-          element={<Navigate to={isUser ? "/user/voice" : "/dashboard"} replace />} 
+          element={<Navigate to={isUser ? "/user/home" : "/dashboard"} replace />} 
         />
 
         {/* ------------------------------------------------------------- */}
@@ -88,12 +91,16 @@ const App: React.FC = () => {
               />
             }
           >
-            <Route index element={<Navigate to="/user/voice" replace />} />
-            {/* できごとを残す */}
+            <Route index element={<Navigate to="/user/home" replace />} />
+            {/* ホーム（大切なお知らせ・今の支援サマリー） */}
+            <Route path="home" element={<UserHomePage />} />
+            {/* 伝える（できごとを残す） */}
             <Route path="voice" element={<JobRetentionVoicePage defaultTab="create" />} />
-            {/* 自分の過去の記録を見る */}
+            {/* 支援を見る（現在の支援計画・新しい計画・交付レポート） */}
+            <Route path="support" element={<UserSupportViewPage />} />
+            {/* これまで（過去の記録・確定文書アーカイブ） */}
             <Route path="history" element={<JobRetentionVoicePage defaultTab="history" />} />
-            {/* 自分の定着支援情報を見る */}
+            {/* 互換用: 定着支援情報 */}
             <Route path="retention-info" element={<JobRetentionUserInfoPage />} />
           </Route>
         </Route>
@@ -125,6 +132,7 @@ const App: React.FC = () => {
 
             {/* 就労定着支援ドメイン (支援員用) */}
             <Route path="/job-retention" element={<JobRetentionStaffDashboardPage />} />
+            <Route path="/job-retention/:contractId/reports" element={<JobRetentionReportShelfPage />} />
             <Route path="/job-retention/:contractId/monthly-report" element={<JobRetentionMonthlyReportPage />} />
           </Route>
         </Route>
@@ -132,11 +140,11 @@ const App: React.FC = () => {
         {/* 4. Fallback (Fail Closed) */}
         <Route 
           path="*" 
-          element={<Navigate to={isUser ? "/user/voice" : "/dashboard"} replace />} 
+          element={<Navigate to={isUser ? "/user/home" : "/dashboard"} replace />} 
         />
       </Routes>
     </BrowserRouter>
   );
 };
 
-export default App;
+export default App;

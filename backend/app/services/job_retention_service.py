@@ -594,6 +594,13 @@ class JobRetentionService:
             report_year_month=year_month
         ).first()
 
+    @staticmethod
+    def list_monthly_reports(contract_id: int) -> List[MonthlyRetentionReport]:
+        """指定契約の月次支援レポートを年月降順で一覧取得"""
+        return MonthlyRetentionReport.query.filter_by(
+            contract_id=contract_id
+        ).order_by(MonthlyRetentionReport.report_year_month.desc()).all()
+
     # ====================================================================
     # 支援計画 (共通SupportPlan + 定着Detail + 様式2入力支援)
     # ====================================================================
