@@ -45,8 +45,8 @@ export function useUserDocuments() {
       setLoadingDocs(true);
       setDocError(null);
       const [pendingRes, deliveredRes] = await Promise.all([
-        client.get<{ pending_documents: PendingDocumentItem[] }>('/api/user-mypage/documents/pending'),
-        client.get<{ delivered_documents: DeliveredDocumentItem[] }>('/api/user-mypage/documents/delivered')
+        client.get<{ pending_documents: PendingDocumentItem[] }>('/user-mypage/documents/pending'),
+        client.get<{ delivered_documents: DeliveredDocumentItem[] }>('/user-mypage/documents/delivered')
       ]);
       setPendingDocs(pendingRes.data.pending_documents || []);
       setDeliveredDocs(deliveredRes.data.delivered_documents || []);
@@ -66,7 +66,7 @@ export function useUserDocuments() {
     try {
       setDocError(null);
       const res = await client.get<{ snapshot: DocumentSnapshot; consent: any }>(
-        `/api/user-mypage/documents/${docType}/${docId}/rendered`
+        `/user-mypage/documents/${docType}/${docId}/rendered`
       );
       setPreviewSnapshot(res.data.snapshot);
       setPreviewConsent(res.data.consent);

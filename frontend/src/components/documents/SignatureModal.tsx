@@ -78,7 +78,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
       setLoading(true);
       setErrorMsg(null);
       const res = await client.get<DocumentStatusResponse>(
-        `/api/consents/documents/${documentType}/${documentId}/status`
+        `/consents/documents/${documentType}/${documentId}/status`
       );
       setStatusData(res.data);
     } catch (err: any) {
@@ -98,7 +98,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     try {
       setSubmitting(true);
       setErrorMsg(null);
-      await client.post(`/api/consents/documents/${documentType}/${documentId}/finalize`);
+      await client.post(`/consents/documents/${documentType}/${documentId}/finalize`);
       setSuccessMsg('文書を確定し、確定版スナップショットを固定しました。');
       await fetchStatus();
       notifyChange();
@@ -114,7 +114,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     try {
       setSubmitting(true);
       setErrorMsg(null);
-      await client.post(`/api/consents/documents/${documentType}/${documentId}/deliver-digital`);
+      await client.post(`/consents/documents/${documentType}/${documentId}/deliver-digital`);
       setSuccessMsg('本人アカウントへ電子交付（配信）しました。');
       await fetchStatus();
       notifyChange();
@@ -130,7 +130,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     try {
       setSubmitting(true);
       setErrorMsg(null);
-      await client.post(`/api/consents/documents/${documentType}/${documentId}/deliver-paper`, {
+      await client.post(`/consents/documents/${documentType}/${documentId}/deliver-paper`, {
         delivered_at: new Date().toISOString().slice(0, 10)
       });
       setSuccessMsg('紙交付の記録を登録しました。');
@@ -160,7 +160,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
       formData.append('signed_at', signedDate);
       formData.append('evidence_file', selectedFile);
 
-      await client.post('/api/consents/paper-upload', formData, {
+      await client.post('/consents/paper-upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       setSuccessMsg('紙署名証拠ファイルを登録し、計画を有効化しました。');
@@ -179,7 +179,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
     try {
       setSubmitting(true);
       setErrorMsg(null);
-      await client.post('/api/consents/digital-sign', {
+      await client.post('/consents/digital-sign', {
         document_type: documentType,
         document_id: documentId
       });

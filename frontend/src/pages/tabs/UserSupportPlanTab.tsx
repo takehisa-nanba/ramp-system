@@ -125,7 +125,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   const handleOpenA4Preview = async (planId: number) => {
     try {
       const res = await client.get<{ snapshot: DocumentSnapshot; consent: any }>(
-        `/api/user-mypage/documents/SUPPORT_PLAN/${planId}/rendered`
+        `/user-mypage/documents/SUPPORT_PLAN/${planId}/rendered`
       );
       setPreviewSnapshot(res.data.snapshot);
       setPreviewConsent(res.data.consent);
