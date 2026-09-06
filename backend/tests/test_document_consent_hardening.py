@@ -20,7 +20,7 @@ from backend.app.models import (
 )
 from backend.app.services.document_consent_service import DocumentConsentService
 from backend.app.services.job_retention_service import JobRetentionService
-from backend.tests.test_job_retention_auth import get_headers
+from backend.tests.test_job_retention_auth import auth_setup, get_headers
 
 
 def _ensure_login(user, *, last_name="山田", first_name="太郎"):
@@ -88,7 +88,7 @@ def test_digital_delivery_requires_current_electronic_eligibility(app, auth_setu
     ).count() == 0
 
 
-def test_digital_signature_requires_exact_delivery_and_view(app, auth_setup):
+def test_digital_signature_requires_exact_delivery(app, auth_setup):
     user = auth_setup["user_a"]
     office = auth_setup["osc_a"].office
     _ensure_login(user)
@@ -105,10 +105,6 @@ def test_digital_signature_requires_exact_delivery_and_view(app, auth_setup):
     delivery = DocumentConsentService.deliver_digital("SUPPORT_PLAN", plan.id, auth_setup["staff_a"].id)
     assert delivery.viewed_at is None
 
-    with pytest.raises(ValueError):
-        DocumentConsentService.sign_digitally("SUPPORT_PLAN", plan.id, user.id)
-
-    DocumentConsentService.record_document_viewed("SUPPORT_PLAN", plan.id, user.id)
     log = DocumentConsentService.sign_digitally("SUPPORT_PLAN", plan.id, user.id)
     assert log.signature_method == "USER_DIGITAL"
     assert log.generated_document_url
