@@ -14,8 +14,8 @@ jobs:
       ALLOW_INSECURE_FALLBACKS: "True"
       SECRET_KEY: "ci-test-secret-key-not-for-production"
       JWT_SECRET_KEY: "ci-test-jwt-secret-not-for-production"
-      PII_ENCRYPTION_KEY: "ci-test-pii-key-not-for-production"
-      FERNET_ENCRYPTION_KEY: "c29tZS1mZXJuZXQta2V5LWZvci10ZXN0aW5nLTEyMzQ1Ng=="
+      PII_ENCRYPTION_KEY: "zbuAINY3giWh4B9eS7kByftOnBsw3wgOjNODwxSSJ6U="
+      FERNET_ENCRYPTION_KEY: "ngMuA47HtIM6_Q4m0_9oYrfMEvQdPxtZv-8QPTDanbc="
       DATABASE_URL: "sqlite:///:memory:"
 
     steps:
