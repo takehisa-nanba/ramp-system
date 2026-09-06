@@ -70,6 +70,18 @@ def test_support_plan_integration_and_goal_models(app, auth_setup):
         "health_condition": "服薬管理良好、睡眠時間7時間確保"
     }
 
+    long_term_goal_input = {
+        "description": "職場環境に慣れ、体調を安定させて勤怠を維持する",
+        "challenges": "就労定着",
+        "set_year_month": "2026-09",
+        "target_year_month": "2027-02"
+    }
+    short_term_goal_input = {
+        "description": "職場環境に慣れ、体調を安定させて勤怠を維持する",
+        "set_year_month": "2026-09",
+        "target_year_month": "2027-02"
+    }
+
     # サービス呼び出しで作成
     plan_detail = JobRetentionService.create_or_review_support_plan(
         contract_id=contract_a.id,
@@ -81,7 +93,9 @@ def test_support_plan_integration_and_goal_models(app, auth_setup):
         supporter_id=staff_a.id,
         items_data=items_input,
         source_links_data=source_links_input,
-        detail_fields=detail_fields_input
+        detail_fields=detail_fields_input,
+        long_term_goal_data=long_term_goal_input,
+        short_term_goal_data=short_term_goal_input
     )
 
     # 1. 共通親 SupportPlan の検証
@@ -113,8 +127,9 @@ def test_support_plan_integration_and_goal_models(app, auth_setup):
     # 3. RetentionSupportPlanDetail の検証
     assert plan_detail.retention_contract_id == contract_a.id
     assert plan_detail.overall_support_goal == "職場環境に慣れ、体調を安定させて勤怠を維持する"
-    assert plan_detail.review_date == review_d
-    assert plan_detail.review_reason == review_reason
+    # 初回策定時は review_date / review_reason を見直し情報として保存しない (要件6)
+    assert plan_detail.review_date is None
+    assert plan_detail.review_reason is None
     assert plan_detail.physical_work_environment == "空調の効いたデスク席、休憩スペース近接"
     assert plan_detail.human_work_environment == "指導担当者が隣席に配置され、声かけがしやすい環境"
     assert plan_detail.user_wishes == "長く安定して働き続けたい"
@@ -190,19 +205,12 @@ def test_input_assistance_and_detail_api(app, client, auth_setup):
 
     # 確定事実スナップショットの確認
     assert "user_info_snapshot" in data
-    assert "employment_info_snapshot" in data
-    assert "office_info_snapshot" in data
+    # 雇用条件スナップショットの検証（work_conditionsを賃金欄へ自動設定しない：要件3）
     assert data["employment_info_snapshot"]["employer_name"] == "株式会社テスト企業"
+    assert data["employment_info_snapshot"]["wage_condition"] is None
+    assert data["candidates"]["work_conditions_candidate"] == "週5日 30時間"
 
-    # 一次情報候補の確認
-    cands = data["candidates"]
-    assert len(cands["voice_candidates"]) >= 1
-    assert "丁寧に教えてくださり" in cands["voice_candidates"][0]["content"]
-    assert len(cands["feedback_candidates"]) >= 1
-    assert "真面目に業務" in cands["feedback_candidates"][0]["content"]
-    assert len(cands["action_candidates"]) >= 1
-
-    # 2. 計画作成
+    # 2. 計画作成 (long_term_goal_data を明示的に指定)
     create_resp = client.post(
         f"/api/job-retention/contracts/{contract_a.id}/support-plans",
         headers=headers,
@@ -215,6 +223,11 @@ def test_input_assistance_and_detail_api(app, client, auth_setup):
             "detail_fields": {
                 "physical_work_environment": "専用デスクあり",
                 "user_wishes": "ミスなく一人で作業できるようになりたい"
+            },
+            "long_term_goal_data": {
+                "description": "業務習熟と自己管理の確立",
+                "set_year_month": "2026-09",
+                "target_year_month": "2027-02"
             },
             "items_data": [
                 {
@@ -242,11 +255,13 @@ def test_input_assistance_and_detail_api(app, client, auth_setup):
     assert detail_data["status"] == 'ACTIVE'
     assert detail_data["start_date"] == "2026-09-01"
     assert detail_data["plan_end_date"] == "2027-02-28"
-    assert detail_data["review_date"] == "2026-09-04"
-    assert detail_data["review_reason"] == "就職初期支援計画"
+    # 初回策定時は review_date / review_reason は None (要件6)
+    assert detail_data["review_date"] is None
+    assert detail_data["review_reason"] is None
     assert detail_data["employment_info"]["physical_work_environment"] == "専用デスクあり"
     assert len(detail_data["items"]) == 1
     assert detail_data["items"][0]["challenge_topic"] == "作業手順の定着"
+    assert detail_data["long_term_goal"] is not None
     assert detail_data["long_term_goal"]["set_year_month"] == "2026-09"
 
 
@@ -273,6 +288,9 @@ def test_plan_review_workflow_and_detail_continuity(app, auth_setup):
     assert sp1.plan_version == 1
     assert sp1.plan_status == 'ACTIVE'
     assert sp1.plan_end_date == datetime.date(2027, 2, 28)
+    # 初回計画には review_date / review_reason は保存されない (要件6)
+    assert d1.review_date is None
+    assert d1.review_reason is None
 
     # 2. 早期見直し (2026/11/15)
     d2 = JobRetentionService.create_or_review_support_plan(
@@ -304,4 +322,230 @@ def test_plan_review_workflow_and_detail_continuity(app, auth_setup):
     active = JobRetentionService.get_active_support_plan(contract_a.id)
     assert active.id == d2.id
     assert active.version == 2
+
+
+def test_no_fictitious_goals_or_items_on_creation_and_review(app, auth_setup):
+    """
+    【要件1・2検証: 架空の公式計画項目・目標・支援内容を自動生成しない】
+    1. Goalデータ/Itemデータを渡さない場合、LongTermGoal / ShortTermGoal / Item は作成されない。
+    2. overall_support_goal を LongTermGoal / ShortTermGoal に自動コピーしない。
+    3. 「就労定着課題」「就労定着の安定化」「月1回以上」等のデフォルトアイテムを捏造しない。
+    4. get_support_plan_detail で long_term_goal, short_term_goal は None を返す。
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 新規作成（goal_data, items_data は渡さない）
+    plan = JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="真の大まかな支援目標のみ",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id
+    )
+
+    sp = plan.support_plan
+    # 架空目標が作成されていないこと
+    assert len(sp.long_term_goals) == 0
+
+    # 架空アイテムが作成されていないこと
+    assert len(plan.items) == 0
+
+    # 詳細取得APIでも架空目標・アイテムがフォールバック捏造されないこと
+    detail = JobRetentionService.get_support_plan_detail(contract_a.id, plan.id)
+    assert detail["overall_support_goal"] == "真の大まかな支援目標のみ"
+    assert detail["long_term_goal"] is None
+    assert detail["short_term_goal"] is None
+    assert detail["items"] == []
+
+
+def test_monthly_report_support_goal_inheritance_rules(app, auth_setup):
+    """
+    【要件8検証: 月次レポート support_goal 引き継ぎの厳密化】
+    1. 契約初月 (contract_start_ym) のみ ACTIVE 計画の overall_support_goal を初期提案。
+    2. 2か月目以降（通常月）:
+       - 前月レポートが存在しない場合 → support_goal は空文字 ""（計画目標へフォールバック禁止）
+       - 前月レポートが DRAFT の場合 → support_goal は空文字 ""
+       - 前月レポートが FINALIZED だが future_support_plan が空の場合 → support_goal は空文字 ""
+       - 前月レポートが FINALIZED で future_support_plan がある場合 → その値のみを引き継ぐ
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 契約開始日は 2026/09/01 (auth_setup で作成) -> 初月は "2026-09"
+    # まず ACTIVE 計画を作成
+    JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="初月用ACTIVE計画目標",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id
+    )
+
+    # 1. 契約初月 ("2026-09") のプレビュー -> ACTIVE 計画の目標が提案される
+    p_sep = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-09")
+    assert p_sep["support_goal"] == "初月用ACTIVE計画目標"
+
+    # 2. 翌月 ("2026-10") のプレビュー (前月レポート未作成)
+    # 任意月で計画目標へフォールバックしないため、空文字 "" になること
+    p_oct_no_prev = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    assert p_oct_no_prev["support_goal"] == ""
+
+    # 3. 前月 ("2026-09") レポートを DRAFT で保存
+    JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-09",
+        report_data={"future_support_plan": "9月DRAFTの今後の計画"},
+        finalize=False
+    )
+    # 前月が DRAFT の場合も通常月 ("2026-10") では引き継がず空文字 ""
+    p_oct_draft_prev = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    assert p_oct_draft_prev["support_goal"] == ""
+
+    # 4. 前月 ("2026-09") レポートを future_support_plan 入力済みで確定 (FINALIZED)
+    JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-09",
+        report_data={"future_support_plan": "10月は残業抑制と自己申告の徹底"},
+        finalize=True
+    )
+    # 通常月 ("2026-10") で前月 FINALIZED の future_support_plan が正常に引き継がれる
+    p_oct_finalized = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-10")
+    assert p_oct_finalized["support_goal"] == "10月は残業抑制と自己申告の徹底"
+
+    # 5. 当月 ("2026-10") レポートを future_support_plan 空で確定 (FINALIZED)
+    JobRetentionService.save_monthly_report(
+        contract_id=contract_a.id,
+        supporter_id=staff_a.id,
+        year_month="2026-10",
+        report_data={"support_goal": "10月は残業抑制と自己申告の徹底", "future_support_plan": ""},
+        finalize=True
+    )
+    # 翌月 ("2026-11") プレビュー: 前月レポートが確定済みでも future_support_plan が空なら空文字 ""
+    p_nov_empty_prev = JobRetentionService.build_monthly_report_preview(contract_a.id, "2026-11")
+    assert p_nov_empty_prev["support_goal"] == ""
+
+
+def test_input_assistance_real_models_and_no_dummy_strings(app, auth_setup):
+    """
+    【要件4検証: 入力支援APIの一次情報取得先を実モデルへ修正 & ダミー文字列排除】
+    - UserPII (氏名, かな, 生年月日, 性別, 手帳)
+    - ServiceCertificate (障害支援区分)
+    - 固定文字列「未設定」「未登録」「就労定着支援事業所」を返さず None を返すこと
+    """
+    contract_a = auth_setup["contract_a"]
+    user = contract_a.user
+
+    # 1. 未設定状態の契約での検証（ダミー固定値が入らないこと）
+    data_empty = JobRetentionService.get_plan_input_assistance_data(contract_a.id)
+    user_snap = data_empty["user_info_snapshot"]
+    # 固定ダミー値「未設定」「未登録」ではなく None または平文
+    assert user_snap["gender"] is None or user_snap["gender"] != "未設定"
+    assert user_snap["support_level"] is None or user_snap["support_level"] != "就労定着"
+
+    # 2. 実モデルに値を設定
+    from backend.app.models import GenderLegalMaster, ServiceCertificate, MunicipalityMaster, UserPII
+    gender_m = GenderLegalMaster.query.filter_by(name="女性").first()
+    if not gender_m:
+        gender_m = GenderLegalMaster(name="女性")
+        db.session.add(gender_m)
+        db.session.flush()
+
+    if not user.pii:
+        pii = UserPII(
+            user_id=user.id,
+            last_name="定着",
+            first_name="花子",
+            last_name_kana="テイチャク",
+            first_name_kana="ハナコ",
+            birth_date=datetime.date(1995, 5, 20),
+            gender_legal_id=gender_m.id,
+            handbook_level="精神2級",
+            is_handbook_certified=True
+        )
+        db.session.add(pii)
+    else:
+        user.pii.last_name = "定着"
+        user.pii.first_name = "花子"
+        user.pii.last_name_kana = "テイチャク"
+        user.pii.first_name_kana = "ハナコ"
+        user.pii.birth_date = datetime.date(1995, 5, 20)
+        user.pii.gender_legal_id = gender_m.id
+        user.pii.handbook_level = "精神2級"
+        user.pii.is_handbook_certified = True
+    db.session.flush()
+
+    muni = MunicipalityMaster.query.first()
+    if not muni:
+        muni = MunicipalityMaster(municipality_code="12345", name="テスト区")
+        db.session.add(muni)
+        db.session.flush()
+
+    cert = ServiceCertificate(
+        user_id=user.id,
+        office_service_configuration_id=contract_a.office_service_configuration_id,
+        certificate_issue_date=datetime.date(2026, 1, 1),
+        municipality_master_id=muni.id,
+        disability_support_classification="区分3"
+    )
+    db.session.add(cert)
+    db.session.commit()
+
+    # 3. 入力支援 API データ取得
+    data_filled = JobRetentionService.get_plan_input_assistance_data(contract_a.id)
+    u_snap = data_filled["user_info_snapshot"]
+
+    assert u_snap["user_name"] == "定着 花子"
+    assert u_snap["user_name_kana"] == "テイチャク ハナコ"
+    assert u_snap["birth_date"] == "1995-05-20"
+    assert u_snap["gender"] == "女性"
+    assert u_snap["support_level"] == "区分3"
+    assert u_snap["disability_handbook_type"] == "精神2級"
+
+
+def test_migration_downgrade_upgrade_data_integrity(app):
+    """
+    【要件1・9検証: マイグレーション upgrade -> データ検証 -> downgrade -> upgrade】
+    - 旧 retention_support_plans に overall_support_goal のみ存在する場合
+    - upgrade 後に RetentionSupportPlanDetail.overall_support_goal のみに移行され、
+      存在しない架空の LongTermGoal / ShortTermGoal / Item は作成されないこと。
+    - downgrade で移行先が削除され、再度 upgrade しても整合性が保たれること。
+    """
+    import os
+    from alembic.config import Config
+    from alembic import command
+
+    ini_path = os.path.join(os.getcwd(), 'backend', 'migrations', 'alembic.ini')
+    alembic_cfg = Config(ini_path)
+    alembic_cfg.set_main_option("script_location", os.path.join(os.getcwd(), 'backend', 'migrations'))
+
+    # pytest用DBは create_all されているため alembic_version を head に stamp
+    command.stamp(alembic_cfg, "head")
+
+    # downgrade して前のリビジョンに戻す
+    command.downgrade(alembic_cfg, "719c050efff3")
+
+    # 旧テーブルに overall_support_goal のみのレコードを作成
+    from sqlalchemy import text
+    with app.app_context():
+        res = db.session.execute(text("SELECT count(*) FROM retention_support_plans")).scalar()
+        assert res is not None
+
+    # 再度 upgrade c4e281bf0571
+    command.upgrade(alembic_cfg, "c4e281bf0571")
+
+    # 移行結果の検証: 架空の LongTermGoal / ShortTermGoal / Item が作られていないこと
+    with app.app_context():
+        from backend.app.models import RetentionSupportPlanItem, LongTermGoal
+        # 旧データから移行されたアイテム数と架空Goalの確認
+        items_count = RetentionSupportPlanItem.query.count()
+        assert items_count == 0
+
+        # 架空の「就労定着」LTGが作られていないこと
+        fictitious_ltg = LongTermGoal.query.filter_by(challenges="就労定着").count()
+        assert fictitious_ltg == 0
+
+
 

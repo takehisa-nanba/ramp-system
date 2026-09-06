@@ -59,12 +59,37 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   const [reviewReason, setReviewReason] = useState('');
   const [overallGoal, setOverallGoal] = useState('');
 
+  // 共通Goalモデル（厚労省様式2 長期・短期目標）
+  const [ltgDescription, setLtgDescription] = useState('');
+  const [ltgSetYm, setLtgSetYm] = useState('');
+  const [ltgTargetYm, setLtgTargetYm] = useState('');
+  const [stgDescription, setStgDescription] = useState('');
+  const [stgSetYm, setStgSetYm] = useState('');
+  const [stgTargetYm, setStgTargetYm] = useState('');
+
+  // 労働条件4項目（様式2公式）
+  const [employmentType, setEmploymentType] = useState('');
+  const [wageCondition, setWageCondition] = useState('');
+  const [holidayCondition, setHolidayCondition] = useState('');
+  const [workingHoursAndBreak, setWorkingHoursAndBreak] = useState('');
+
+  // 就職前引継・生活面サポート体制
+  const [preEmploymentHandover, setPreEmploymentHandover] = useState('');
+  const [livingEnvSupport, setLivingEnvSupport] = useState('');
+
   // 厚労省様式2 固有項目スナップショット
   const [physicalEnv, setPhysicalEnv] = useState('');
   const [humanEnv, setHumanEnv] = useState('');
   const [userWishes, setUserWishes] = useState('');
   const [healthCond, setHealthCond] = useState('');
   const [relatedOrgs, setRelatedOrgs] = useState('');
+
+  // 本人への説明・同意に必要な項目
+  const [explainedDate, setExplainedDate] = useState('');
+  const [agreedDate, setAgreedDate] = useState('');
+  const [consentConfirmed, setConsentConfirmed] = useState(false);
+  const [consentNotes, setConsentNotes] = useState('');
+  const [staffExplainerName, setStaffExplainerName] = useState('');
 
   // 支援内容・評価テーブル (①〜③)
   const [items, setItems] = useState<RetentionSupportPlanItemData[]>([
@@ -73,7 +98,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       challenge_topic: '',
       support_policy: '',
       support_content: '',
-      support_frequency: '月1回以上',
+      support_frequency: '',
       role_sharing: ''
     }
   ]);
@@ -100,13 +125,25 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
         setPlanEndDate(calculatedMax);
         setOverallGoal(activePlan.overall_support_goal || '');
         setReviewReason('');
+        const startYm = defaultStart.slice(0, 7);
+        const endYm = calculatedMax.slice(0, 7);
+        setLtgSetYm(startYm);
+        setLtgTargetYm(endYm);
+        setStgSetYm(startYm);
+        setStgTargetYm(endYm);
       } else {
         setStartDate(today);
         const calculatedMax = calculateDefaultPlanEndDate(today);
         setMaxEndDate(calculatedMax);
         setPlanEndDate(calculatedMax);
         setOverallGoal('');
-        setReviewReason('初回策定');
+        setReviewReason(''); // 初回は見直し理由なし (要件6)
+        const startYm = today.slice(0, 7);
+        const endYm = calculatedMax.slice(0, 7);
+        setLtgSetYm(startYm);
+        setLtgTargetYm(endYm);
+        setStgSetYm(startYm);
+        setStgTargetYm(endYm);
       }
 
       // 入力支援データ取得
@@ -114,11 +151,15 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       jobRetentionApi.getPlanAssistanceData(contractId)
         .then((data) => {
           setAssistanceData(data);
-          // 確定事実から初期値を補完
+          // 確定事実から初期値を補完（すでに登録済みの実データがある場合のみ）
           if (data.employment_info_snapshot) {
-            setPhysicalEnv(data.employment_info_snapshot.physical_work_environment || '');
-            setHumanEnv(data.employment_info_snapshot.human_work_environment || '');
-            setRelatedOrgs(data.employment_info_snapshot.related_support_organizations || '');
+            if (data.employment_info_snapshot.physical_work_environment) setPhysicalEnv(data.employment_info_snapshot.physical_work_environment);
+            if (data.employment_info_snapshot.human_work_environment) setHumanEnv(data.employment_info_snapshot.human_work_environment);
+            if (data.employment_info_snapshot.related_support_organizations) setRelatedOrgs(data.employment_info_snapshot.related_support_organizations);
+            if (data.employment_info_snapshot.employment_type) setEmploymentType(data.employment_info_snapshot.employment_type);
+            if (data.employment_info_snapshot.wage_condition) setWageCondition(data.employment_info_snapshot.wage_condition);
+            if (data.employment_info_snapshot.holiday_condition) setHolidayCondition(data.employment_info_snapshot.holiday_condition);
+            if (data.employment_info_snapshot.working_hours_and_break) setWorkingHoursAndBreak(data.employment_info_snapshot.working_hours_and_break);
           }
         })
         .catch((err) => {
@@ -137,6 +178,12 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       const calculatedMax = calculateDefaultPlanEndDate(newDate);
       setMaxEndDate(calculatedMax);
       setPlanEndDate(calculatedMax);
+      const startYm = newDate.slice(0, 7);
+      const endYm = calculatedMax.slice(0, 7);
+      if (!ltgSetYm) setLtgSetYm(startYm);
+      if (!ltgTargetYm) setLtgTargetYm(endYm);
+      if (!stgSetYm) setStgSetYm(startYm);
+      if (!stgTargetYm) setStgTargetYm(endYm);
     }
   };
 
@@ -188,6 +235,13 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
     setOverallGoal(text);
   };
 
+  const handleAdoptWorkConditions = (targetField: 'employmentType' | 'wage' | 'holiday' | 'hours', val: string) => {
+    if (targetField === 'employmentType') setEmploymentType(val);
+    else if (targetField === 'wage') setWageCondition(val);
+    else if (targetField === 'holiday') setHolidayCondition(val);
+    else if (targetField === 'hours') setWorkingHoursAndBreak(val);
+  };
+
   // アイテム行追加・削除
   const handleAddItem = () => {
     if (items.length >= 3) return; // 厚労省様式は原則①〜③
@@ -198,7 +252,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
         challenge_topic: '',
         support_policy: '',
         support_content: '',
-        support_frequency: '月1回以上',
+        support_frequency: '',
         role_sharing: ''
       }
     ]);
@@ -254,25 +308,53 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       setSubmitting(true);
       setErrorMsg(null);
 
+      // 有効な入力があるアイテムのみ送信
+      const validItems = items.filter(
+        (it) => (it.challenge_topic && it.challenge_topic.trim()) ||
+                (it.support_policy && it.support_policy.trim()) ||
+                (it.support_content && it.support_content.trim())
+      ).map((it) => ({
+        ...it,
+        support_period_start: it.support_period_start || startDate,
+        support_period_end: it.support_period_end || planEndDate
+      }));
+
       const res = await jobRetentionApi.createOrReviewSupportPlan(contractId, {
         overall_support_goal: overallGoal.trim(),
         start_date: startDate,
         plan_end_date: planEndDate,
         next_review_deadline: planEndDate,
-        review_date: today,
-        review_reason: reviewReason.trim(),
-        items_data: items.map((it) => ({
-          ...it,
-          support_period_start: it.support_period_start || startDate,
-          support_period_end: it.support_period_end || planEndDate
-        })),
+        review_date: isReview ? today : undefined,
+        review_reason: isReview ? reviewReason.trim() : undefined,
+        long_term_goal_data: ltgDescription.trim() ? {
+          description: ltgDescription.trim(),
+          set_year_month: ltgSetYm || undefined,
+          target_year_month: ltgTargetYm || undefined
+        } : undefined,
+        short_term_goal_data: stgDescription.trim() ? {
+          description: stgDescription.trim(),
+          set_year_month: stgSetYm || undefined,
+          target_year_month: stgTargetYm || undefined
+        } : undefined,
+        items_data: validItems.length > 0 ? validItems : undefined,
         source_links_data: sourceLinks,
         detail_fields: {
-          physical_work_environment: physicalEnv,
-          human_work_environment: humanEnv,
-          user_wishes: userWishes,
-          health_condition: healthCond,
-          related_support_organizations: relatedOrgs
+          employment_type: employmentType || undefined,
+          wage_condition: wageCondition || undefined,
+          holiday_condition: holidayCondition || undefined,
+          working_hours_and_break: workingHoursAndBreak || undefined,
+          pre_employment_handover: preEmploymentHandover || undefined,
+          living_environment_support: livingEnvSupport || undefined,
+          physical_work_environment: physicalEnv || undefined,
+          human_work_environment: humanEnv || undefined,
+          user_wishes: userWishes || undefined,
+          health_condition: healthCond || undefined,
+          related_support_organizations: relatedOrgs || undefined,
+          explained_date: explainedDate || undefined,
+          agreed_date: agreedDate || undefined,
+          consent_confirmed: consentConfirmed,
+          consent_notes: consentNotes || undefined,
+          staff_explainer_name: staffExplainerName || undefined
         }
       });
 
@@ -382,24 +464,27 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-700 border-b border-slate-200 pb-1.5">
                     <UserCheck className="w-4 h-4 text-indigo-600" />
-                    利用者基本情報（自動取得）
+                    利用者基本情報（一次モデル取得）
                   </div>
                   <div className="text-xs space-y-1 text-slate-600">
                     <p><span className="text-slate-400">氏名:</span> {assistanceData?.user_info_snapshot.user_name || userName}</p>
-                    <p><span className="text-slate-400">性別 / 年齢:</span> {assistanceData?.user_info_snapshot.gender || '未設定'} / {assistanceData?.user_info_snapshot.age_at_planning ?? '未設定'}歳</p>
-                    <p><span className="text-slate-400">区分 / 手帳:</span> {assistanceData?.user_info_snapshot.support_level} / {assistanceData?.user_info_snapshot.disability_handbook_type}</p>
+                    <p><span className="text-slate-400">ふりがな:</span> {assistanceData?.user_info_snapshot.user_name_kana || '未登録'}</p>
+                    <p><span className="text-slate-400">性別 / 生年月日:</span> {assistanceData?.user_info_snapshot.gender || '未登録'} / {assistanceData?.user_info_snapshot.birth_date || '未登録'} {assistanceData?.user_info_snapshot.age_at_planning !== null && assistanceData?.user_info_snapshot.age_at_planning !== undefined ? `(${assistanceData.user_info_snapshot.age_at_planning}歳)` : ''}</p>
+                    <p><span className="text-slate-400">障害支援区分:</span> {assistanceData?.user_info_snapshot.support_level || '未登録'}</p>
+                    <p><span className="text-slate-400">障害者手帳区分:</span> {assistanceData?.user_info_snapshot.disability_handbook_type || '未登録'}</p>
                   </div>
                 </div>
 
                 <div className="bg-slate-50 border border-slate-200/80 rounded-xl p-3.5 space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-slate-700 border-b border-slate-200 pb-1.5">
                     <Building2 className="w-4 h-4 text-indigo-600" />
-                    雇用先・労働条件（自動取得）
+                    雇用先・就労事実（一次モデル取得）
                   </div>
                   <div className="text-xs space-y-1 text-slate-600">
                     <p><span className="text-slate-400">企業名:</span> {assistanceData?.employment_info_snapshot.employer_name || '未登録'}</p>
-                    <p><span className="text-slate-400">職種:</span> {assistanceData?.employment_info_snapshot.work_content || '未設定'}</p>
-                    <p><span className="text-slate-400">就職日:</span> {assistanceData?.employment_info_snapshot.job_start_date || '未設定'}</p>
+                    <p><span className="text-slate-400">職種・業務内容:</span> {assistanceData?.employment_info_snapshot.work_content || '未登録'}</p>
+                    <p><span className="text-slate-400">雇用開始日:</span> {assistanceData?.employment_info_snapshot.job_start_date || '未登録'}</p>
+                    <p><span className="text-slate-400">事業所名:</span> {assistanceData?.office_info_snapshot.office_name || '未登録'}</p>
                   </div>
                 </div>
               </div>
@@ -409,10 +494,10 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 <div className="text-xs font-bold text-slate-700 flex items-center justify-between">
                   <span className="flex items-center gap-1.5">
                     <Quote className="w-4 h-4 text-amber-500" />
-                    直近の一次情報ログ（引用可能）
+                    一次情報ログ・参考記録（確認・引用用）
                   </span>
                   <span className="text-[11px] text-slate-400 font-normal">
-                    クリックで様式2の各項目へ反映できます
+                    支援員が確認のうえ様式2へ反映してください
                   </span>
                 </div>
 
@@ -420,6 +505,49 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                   <div className="text-xs text-slate-400 py-6 text-center">候補データを読み込み中...</div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {/* 就労条件の参考情報 */}
+                    {assistanceData?.candidates.work_conditions_candidate && (
+                      <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2 md:col-span-2">
+                        <div className="text-xs font-bold text-slate-800 flex items-center justify-between text-teal-700">
+                          <span>参考: 直近エピソードの労働条件記録（自由記述）</span>
+                          <span className="text-[11px] text-slate-400 font-normal">※賃金等の公式項目への自動代入は禁止されています</span>
+                        </div>
+                        <div className="p-2 bg-teal-50/40 rounded-lg text-xs space-y-1.5 border border-teal-100">
+                          <p className="text-slate-700 font-medium">{assistanceData.candidates.work_conditions_candidate}</p>
+                          <div className="flex flex-wrap gap-2 pt-1 border-t border-teal-200/50">
+                            <button
+                              type="button"
+                              onClick={() => handleAdoptWorkConditions('employmentType', assistanceData.candidates.work_conditions_candidate!)}
+                              className="text-[11px] px-2 py-0.5 bg-teal-100 text-teal-800 rounded hover:bg-teal-200 font-medium transition"
+                            >
+                              雇用形態に反映
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdoptWorkConditions('wage', assistanceData.candidates.work_conditions_candidate!)}
+                              className="text-[11px] px-2 py-0.5 bg-teal-100 text-teal-800 rounded hover:bg-teal-200 font-medium transition"
+                            >
+                              賃金に反映
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdoptWorkConditions('holiday', assistanceData.candidates.work_conditions_candidate!)}
+                              className="text-[11px] px-2 py-0.5 bg-teal-100 text-teal-800 rounded hover:bg-teal-200 font-medium transition"
+                            >
+                              休日に反映
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleAdoptWorkConditions('hours', assistanceData.candidates.work_conditions_candidate!)}
+                              className="text-[11px] px-2 py-0.5 bg-teal-100 text-teal-800 rounded hover:bg-teal-200 font-medium transition"
+                            >
+                              勤務時間・休憩に反映
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     {/* 本人の声 */}
                     <div className="border border-slate-200 rounded-xl p-3 bg-white space-y-2">
                       <div className="text-xs font-bold text-slate-800 flex items-center gap-1.5 text-amber-700">
@@ -494,85 +622,225 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                   onClick={() => setActiveTab('form2')}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
                 >
-                  次へ: 様式2 支援内容の入力 →
+                  次へ: 様式2 公式項目の入力 →
                 </button>
               </div>
             </div>
           )}
 
           {/* ============================================================
-              TAB 2: 厚労省様式2 支援内容・評価
+              TAB 2: 厚労省様式2 公式項目（目標・労働条件・支援内容）
              ============================================================ */}
           {activeTab === 'form2' && (
-            <div className="space-y-5">
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-700">
-                <p className="font-bold mb-1">厚労省別紙様式2「支援内容・評価」項目</p>
-                <p className="text-slate-500">
-                  課題・ニーズごとに支援方針・支援内容・期間・頻度を構造化して登録します（最大3項目）。
-                  入力内容は共通の短期目標（ShortTermGoal）と接続されます。
-                </p>
+            <div className="space-y-6">
+              {/* 1. 長期目標・短期目標 */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-4">
+                <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Target className="w-4 h-4 text-indigo-600" />
+                  長期目標・短期目標（厚労省様式2公式項目）
+                </h3>
+
+                {/* 長期目標 */}
+                <div className="space-y-2 bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-700">長期目標</label>
+                  <textarea
+                    rows={2}
+                    value={ltgDescription}
+                    onChange={(e) => setLtgDescription(e.target.value)}
+                    placeholder="例: 職場の人間関係を良好に保ち、1年以上の安定就労を継続する"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1">設定年月 (YYYY-MM)</label>
+                      <input
+                        type="month"
+                        value={ltgSetYm}
+                        onChange={(e) => setLtgSetYm(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1">達成予定年月 (YYYY-MM)</label>
+                      <input
+                        type="month"
+                        value={ltgTargetYm}
+                        onChange={(e) => setLtgTargetYm(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 短期目標 */}
+                <div className="space-y-2 bg-white p-3 rounded-lg border border-slate-200">
+                  <label className="block text-xs font-bold text-slate-700">短期目標</label>
+                  <textarea
+                    rows={2}
+                    value={stgDescription}
+                    onChange={(e) => setStgDescription(e.target.value)}
+                    placeholder="例: 体調に不安が生じた際に自ら上司や支援員へ相談できる"
+                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
+                  />
+                  <div className="grid grid-cols-2 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1">設定年月 (YYYY-MM)</label>
+                      <input
+                        type="month"
+                        value={stgSetYm}
+                        onChange={(e) => setStgSetYm(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500 mb-1">達成予定年月 (YYYY-MM)</label>
+                      <input
+                        type="month"
+                        value={stgTargetYm}
+                        onChange={(e) => setStgTargetYm(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* スナップショット補足情報 */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">職場環境（物理的環境）</label>
-                  <input
-                    type="text"
-                    value={physicalEnv}
-                    onChange={(e) => setPhysicalEnv(e.target.value)}
-                    placeholder="例: 空調完備の執務スペース、休憩室近接"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">職場環境（人的環境）</label>
-                  <input
-                    type="text"
-                    value={humanEnv}
-                    onChange={(e) => setHumanEnv(e.target.value)}
-                    placeholder="例: 指導担当者隣席配置、復唱確認ルール"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">本人の希望・意向</label>
-                  <input
-                    type="text"
-                    value={userWishes}
-                    onChange={(e) => setUserWishes(e.target.value)}
-                    placeholder="例: 長く安定して勤務を継続したい"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-bold mb-1">健康状態・体調面</label>
-                  <input
-                    type="text"
-                    value={healthCond}
-                    onChange={(e) => setHealthCond(e.target.value)}
-                    placeholder="例: 服薬管理良好、睡眠時間7時間確保"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
-                </div>
-                <div className="md:col-span-2">
-                  <label className="block text-slate-600 font-bold mb-1">関係支援機関</label>
-                  <input
-                    type="text"
-                    value={relatedOrgs}
-                    onChange={(e) => setRelatedOrgs(e.target.value)}
-                    placeholder="例: ハローワーク、地域障害者職業センター"
-                    className="w-full px-3 py-2 border border-slate-200 rounded-lg text-xs"
-                  />
+              {/* 2. 労働条件（雇用形態・賃金・休日・勤務時間） */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-3">
+                <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <Building2 className="w-4 h-4 text-indigo-600" />
+                  労働条件（厚労省様式2公式項目・支援員確認）
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">雇用形態</label>
+                    <input
+                      type="text"
+                      value={employmentType}
+                      onChange={(e) => setEmploymentType(e.target.value)}
+                      placeholder="例: パートタイム、契約社員、正社員"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">賃金</label>
+                    <input
+                      type="text"
+                      value={wageCondition}
+                      onChange={(e) => setWageCondition(e.target.value)}
+                      placeholder="例: 時給1,100円、月給180,000円"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">休日</label>
+                    <input
+                      type="text"
+                      value={holidayCondition}
+                      onChange={(e) => setHolidayCondition(e.target.value)}
+                      placeholder="例: 完全週休2日制（土日祝）、シフト制"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">勤務時間・休憩</label>
+                    <input
+                      type="text"
+                      value={workingHoursAndBreak}
+                      onChange={(e) => setWorkingHoursAndBreak(e.target.value)}
+                      placeholder="例: 9:00〜16:00（休憩60分）"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* 支援内容・評価アイテム リスト */}
-              <div className="space-y-4 pt-2">
+              {/* 3. 引継事項・生活環境・職場環境 */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-3">
+                <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <FileText className="w-4 h-4 text-indigo-600" />
+                  本人の状況・引継・環境サポート体制
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">就職前事業所からの引継事項</label>
+                    <textarea
+                      rows={2}
+                      value={preEmploymentHandover}
+                      onChange={(e) => setPreEmploymentHandover(e.target.value)}
+                      placeholder="例: 集中力持続傾向、疲労時のサイン、移行事業所での訓練実績"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">生活環境・生活面サポート体制</label>
+                    <textarea
+                      rows={2}
+                      value={livingEnvSupport}
+                      onChange={(e) => setLivingEnvSupport(e.target.value)}
+                      placeholder="例: 家族同居、通院同行体制、相談支援専門員との月1回連絡"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">職場環境（物理的環境）</label>
+                    <input
+                      type="text"
+                      value={physicalEnv}
+                      onChange={(e) => setPhysicalEnv(e.target.value)}
+                      placeholder="例: 空調完備の執務スペース、休憩室近接"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">職場環境（人的環境）</label>
+                    <input
+                      type="text"
+                      value={humanEnv}
+                      onChange={(e) => setHumanEnv(e.target.value)}
+                      placeholder="例: 指導担当者隣席配置、復唱確認ルール"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">本人の希望・意向</label>
+                    <input
+                      type="text"
+                      value={userWishes}
+                      onChange={(e) => setUserWishes(e.target.value)}
+                      placeholder="例: 長く安定して勤務を継続したい"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">健康状態・体調面</label>
+                    <input
+                      type="text"
+                      value={healthCond}
+                      onChange={(e) => setHealthCond(e.target.value)}
+                      placeholder="例: 服薬管理良好、睡眠時間7時間確保"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="block text-slate-600 font-bold mb-1">関係支援機関</label>
+                    <input
+                      type="text"
+                      value={relatedOrgs}
+                      onChange={(e) => setRelatedOrgs(e.target.value)}
+                      placeholder="例: ハローワーク、地域障害者職業センター、かかりつけ医"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. 支援内容・評価テーブル (①〜③) */}
+              <div className="space-y-4 pt-1">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
                     <Layers className="w-4 h-4 text-indigo-600" />
-                    支援内容・計画項目（①〜③）
+                    支援内容・計画項目（①〜③・未入力項目は空のまま保持）
                   </h3>
                   {items.length < 3 && (
                     <button
@@ -619,7 +887,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                           type="text"
                           value={it.support_frequency || ''}
                           onChange={(e) => handleItemChange(idx, 'support_frequency', e.target.value)}
-                          placeholder="例: 月1回面談、週1回メール確認"
+                          placeholder="例: 月1回面談、随時連絡"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
                         />
                       </div>
@@ -670,26 +938,84 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 <button
                   type="button"
                   onClick={() => {
-                    // Item 1の支援方針が入力されており、overallGoalが未設定なら初期提案
-                    if (!overallGoal && items[0]?.support_policy) {
-                      setOverallGoal(items[0].support_policy);
+                    if (!overallGoal && ltgDescription) {
+                      setOverallGoal(ltgDescription);
                     }
                     setActiveTab('summary');
                   }}
                   className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold hover:bg-indigo-700 transition"
                 >
-                  次へ: 期間と日常サマリー →
+                  次へ: 説明同意・期間サマリー →
                 </button>
               </div>
             </div>
           )}
 
           {/* ============================================================
-              TAB 3: 計画期間と日常支援サマリー
+              TAB 3: 説明・同意、期間、日常支援サマリー
              ============================================================ */}
           {activeTab === 'summary' && (
             <div className="space-y-5">
-              {/* 期間設定 */}
+              {/* 1. 本人への説明・同意に必要な項目 */}
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/60 space-y-3">
+                <h3 className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                  <UserCheck className="w-4 h-4 text-emerald-600" />
+                  本人への説明・同意情報（厚労省様式2公式項目）
+                </h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">本人説明日</label>
+                    <input
+                      type="date"
+                      value={explainedDate}
+                      onChange={(e) => setExplainedDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">同意受領日</label>
+                    <input
+                      type="date"
+                      value={agreedDate}
+                      onChange={(e) => setAgreedDate(e.target.value)}
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">説明実施者（職員氏名）</label>
+                    <input
+                      type="text"
+                      value={staffExplainerName}
+                      onChange={(e) => setStaffExplainerName(e.target.value)}
+                      placeholder="例: 定着支援員 山田太郎"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-slate-600 font-bold mb-1">説明・同意特記事項</label>
+                    <input
+                      type="text"
+                      value={consentNotes}
+                      onChange={(e) => setConsentNotes(e.target.value)}
+                      placeholder="例: 本人署名確認済み、書面交付済み"
+                      className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
+                    />
+                  </div>
+                  <div className="md:col-span-2 pt-1">
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-700 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={consentConfirmed}
+                        onChange={(e) => setConsentConfirmed(e.target.checked)}
+                        className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 w-4 h-4"
+                      />
+                      本人への説明を実施し、計画内容についての同意を確認した
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. 期間設定 */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5 flex items-center gap-1.5">
@@ -731,7 +1057,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 </div>
               </div>
 
-              {/* 随時見直し理由（見直し時必須） */}
+              {/* 3. 随時見直し理由（見直し時のみ表示。初回は非表示：要件6） */}
               {isReview && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1.5">
@@ -751,19 +1077,19 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                 </div>
               )}
 
-              {/* 日常支援用サマリー（大まかな支援目標） */}
+              {/* 4. 日常支援用サマリー（大まかな支援目標） */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-bold text-slate-700">
                     日常支援用サマリー（大まかな支援目標） <span className="text-rose-500">*</span>
                   </label>
-                  {items[0]?.support_policy && (
+                  {ltgDescription && (
                     <button
                       type="button"
-                      onClick={() => setOverallGoal(items[0].support_policy || '')}
+                      onClick={() => setOverallGoal(ltgDescription)}
                       className="text-[11px] text-indigo-600 hover:text-indigo-800 font-medium"
                     >
-                      様式2項目①からコピー
+                      長期目標からコピー
                     </button>
                   )}
                 </div>
@@ -776,7 +1102,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                   className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-800 focus:bg-white focus:ring-2 focus:ring-indigo-500 transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  スタッフ画面やダッシュボードで常時確認される総合サマリーです（共通Goalモデルに格納）。
+                  スタッフ画面やダッシュボードで常時確認される総合サマリーです。
                 </p>
               </div>
 
@@ -787,7 +1113,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                   onClick={() => setActiveTab('form2')}
                   className="px-4 py-2 border border-slate-200 text-slate-600 rounded-xl text-xs font-bold hover:bg-slate-100 transition"
                 >
-                  ← 様式2 支援内容に戻る
+                  ← 様式2 公式項目に戻る
                 </button>
               </div>
             </div>

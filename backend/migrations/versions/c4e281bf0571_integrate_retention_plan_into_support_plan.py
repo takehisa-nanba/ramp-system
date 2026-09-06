@@ -225,45 +225,7 @@ def upgrade():
                 {"uid": user_id, "ver": version, "cid": office_service_config_id}
             ).scalar()
 
-            # LongTermGoal 作成
-            start_ym = start_date.strftime('%Y-%m') if start_date else None
-            end_ym = plan_end_date.strftime('%Y-%m') if plan_end_date else None
-            bind.execute(
-                sa.text(
-                    "INSERT INTO long_term_goals (plan_id, description, challenges, target_period_start, target_period_end, set_year_month, target_year_month) "
-                    "VALUES (:pid, :desc, :chal, :sdate, :edate, :sym, :eym)"
-                ),
-                {
-                    "pid": support_plan_id,
-                    "desc": goal,
-                    "chal": "就労定着",
-                    "sdate": start_date,
-                    "edate": plan_end_date,
-                    "sym": start_ym,
-                    "eym": end_ym
-                }
-            )
-            ltg_id = bind.execute(sa.text("SELECT id FROM long_term_goals WHERE plan_id = :pid ORDER BY id DESC LIMIT 1"), {"pid": support_plan_id}).scalar()
-
-            # ShortTermGoal 作成
-            bind.execute(
-                sa.text(
-                    "INSERT INTO short_term_goals (long_term_goal_id, description, target_period_start, target_period_end, next_review_date, set_year_month, target_year_month) "
-                    "VALUES (:ltg_id, :desc, :sdate, :edate, :nrd, :sym, :eym)"
-                ),
-                {
-                    "ltg_id": ltg_id,
-                    "desc": goal,
-                    "sdate": start_date,
-                    "edate": plan_end_date,
-                    "nrd": plan_end_date,
-                    "sym": start_ym,
-                    "eym": end_ym
-                }
-            )
-            stg_id = bind.execute(sa.text("SELECT id FROM short_term_goals WHERE long_term_goal_id = :ltg_id ORDER BY id DESC LIMIT 1"), {"ltg_id": ltg_id}).scalar()
-
-            # RetentionSupportPlanDetail 作成 (review_date / review_reason は Detail に保持)
+            # RetentionSupportPlanDetail 作成 (overall_support_goal のみ事実として移行、架空のGoalやItemは作成しない)
             bind.execute(
                 sa.text(
                     "INSERT INTO retention_support_plan_details (support_plan_id, retention_contract_id, overall_support_goal, review_date, review_reason, created_at, updated_at) "
@@ -279,33 +241,20 @@ def upgrade():
                     "updated_at": updated_at
                 }
             )
-            detail_id = bind.execute(sa.text("SELECT id FROM retention_support_plan_details WHERE support_plan_id = :sp_id"), {"sp_id": support_plan_id}).scalar()
-
-            # RetentionSupportPlanItem 作成 (第1項目)
-            bind.execute(
-                sa.text(
-                    "INSERT INTO retention_support_plan_items (detail_id, short_term_goal_id, item_number, challenge_topic, support_policy, support_content, support_period_start, support_period_end, support_frequency, created_at, updated_at) "
-                    "VALUES (:did, :stg_id, 1, :topic, :policy, :content, :sdate, :edate, :freq, :created_at, :updated_at)"
-                ),
-                {
-                    "did": detail_id,
-                    "stg_id": stg_id,
-                    "topic": "就労定着",
-                    "policy": goal,
-                    "content": goal,
-                    "sdate": start_date,
-                    "edate": plan_end_date,
-                    "freq": "月1回以上",
-                    "created_at": created_at,
-                    "updated_at": updated_at
-                }
-            )
 
 
 def downgrade():
     bind = op.get_bind()
     insp = sa.inspect(bind)
     existing_tables = set(insp.get_table_names())
+
+    if 'retention_support_plan_details' in existing_tables and 'support_plans' in existing_tables:
+        # 移行された support_plans (およびcascadeする目標) をクリーンアップ
+        sp_ids = bind.execute(sa.text("SELECT support_plan_id FROM retention_support_plan_details")).fetchall()
+        if sp_ids:
+            ids = [str(r[0]) for r in sp_ids]
+            bind.execute(sa.text(f"DELETE FROM long_term_goals WHERE plan_id IN ({','.join(ids)})"))
+            bind.execute(sa.text(f"DELETE FROM support_plans WHERE id IN ({','.join(ids)})"))
 
     if 'retention_support_plan_source_links' in existing_tables:
         op.drop_table('retention_support_plan_source_links')
@@ -329,7 +278,17 @@ def downgrade():
             batch_op.drop_column('set_year_month')
 
     if 'support_plans' in existing_tables:
+        indexes = {idx['name'] for idx in insp.get_indexes('support_plans')}
         with op.batch_alter_table('support_plans', schema=None) as batch_op:
+            for idx_name in [
+                'ix_support_plans_office_service_config_id',
+                'ix_support_plans_office_service_configuration_id'
+            ]:
+                if idx_name in indexes:
+                    try:
+                        batch_op.drop_index(idx_name)
+                    except Exception:
+                        pass
             batch_op.drop_column('updated_at')
             batch_op.drop_column('created_by_id')
             batch_op.drop_column('office_service_configuration_id')

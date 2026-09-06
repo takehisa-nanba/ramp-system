@@ -852,10 +852,12 @@ def create_or_review_support_plan(contract_id: int):
         start_date = _parse_date(data.get('start_date'))
         review_reason = data.get('review_reason')
 
-        # 様式2固有の拡張データ (Items, SourceLinks, Detail fields)
+        # 様式2固有の拡張データ (Items, SourceLinks, Detail fields, Goals)
         items_data = data.get('items_data')
         source_links_data = data.get('source_links_data')
         detail_fields = data.get('detail_fields')
+        long_term_goal_data = data.get('long_term_goal_data')
+        short_term_goal_data = data.get('short_term_goal_data')
 
         plan = JobRetentionService.create_or_review_support_plan(
             contract_id=contract_id,
@@ -867,7 +869,9 @@ def create_or_review_support_plan(contract_id: int):
             supporter_id=supporter_id,
             items_data=items_data,
             source_links_data=source_links_data,
-            detail_fields=detail_fields
+            detail_fields=detail_fields,
+            long_term_goal_data=long_term_goal_data,
+            short_term_goal_data=short_term_goal_data
         )
         status_info = plan.compute_deadline_status()
         return jsonify({

@@ -11,7 +11,7 @@ from backend.app.models import (
     RetentionSupportPlan,
     RetentionSupportPlanDetail, RetentionSupportPlanItem,
     RetentionSupportPlanSourceLink,
-    SupportPlan, LongTermGoal, ShortTermGoal,
+    SupportPlan, LongTermGoal, ShortTermGoal, ServiceCertificate,
     calculate_max_review_deadline, calculate_plan_end_date,
     compute_retention_deadline_status,
     User, Supporter, AuditActionLog
@@ -429,15 +429,21 @@ class JobRetentionService:
             report_year_month=prev_year_month
         ).first()
 
+        contract_start_ym = contract.contract_start_date.strftime('%Y-%m') if contract.contract_start_date else None
+        is_first_contract_month = (contract_start_ym == year_month)
+
         if prev_report and prev_report.status == 'FINALIZED' and prev_report.future_support_plan:
             support_goal_str = prev_report.future_support_plan
-        else:
-            # 前月確定レポートが存在しない初月等の場合のみ、現在有効な支援計画の目標を初期提案値とする
+        elif is_first_contract_month:
+            # 契約における「本当の初月」に限り、ACTIVE支援計画の大まかな支援目標を初期提案値とする
             active_plan = JobRetentionService.get_active_support_plan(contract_id)
             if active_plan and active_plan.overall_support_goal:
                 support_goal_str = active_plan.overall_support_goal
             else:
                 support_goal_str = ""
+        else:
+            # 通常月で前月FINALIZEDレポートや今後の支援内容がない場合は空欄とする（推測・フォールバック禁止）
+            support_goal_str = ""
 
         # 2. 支援実施内容: provided_supportと訪問/面談情報
         support_content_parts = []
@@ -671,20 +677,20 @@ class JobRetentionService:
             "deadline_status": status_info["status_code"],
             "days_diff": status_info["days_diff"],
             "is_overdue": status_info["is_overdue"],
-            # 長期・短期目標 (共通Goalモデル)
+            # 長期・短期目標 (共通Goalモデル - 架空フォールバック禁止)
             "long_term_goal": {
-                "id": ltg.id if ltg else None,
-                "description": ltg.description if ltg else detail.overall_support_goal,
-                "set_year_month": ltg.set_year_month if ltg else None,
-                "target_year_month": ltg.target_year_month if ltg else None,
-                "achievement_status": ltg.achievement_status if ltg else None
+                "id": ltg.id,
+                "description": ltg.description,
+                "set_year_month": ltg.set_year_month,
+                "target_year_month": ltg.target_year_month,
+                "achievement_status": ltg.achievement_status
             } if ltg else None,
             "short_term_goal": {
-                "id": stg.id if stg else None,
-                "description": stg.description if stg else detail.overall_support_goal,
-                "set_year_month": stg.set_year_month if stg else None,
-                "target_year_month": stg.target_year_month if stg else None,
-                "achievement_status": stg.achievement_status if stg else None
+                "id": stg.id,
+                "description": stg.description,
+                "set_year_month": stg.set_year_month,
+                "target_year_month": stg.target_year_month,
+                "achievement_status": stg.achievement_status
             } if stg else None,
             # 1. 利用者基本情報スナップショット
             "user_info": {
@@ -758,6 +764,9 @@ class JobRetentionService:
         """
         厚労省様式2計画書作成のための入力支援データを取得する。
         - 確定事実スナップショット（利用者基本情報・雇用先・事業所情報など）
+          * 利用者情報: UserPII (氏名, ふりがな, 生年月日, 性別, 手帳) / ServiceCertificate (障害支援区分)
+          * 固定文字列（「未設定」「未登録」「就労定着支援事業所」等）は返さず NULL/空 とする
+          * 労働条件（雇用形態・賃金・休日・勤務時間）は自動設定せず、work_conditionsは参考情報として提供
         - 一次情報候補（本人の声・企業フィードバック・支援アクション・月次レポート）
         支援員が事実と判断を区別して計画書を作成できるように支援する。
         """
@@ -770,34 +779,52 @@ class JobRetentionService:
         office_config = contract.office_service_configuration
         office = office_config.office if office_config else None
 
-        # 1. 利用者基本情報の確定事実候補
+        # 1. 利用者基本情報の確定事実候補 (UserPII & ServiceCertificate)
+        user_name = None
+        user_kana = None
         birth_d = None
         age_at_planning = None
-        gender_str = "未設定"
-        user_kana = None
+        gender_str = None
+        handbook_type = None
+        support_level = None
 
         if user:
-            user_kana = getattr(user, 'kana', None)
-            if hasattr(user, 'profile') and user.profile:
-                prof = user.profile
-                birth_d = getattr(prof, 'birth_date', None)
+            user_name = user.display_name
+            pii = getattr(user, 'pii', None)
+            if pii:
+                full_name = f"{pii.last_name or ''} {pii.first_name or ''}".strip()
+                if full_name:
+                    user_name = full_name
+                full_kana = f"{pii.last_name_kana or ''} {pii.first_name_kana or ''}".strip()
+                if full_kana:
+                    user_kana = full_kana
+                birth_d = pii.birth_date
                 if birth_d:
                     today = datetime.date.today()
                     age_at_planning = today.year - birth_d.year - ((today.month, today.day) < (birth_d.month, birth_d.day))
-                gender_str = getattr(prof, 'gender', "未設定")
+                if pii.gender_legal:
+                    gender_str = pii.gender_legal.name
+                if pii.handbook_level:
+                    handbook_type = pii.handbook_level
 
-        # 2. 雇用先・労働条件の確定事実候補
-        employer_name = latest_ep.workplace_name if latest_ep else "未登録"
-        job_start_d = latest_ep.job_start_date if latest_ep else contract.contract_start_date
-        job_title = latest_ep.job_title if latest_ep else ""
-        work_conditions = latest_ep.work_conditions if latest_ep else ""
+            # 障害支援区分: ServiceCertificate の最新証から取得
+            if hasattr(user, 'certificates') and user.certificates:
+                cert = user.certificates.order_by(ServiceCertificate.certificate_issue_date.desc()).first()
+                if cert and cert.disability_support_classification:
+                    support_level = cert.disability_support_classification
 
-        # 3. 事業所・スタッフ確定事実候補
-        office_name = office.office_name if office else "就労定着支援事業所"
-        office_number = office_config.jigyosho_bango if office_config and hasattr(office_config, 'jigyosho_bango') else ""
-        office_address = getattr(office, 'address', "") if office else ""
-        office_tel = getattr(office, 'phone_number', "") if office else ""
-        office_fax = getattr(office, 'fax_number', "") if office else ""
+        # 2. 雇用先・労働条件の確定事実候補 (固定ダミー値は返さない)
+        employer_name = latest_ep.workplace_name if latest_ep else None
+        job_start_d = latest_ep.job_start_date if latest_ep else None
+        job_title = latest_ep.job_title if latest_ep else None
+        raw_work_conditions = latest_ep.work_conditions if latest_ep else None
+
+        # 3. 事業所・スタッフ確定事実候補 (固定ダミー値は返さない)
+        office_name = office.office_name if office else None
+        office_number = office_config.jigyosho_bango if office_config and hasattr(office_config, 'jigyosho_bango') else None
+        office_address = getattr(office, 'address', None) if office else None
+        office_tel = getattr(office, 'phone_number', None) if office else None
+        office_fax = getattr(office, 'fax_number', None) if office else None
 
         # 4. 一次情報からの候補リスト
         # 本人の声 (直近5件)
@@ -874,29 +901,30 @@ class JobRetentionService:
             "contract_id": contract.id,
             "user_id": contract.user_id,
             "user_info_snapshot": {
-                "user_name": user.display_name if user else f"利用者#{contract.user_id}",
+                "user_name": user_name,
                 "user_name_kana": user_kana,
                 "gender": gender_str,
                 "birth_date": birth_d.isoformat() if birth_d else None,
                 "age_at_planning": age_at_planning,
-                "support_level": "就労定着",
-                "disability_handbook_type": "手帳保持"
+                "support_level": support_level,
+                "disability_handbook_type": handbook_type
             },
             "employment_info_snapshot": {
                 "employer_name": employer_name,
-                "employer_industry": "一般就労",
-                "employer_address": "",
-                "employer_tel": "",
-                "employer_contact_person": "",
+                "employer_industry": None,
+                "employer_address": None,
+                "employer_tel": None,
+                "employer_contact_person": None,
                 "job_start_date": job_start_d.isoformat() if job_start_d else None,
                 "work_content": job_title,
-                "employment_type": "一般雇用",
-                "wage_condition": work_conditions,
-                "holiday_condition": "週休2日",
-                "working_hours_and_break": "フルタイム",
-                "physical_work_environment": "整備済み",
-                "human_work_environment": "指導員配置",
-                "related_support_organizations": "ハローワーク・地域障害者職業センター"
+                "employment_type": None,
+                "wage_condition": None, # work_conditionsを賃金欄へ自動設定しない
+                "holiday_condition": None,
+                "working_hours_and_break": None,
+                "physical_work_environment": None,
+                "human_work_environment": None,
+                "related_support_organizations": None,
+                "raw_work_conditions": raw_work_conditions # 参考候補として提示
             },
             "office_info_snapshot": {
                 "office_name": office_name,
@@ -909,7 +937,8 @@ class JobRetentionService:
                 "voice_candidates": voice_candidates,
                 "feedback_candidates": feedback_candidates,
                 "action_candidates": action_candidates,
-                "latest_report": report_candidate
+                "latest_report": report_candidate,
+                "work_conditions_candidate": raw_work_conditions
             },
             "current_plan": current_plan_info
         }
@@ -926,7 +955,9 @@ class JobRetentionService:
         supporter_id: Optional[int] = None,
         items_data: Optional[List[Dict[str, Any]]] = None,
         source_links_data: Optional[List[Dict[str, Any]]] = None,
-        detail_fields: Optional[Dict[str, Any]] = None
+        detail_fields: Optional[Dict[str, Any]] = None,
+        long_term_goal_data: Optional[Dict[str, Any]] = None,
+        short_term_goal_data: Optional[Dict[str, Any]] = None
     ) -> RetentionSupportPlanDetail:
         """
         就労定着支援計画の新規作成または随時見直しを行う。
@@ -935,13 +966,15 @@ class JobRetentionService:
         を完全に統合して永続化する。
 
         - plan_end_date: 当該計画版の終了予定日 (原則: start_date + 6 calendar months - 1 day)
-        - 初回作成時: plan_version=1, 基準日はstart_date (契約開始日等), 終了予定日 <= 基準日+6か月-1日
+        - 初回作成時: plan_version=1, review_date=None, review_reason=None (初回策定は見直し理由ではない)
         - 見直し時:
             - 以前のACTIVE版をARCHIVEDに変更
             - 早期見直し時 (review_d <= 旧版終了予定日): 旧版の終了日を前日(review_d - 1日)として連続保持
             - 終了予定日後の遅延見直し: 旧版終了予定日+1日を新開始日として連続保持
             - plan_version=前版+1, 基準日は見直し日, 新計画終了予定日 <= 見直し日+6か月-1日
-        - review_date / review_reason は RetentionSupportPlanDetail に保持（共通activated_at/explained_atに流用しない）
+            - review_date / review_reason は RetentionSupportPlanDetail に保持
+        - 架空目標・架空アイテムの自動生成を禁止（入力されたもののみ保存）
+        - work_conditionsを賃金欄へ自動設定しない
         - 監査ログを記録
         """
         contract = db.session.get(JobRetentionContract, contract_id)
@@ -960,7 +993,11 @@ class JobRetentionService:
             # ========================
             # 初回作成
             # ========================
-            base_date = start_date or review_date or contract.contract_start_date or datetime.date.today()
+            # 初回策定時は review_date / review_reason を見直し情報として保存しない（初回は見直しではない）
+            init_review_date = None
+            init_review_reason = None
+
+            base_date = start_date or contract.contract_start_date or datetime.date.today()
             max_allowed = calculate_plan_end_date(base_date)
             if target_end_date is None:
                 target_end_date = max_allowed
@@ -975,7 +1012,7 @@ class JobRetentionService:
             new_sp = SupportPlan(
                 user_id=contract.user_id,
                 plan_version=1,
-                plan_status='ACTIVE', # 既存workflow体系: ACTIVE
+                plan_status='ACTIVE',
                 plan_start_date=base_date,
                 plan_end_date=target_end_date,
                 activated_at=base_date,
@@ -985,69 +1022,77 @@ class JobRetentionService:
             db.session.add(new_sp)
             db.session.flush()
 
-            # 2. 共通 LongTermGoal 作成 (本文は重複保存せず共通モデルに保持)
-            start_ym = base_date.strftime('%Y-%m')
-            end_ym = target_end_date.strftime('%Y-%m')
-            new_ltg = LongTermGoal(
-                plan_id=new_sp.id,
-                description=overall_support_goal.strip(),
-                challenges="就労定着",
-                target_period_start=base_date,
-                target_period_end=target_end_date,
-                set_year_month=start_ym,
-                target_year_month=end_ym
-            )
-            db.session.add(new_ltg)
-            db.session.flush()
+            # 2. 共通 LongTermGoal 作成 (UIで支援員が確認・入力した値のみ保存、架空自動生成禁止)
+            new_ltg = None
+            if long_term_goal_data and long_term_goal_data.get('description'):
+                ltg_desc = long_term_goal_data.get('description', '').strip()
+                if ltg_desc:
+                    new_ltg = LongTermGoal(
+                        plan_id=new_sp.id,
+                        description=ltg_desc,
+                        challenges=long_term_goal_data.get('challenges'),
+                        target_period_start=base_date,
+                        target_period_end=target_end_date,
+                        set_year_month=long_term_goal_data.get('set_year_month'),
+                        target_year_month=long_term_goal_data.get('target_year_month'),
+                        achievement_status=long_term_goal_data.get('achievement_status')
+                    )
+                    db.session.add(new_ltg)
+                    db.session.flush()
 
-            # 3. 共通 ShortTermGoal 作成 (本文は重複保存せず共通モデルに保持)
-            new_stg = ShortTermGoal(
-                long_term_goal_id=new_ltg.id,
-                description=overall_support_goal.strip(),
-                target_period_start=base_date,
-                target_period_end=target_end_date,
-                next_review_date=target_end_date,
-                set_year_month=start_ym,
-                target_year_month=end_ym
-            )
-            db.session.add(new_stg)
-            db.session.flush()
+            # 3. 共通 ShortTermGoal 作成 (UIで支援員が確認・入力した値のみ保存、架空自動生成禁止)
+            new_stg = None
+            if short_term_goal_data and short_term_goal_data.get('description') and new_ltg:
+                stg_desc = short_term_goal_data.get('description', '').strip()
+                if stg_desc:
+                    new_stg = ShortTermGoal(
+                        long_term_goal_id=new_ltg.id,
+                        description=stg_desc,
+                        target_period_start=base_date,
+                        target_period_end=target_end_date,
+                        next_review_date=target_end_date,
+                        set_year_month=short_term_goal_data.get('set_year_month'),
+                        target_year_month=short_term_goal_data.get('target_year_month'),
+                        achievement_status=short_term_goal_data.get('achievement_status')
+                    )
+                    db.session.add(new_stg)
+                    db.session.flush()
 
             # 4. 定着支援固有 Detail 作成
             detail_data = detail_fields.copy() if detail_fields else {}
-            # 必須・基本項目のマージ
+            # 利用者名
             detail_data.setdefault('user_name', contract.user.display_name if contract.user else f"利用者#{contract.user_id}")
             latest_ep = contract.episodes[-1] if contract.episodes else None
             if latest_ep:
                 detail_data.setdefault('employer_name', latest_ep.workplace_name)
                 detail_data.setdefault('work_content', latest_ep.job_title)
-                detail_data.setdefault('wage_condition', latest_ep.work_conditions)
                 detail_data.setdefault('job_start_date', latest_ep.job_start_date)
+                # work_conditions を wage_condition に自動代入しない (要件3)
 
             new_detail = RetentionSupportPlanDetail(
                 support_plan_id=new_sp.id,
                 retention_contract_id=contract_id,
                 overall_support_goal=overall_support_goal.strip(),
-                review_date=review_date, # review_date は Detail に保持
-                review_reason=review_reason.strip() if review_reason else None,
+                review_date=init_review_date, # 初回は None
+                review_reason=init_review_reason, # 初回は None
                 **{k: v for k, v in detail_data.items() if hasattr(RetentionSupportPlanDetail, k) and k not in ['id', 'support_plan_id', 'retention_contract_id', 'overall_support_goal', 'review_date', 'review_reason']}
             )
             db.session.add(new_detail)
             db.session.flush()
 
-            # 5. RetentionSupportPlanItem 作成 (様式2の①〜③、ShortTermGoalと明示的接続)
+            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ保存、架空デフォルト生成禁止)
             if items_data and len(items_data) > 0:
                 for idx, it in enumerate(items_data):
                     item_rec = RetentionSupportPlanItem(
                         detail_id=new_detail.id,
-                        short_term_goal_id=new_stg.id,
+                        short_term_goal_id=new_stg.id if new_stg else None,
                         item_number=it.get('item_number', idx + 1),
-                        challenge_topic=it.get('challenge_topic', '就労定着課題'),
-                        support_policy=it.get('support_policy', overall_support_goal.strip()),
-                        support_content=it.get('support_content', overall_support_goal.strip()),
+                        challenge_topic=it.get('challenge_topic'),
+                        support_policy=it.get('support_policy'),
+                        support_content=it.get('support_content'),
                         support_period_start=it.get('support_period_start', base_date),
                         support_period_end=it.get('support_period_end', target_end_date),
-                        support_frequency=it.get('support_frequency', '月1回以上'),
+                        support_frequency=it.get('support_frequency'),
                         role_sharing=it.get('role_sharing'),
                         implementation_status=it.get('implementation_status'),
                         achievement_status=it.get('achievement_status'),
@@ -1055,19 +1100,6 @@ class JobRetentionService:
                         remaining_challenges=it.get('remaining_challenges')
                     )
                     db.session.add(item_rec)
-            else:
-                default_item = RetentionSupportPlanItem(
-                    detail_id=new_detail.id,
-                    short_term_goal_id=new_stg.id,
-                    item_number=1,
-                    challenge_topic="就労定着の安定化",
-                    support_policy=overall_support_goal.strip(),
-                    support_content=overall_support_goal.strip(),
-                    support_period_start=base_date,
-                    support_period_end=target_end_date,
-                    support_frequency="月1回以上"
-                )
-                db.session.add(default_item)
 
             # 6. 一次情報出所追跡リンク作成
             if source_links_data:
@@ -1087,8 +1119,8 @@ class JobRetentionService:
                 version=1,
                 overall_support_goal=overall_support_goal.strip(),
                 start_date=base_date,
-                review_date=review_date,
-                review_reason=review_reason.strip() if review_reason else None,
+                review_date=init_review_date, # 初回は None
+                review_reason=init_review_reason, # 初回は None
                 plan_end_date=target_end_date,
                 status='ACTIVE',
                 created_by_id=supporter_id
@@ -1163,7 +1195,7 @@ class JobRetentionService:
             new_sp = SupportPlan(
                 user_id=contract.user_id,
                 plan_version=new_version,
-                plan_status='ACTIVE', # 既存workflow体系: ACTIVE
+                plan_status='ACTIVE',
                 plan_start_date=new_start_date,
                 plan_end_date=target_end_date,
                 activated_at=new_start_date,
@@ -1174,33 +1206,41 @@ class JobRetentionService:
             db.session.add(new_sp)
             db.session.flush()
 
-            # 2. 共通 LongTermGoal 作成
-            start_ym = new_start_date.strftime('%Y-%m')
-            end_ym = target_end_date.strftime('%Y-%m')
-            new_ltg = LongTermGoal(
-                plan_id=new_sp.id,
-                description=overall_support_goal.strip(),
-                challenges="就労定着",
-                target_period_start=new_start_date,
-                target_period_end=target_end_date,
-                set_year_month=start_ym,
-                target_year_month=end_ym
-            )
-            db.session.add(new_ltg)
-            db.session.flush()
+            # 2. 共通 LongTermGoal 作成 (UI入力値のみ、架空生成禁止)
+            new_ltg = None
+            if long_term_goal_data and long_term_goal_data.get('description'):
+                ltg_desc = long_term_goal_data.get('description', '').strip()
+                if ltg_desc:
+                    new_ltg = LongTermGoal(
+                        plan_id=new_sp.id,
+                        description=ltg_desc,
+                        challenges=long_term_goal_data.get('challenges'),
+                        target_period_start=new_start_date,
+                        target_period_end=target_end_date,
+                        set_year_month=long_term_goal_data.get('set_year_month'),
+                        target_year_month=long_term_goal_data.get('target_year_month'),
+                        achievement_status=long_term_goal_data.get('achievement_status')
+                    )
+                    db.session.add(new_ltg)
+                    db.session.flush()
 
-            # 3. 共通 ShortTermGoal 作成
-            new_stg = ShortTermGoal(
-                long_term_goal_id=new_ltg.id,
-                description=overall_support_goal.strip(),
-                target_period_start=new_start_date,
-                target_period_end=target_end_date,
-                next_review_date=target_end_date,
-                set_year_month=start_ym,
-                target_year_month=end_ym
-            )
-            db.session.add(new_stg)
-            db.session.flush()
+            # 3. 共通 ShortTermGoal 作成 (UI入力値のみ、架空生成禁止)
+            new_stg = None
+            if short_term_goal_data and short_term_goal_data.get('description') and new_ltg:
+                stg_desc = short_term_goal_data.get('description', '').strip()
+                if stg_desc:
+                    new_stg = ShortTermGoal(
+                        long_term_goal_id=new_ltg.id,
+                        description=stg_desc,
+                        target_period_start=new_start_date,
+                        target_period_end=target_end_date,
+                        next_review_date=target_end_date,
+                        set_year_month=short_term_goal_data.get('set_year_month'),
+                        target_year_month=short_term_goal_data.get('target_year_month'),
+                        achievement_status=short_term_goal_data.get('achievement_status')
+                    )
+                    db.session.add(new_stg)
+                    db.session.flush()
 
             # 4. 定着支援固有 Detail 作成
             detail_data = detail_fields.copy() if detail_fields else {}
@@ -1224,26 +1264,26 @@ class JobRetentionService:
                 support_plan_id=new_sp.id,
                 retention_contract_id=contract_id,
                 overall_support_goal=overall_support_goal.strip(),
-                review_date=review_d, # review_date / review_reason は Detail に保持
+                review_date=review_d, # 見直し時は review_d を保存
                 review_reason=review_reason.strip(),
                 **{k: v for k, v in detail_data.items() if hasattr(RetentionSupportPlanDetail, k) and k not in ['id', 'support_plan_id', 'retention_contract_id', 'overall_support_goal', 'review_date', 'review_reason']}
             )
             db.session.add(new_detail)
             db.session.flush()
 
-            # 5. RetentionSupportPlanItem 作成
+            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ、架空生成禁止)
             if items_data and len(items_data) > 0:
                 for idx, it in enumerate(items_data):
                     item_rec = RetentionSupportPlanItem(
                         detail_id=new_detail.id,
-                        short_term_goal_id=new_stg.id,
+                        short_term_goal_id=new_stg.id if new_stg else None,
                         item_number=it.get('item_number', idx + 1),
-                        challenge_topic=it.get('challenge_topic', '就労定着課題'),
-                        support_policy=it.get('support_policy', overall_support_goal.strip()),
-                        support_content=it.get('support_content', overall_support_goal.strip()),
+                        challenge_topic=it.get('challenge_topic'),
+                        support_policy=it.get('support_policy'),
+                        support_content=it.get('support_content'),
                         support_period_start=it.get('support_period_start', new_start_date),
                         support_period_end=it.get('support_period_end', target_end_date),
-                        support_frequency=it.get('support_frequency', '月1回以上'),
+                        support_frequency=it.get('support_frequency'),
                         role_sharing=it.get('role_sharing'),
                         implementation_status=it.get('implementation_status'),
                         achievement_status=it.get('achievement_status'),
@@ -1251,19 +1291,6 @@ class JobRetentionService:
                         remaining_challenges=it.get('remaining_challenges')
                     )
                     db.session.add(item_rec)
-            else:
-                default_item = RetentionSupportPlanItem(
-                    detail_id=new_detail.id,
-                    short_term_goal_id=new_stg.id,
-                    item_number=1,
-                    challenge_topic="就労定着の継続支援",
-                    support_policy=overall_support_goal.strip(),
-                    support_content=overall_support_goal.strip(),
-                    support_period_start=new_start_date,
-                    support_period_end=target_end_date,
-                    support_frequency="月1回以上"
-                )
-                db.session.add(default_item)
 
             # 6. 一次情報出所追跡リンク作成
             if source_links_data:

@@ -240,30 +240,30 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
               />
             </div>
 
-            {/* 関係機関等との連携調整 */}
+            {/* 対象者・事業主・関係機関等の取組 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
-                関係機関等との連携調整（医療機関・企業等）
+                対象者・事業主・関係機関等の取組
               </label>
               <textarea
                 value={reportData.stakeholder_efforts || ''}
                 onChange={(e) => handleFieldChange('stakeholder_efforts', e.target.value)}
                 rows={2}
-                placeholder="主治医、ハローワーク、職場担当者等との連携内容"
+                placeholder="本人・事業主・医療機関・地域障害者職業センター等の取組状況"
                 className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
               />
             </div>
 
-            {/* 情報共有メモ */}
+            {/* 共有事項 */}
             <div className="space-y-1">
               <label className="text-xs font-bold text-slate-700 block">
-                情報共有・申し送り事項（内部メモ）
+                共有事項
               </label>
               <textarea
                 value={reportData.sharing_notes || ''}
                 onChange={(e) => handleFieldChange('sharing_notes', e.target.value)}
                 rows={2}
-                placeholder="事業所内スタッフ間の特記事項・申し送り"
+                placeholder="関係者間で共有すべき留意事項・確認結果"
                 className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
               />
             </div>

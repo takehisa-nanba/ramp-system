@@ -127,6 +127,7 @@ export interface PlanInputAssistanceData {
     feedback_candidates: PlanAssistanceCandidate[];
     action_candidates: any[];
     latest_report?: any;
+    work_conditions_candidate?: string | null;
   };
   current_plan?: {
     id: number;
@@ -172,6 +173,19 @@ export interface CreateOrReviewPlanRequest {
   items_data?: RetentionSupportPlanItemData[];
   source_links_data?: RetentionSourceLinkData[];
   detail_fields?: Record<string, any>;
+  long_term_goal_data?: {
+    description?: string;
+    challenges?: string;
+    set_year_month?: string;
+    target_year_month?: string;
+    achievement_status?: string;
+  };
+  short_term_goal_data?: {
+    description?: string;
+    set_year_month?: string;
+    target_year_month?: string;
+    achievement_status?: string;
+  };
 }
 
 export interface EmploymentEpisode {
