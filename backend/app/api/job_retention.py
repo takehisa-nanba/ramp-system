@@ -778,6 +778,54 @@ def list_support_plans(contract_id: int):
     return jsonify(items), 200
 
 
+@job_retention_bp.route('/contracts/<int:contract_id>/support-plan/assistance-data', methods=['GET'])
+@jwt_required()
+def get_support_plan_assistance_data(contract_id: int):
+    """就労定着支援計画（別紙様式2）作成のための入力支援データ取得（支援員専用・JOB_RETENTION_VIEW必須）"""
+    identity = get_jwt_identity()
+    supporter_id = require_staff_actor(identity)
+    require_staff_permission(supporter_id, 'JOB_RETENTION_VIEW')
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+    validate_supporter_access_to_contract(supporter_id, contract)
+
+    try:
+        data = JobRetentionService.get_plan_input_assistance_data(contract_id)
+        return jsonify(data), 200
+    except ValueError as e:
+        return jsonify({"msg": str(e)}), 400
+    except Exception as e:
+        return jsonify({"msg": f"エラーが発生しました: {str(e)}"}), 500
+
+
+@job_retention_bp.route('/contracts/<int:contract_id>/support-plans/<int:plan_id>/detail', methods=['GET'])
+@jwt_required()
+def get_support_plan_detail(contract_id: int, plan_id: int):
+    """厚労省様式2の全項目（基本情報スナップショット・支援内容①〜③・出所リンク等）を取得（支援員または本人）"""
+    identity = get_jwt_identity()
+    actor_type, actor_id = extract_actor_info(identity)
+
+    contract = JobRetentionService.get_contract(contract_id)
+    if not contract:
+        return jsonify({"msg": "契約が見つかりません。"}), 404
+
+    if actor_type == 'staff':
+        require_staff_permission(actor_id, 'JOB_RETENTION_VIEW')
+        validate_supporter_access_to_contract(actor_id, contract)
+    elif actor_type == 'user':
+        validate_user_access_to_contract(actor_id, contract)
+    else:
+        return jsonify({"msg": "権限がありません。"}), 403
+
+    detail = JobRetentionService.get_support_plan_detail(contract_id, plan_id)
+    if not detail:
+        return jsonify({"msg": "指定された支援計画が見つかりません。"}), 404
+
+    return jsonify(detail), 200
+
+
 @job_retention_bp.route('/contracts/<int:contract_id>/support-plans', methods=['POST'])
 @jwt_required()
 def create_or_review_support_plan(contract_id: int):
@@ -804,6 +852,11 @@ def create_or_review_support_plan(contract_id: int):
         start_date = _parse_date(data.get('start_date'))
         review_reason = data.get('review_reason')
 
+        # 様式2固有の拡張データ (Items, SourceLinks, Detail fields)
+        items_data = data.get('items_data')
+        source_links_data = data.get('source_links_data')
+        detail_fields = data.get('detail_fields')
+
         plan = JobRetentionService.create_or_review_support_plan(
             contract_id=contract_id,
             overall_support_goal=overall_support_goal,
@@ -811,7 +864,10 @@ def create_or_review_support_plan(contract_id: int):
             review_date=review_date,
             review_reason=review_reason,
             start_date=start_date,
-            supporter_id=supporter_id
+            supporter_id=supporter_id,
+            items_data=items_data,
+            source_links_data=source_links_data,
+            detail_fields=detail_fields
         )
         status_info = plan.compute_deadline_status()
         return jsonify({
@@ -820,12 +876,12 @@ def create_or_review_support_plan(contract_id: int):
                 "id": plan.id,
                 "version": plan.version,
                 "overall_support_goal": plan.overall_support_goal,
-                "start_date": plan.start_date.isoformat(),
+                "start_date": plan.start_date.isoformat() if plan.start_date else None,
                 "review_date": plan.review_date.isoformat() if plan.review_date else None,
                 "review_reason": plan.review_reason,
-                "plan_end_date": plan.plan_end_date.isoformat(),
-                "next_plan_start_date": plan.next_plan_start_date.isoformat(),
-                "next_review_deadline": plan.plan_end_date.isoformat(),
+                "plan_end_date": plan.plan_end_date.isoformat() if plan.plan_end_date else None,
+                "next_plan_start_date": plan.next_plan_start_date.isoformat() if plan.next_plan_start_date else None,
+                "next_review_deadline": plan.plan_end_date.isoformat() if plan.plan_end_date else None,
                 "status": plan.status,
                 "deadline_status": status_info["status_code"],
                 "days_diff": status_info["days_diff"],

@@ -352,16 +352,290 @@ class RetentionSupportPlan(db.Model):
             else:
                 status_code = 'NORMAL'
 
-        days_remaining = max(0, days_diff)
-        days_overdue = max(0, -days_diff)
+        return compute_retention_deadline_status(self.plan_end_date, today)
 
-        return {
-            "status_code": status_code,
-            "days_diff": days_diff,
-            "days_remaining": days_remaining,
-            "days_overdue": days_overdue,
-            "plan_end_date": self.plan_end_date.isoformat(),
-            "next_plan_start_date": next_start.isoformat(),
-            "next_review_deadline": self.plan_end_date.isoformat(),
-            "is_overdue": today > self.plan_end_date
-        }
+
+def compute_retention_deadline_status(plan_end_date: datetime.date, today: Optional[datetime.date] = None) -> Dict[str, Any]:
+    """
+    計画終了予定日および次計画開始予定日を基準とした更新ステータス判定（共通ヘルパー）。
+    - today <= plan_end_date: 現行計画期間内 (終了間近なら APPROACHING, 本日なら DUE_TODAY)
+    - today > plan_end_date:
+        - 次計画開始予定日の属する月と同じ月内: OVERDUE_WITHIN_MONTH (当月内更新猶予あり)
+        - その翌月以降: OVERDUE_BILLING_RISK (前月内に更新されていないため請求影響リスクあり)
+    """
+    if today is None:
+        today = datetime.date.today()
+
+    next_start = plan_end_date + datetime.timedelta(days=1)
+    days_diff = (plan_end_date - today).days
+
+    if today < plan_end_date:
+        if days_diff <= 14:
+            status_code = 'APPROACHING'
+        else:
+            status_code = 'NORMAL'
+    elif today == plan_end_date:
+        status_code = 'DUE_TODAY'
+    else:
+        # today > plan_end_date (次計画期間突入)
+        if (today.year, today.month) == (next_start.year, next_start.month):
+            status_code = 'OVERDUE_WITHIN_MONTH'
+        elif (today.year, today.month) > (next_start.year, next_start.month):
+            status_code = 'OVERDUE_BILLING_RISK'
+        else:
+            status_code = 'NORMAL'
+
+    days_remaining = max(0, days_diff)
+    days_overdue = max(0, -days_diff)
+
+    return {
+        "status_code": status_code,
+        "days_diff": days_diff,
+        "days_remaining": days_remaining,
+        "days_overdue": days_overdue,
+        "plan_end_date": plan_end_date.isoformat(),
+        "next_plan_start_date": next_start.isoformat(),
+        "next_review_deadline": plan_end_date.isoformat(),
+        "is_overdue": today > plan_end_date
+    }
+
+
+# ====================================================================
+# 9. RetentionSupportPlanDetail (共通SupportPlanに1対1紐づく定着固有詳細)
+# ====================================================================
+class RetentionSupportPlanDetail(db.Model):
+    """
+    就労定着支援計画の固有詳細モデル（厚労省通知・別紙様式2完全準拠）。
+    SupportPlan と 1対1 で結合し、定着固有の確定スナップショット・様式項目・日常サマリーを保持する。
+    """
+    __tablename__ = 'retention_support_plan_details'
+
+    id = Column(Integer, primary_key=True)
+    support_plan_id = Column(
+        Integer, 
+        ForeignKey('support_plans.id', ondelete='CASCADE'), 
+        nullable=False, 
+        unique=True, 
+        index=True
+    )
+    retention_contract_id = Column(
+        Integer, 
+        ForeignKey('job_retention_contracts.id', ondelete='CASCADE'), 
+        nullable=False, 
+        index=True
+    )
+
+    # --- 日常表示用サマリー（短期目標から確定時に初期提案・固定） ---
+    overall_support_goal = Column(Text, nullable=False)
+    review_date = Column(Date, nullable=True)             # 実際の見直し実施日
+    review_reason = Column(Text, nullable=True)           # 見直し理由
+
+    # --- 共通SupportPlan互換プロパティ ---
+    @property
+    def version(self) -> int:
+        return self.support_plan.plan_version if self.support_plan else 1
+
+    @property
+    def status(self) -> str:
+        return self.support_plan.plan_status if self.support_plan else 'DRAFT'
+
+    @property
+    def start_date(self) -> Optional[datetime.date]:
+        return self.support_plan.plan_start_date if self.support_plan else None
+
+    @property
+    def plan_end_date(self) -> Optional[datetime.date]:
+        return self.support_plan.plan_end_date if self.support_plan else None
+
+    @property
+    def next_plan_start_date(self) -> Optional[datetime.date]:
+        if self.plan_end_date:
+            return self.plan_end_date + datetime.timedelta(days=1)
+        return None
+
+    @property
+    def next_review_deadline(self) -> Optional[datetime.date]:
+        return self.plan_end_date
+
+    @property
+    def created_by_id(self) -> Optional[int]:
+        return self.support_plan.created_by_id if self.support_plan else None
+
+    def compute_deadline_status(self, today: Optional[datetime.date] = None) -> Dict[str, Any]:
+        if not self.plan_end_date:
+            return {
+                "status_code": "NORMAL",
+                "days_diff": 0,
+                "days_remaining": 0,
+                "days_overdue": 0,
+                "plan_end_date": None,
+                "next_plan_start_date": None,
+                "next_review_deadline": None,
+                "is_overdue": False
+            }
+        return compute_retention_deadline_status(self.plan_end_date, today)
+
+    # --- 1. 利用者基本情報スナップショット（様式2 公式欄） ---
+    user_name = Column(String(100), nullable=True)
+    user_name_kana = Column(String(100), nullable=True)
+    gender = Column(String(20), nullable=True)
+    birth_date = Column(Date, nullable=True)
+    age_at_planning = Column(Integer, nullable=True)
+    support_level = Column(String(50), nullable=True)              # 障害支援区分
+    disability_handbook_type = Column(String(50), nullable=True)   # 障害者手帳区分
+
+    # --- 2. 雇用先・労働条件・職場環境スナップショット ---
+    employer_name = Column(String(200), nullable=True)
+    employer_industry = Column(String(100), nullable=True)
+    employer_address = Column(String(300), nullable=True)
+    employer_tel = Column(String(50), nullable=True)
+    employer_contact_person = Column(String(100), nullable=True)
+    job_start_date = Column(Date, nullable=True)
+    work_content = Column(Text, nullable=True)                     # 職種・業務内容
+    employment_type = Column(String(100), nullable=True)           # 雇用形態
+    wage_condition = Column(String(200), nullable=True)            # 賃金
+    holiday_condition = Column(String(200), nullable=True)         # 休日
+    working_hours_and_break = Column(Text, nullable=True)          # 勤務時間・休憩
+    physical_work_environment = Column(Text, nullable=True)        # 物理的環境
+    human_work_environment = Column(Text, nullable=True)           # 人的環境
+    related_support_organizations = Column(Text, nullable=True)    # 関係支援機関
+
+    # --- 3. 本人の状況・生活環境・定着課題 ---
+    pre_employment_handover = Column(Text, nullable=True)          # 就職前事業所からの引継事項
+    user_wishes = Column(Text, nullable=True)                      # 本人の希望・意向
+    health_condition = Column(Text, nullable=True)                 # 健康状態
+    living_environment_support = Column(Text, nullable=True)       # 生活環境・生活面サポート体制
+    retention_challenges = Column(Text, nullable=True)             # 就労定着に向けた課題
+
+    # --- 4. 本人説明・同意 & 帳票出力用事業所・スタッフスナップショット ---
+    office_name = Column(String(200), nullable=True)
+    office_number = Column(String(50), nullable=True)
+    office_address = Column(String(300), nullable=True)
+    office_tel = Column(String(50), nullable=True)
+    office_fax = Column(String(50), nullable=True)
+
+    staff_creator_name = Column(String(100), nullable=True)
+    staff_evaluator_name = Column(String(100), nullable=True)
+    staff_manager_name = Column(String(100), nullable=True)
+    staff_service_manager_name = Column(String(100), nullable=True)
+    staff_job_supporter_name = Column(String(100), nullable=True)
+    staff_explainer_name = Column(String(100), nullable=True)
+
+    explained_date = Column(Date, nullable=True)
+    agreed_date = Column(Date, nullable=True)
+    consent_confirmed = Column(Boolean, default=False)
+    consent_notes = Column(String(200), nullable=True)
+
+    evaluation_date = Column(Date, nullable=True)
+    overall_evaluation = Column(Text, nullable=True)
+    special_notes = Column(Text, nullable=True)
+
+    # --- 5. 公式帳票外・内部整理情報 ---
+    internal_employer_wishes = Column(Text, nullable=True)
+    internal_overall_policy = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    # リレーション
+    support_plan = db.relationship('SupportPlan', back_populates='retention_detail')
+    contract = db.relationship('JobRetentionContract', backref='retention_plan_details')
+    items = db.relationship(
+        'RetentionSupportPlanItem', 
+        back_populates='detail', 
+        cascade='all, delete-orphan', 
+        order_by='RetentionSupportPlanItem.item_number'
+    )
+    source_links = db.relationship(
+        'RetentionSupportPlanSourceLink', 
+        back_populates='detail', 
+        cascade='all, delete-orphan'
+    )
+
+
+# ====================================================================
+# 10. RetentionSupportPlanItem (様式2の①〜③ 支援内容・評価 子テーブル)
+# ====================================================================
+class RetentionSupportPlanItem(db.Model):
+    """
+    厚労省様式2の「支援内容・評価」表行（①〜③）。
+    ShortTermGoal と明示的に接続し、課題ごとの支援方針・内容・期間・頻度・役割分担・事後評価を保持する。
+    """
+    __tablename__ = 'retention_support_plan_items'
+    __table_args__ = (
+        UniqueConstraint('detail_id', 'item_number', name='uq_retention_detail_item_number'),
+    )
+
+    id = Column(Integer, primary_key=True)
+    detail_id = Column(
+        Integer, 
+        ForeignKey('retention_support_plan_details.id', ondelete='CASCADE'), 
+        nullable=False, 
+        index=True
+    )
+    short_term_goal_id = Column(
+        Integer, 
+        ForeignKey('short_term_goals.id', ondelete='SET NULL'), 
+        nullable=True, 
+        index=True
+    )
+    item_number = Column(Integer, nullable=False) # 1, 2, 3... (様式2の①〜③)
+
+    # 計画策定時 (公式項目)
+    challenge_topic = Column(String(200), nullable=True)   # 課題・ニーズ
+    support_policy = Column(Text, nullable=True)            # 支援方針
+    support_content = Column(Text, nullable=True)           # 支援内容
+    support_period_start = Column(Date, nullable=True)      # 支援期間開始
+    support_period_end = Column(Date, nullable=True)        # 支援期間終了
+    support_frequency = Column(String(100), nullable=True)  # 支援頻度
+
+    # 計画策定時 (公式外・内部整理情報)
+    role_sharing = Column(Text, nullable=True)              # 関係者の役割分担
+
+    # 評価時 (公式項目)
+    implementation_status = Column(String(20), nullable=True)     # IMPLEMENTED, PARTIAL, NOT_IMPLEMENTED, NULL
+    achievement_status = Column(String(20), nullable=True)        # ACHIEVED, PARTIAL, NOT_ACHIEVED, NULL
+    effectiveness_satisfaction = Column(Text, nullable=True)      # 効果、満足度など（自由記述）
+    remaining_challenges = Column(Text, nullable=True)            # 残課題と対策
+
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    detail = db.relationship('RetentionSupportPlanDetail', back_populates='items')
+    short_term_goal = db.relationship('ShortTermGoal', back_populates='retention_items')
+    source_links = db.relationship('RetentionSupportPlanSourceLink', back_populates='plan_item', cascade='all, delete-orphan')
+
+
+# ====================================================================
+# 11. RetentionSupportPlanSourceLink (一次情報出所追跡 子テーブル)
+# ====================================================================
+class RetentionSupportPlanSourceLink(db.Model):
+    """
+    入力支援で採用された一次情報（本人の声、企業情報、支援記録、月次レポート等）の出所プロベナンスを追跡するテーブル。
+    """
+    __tablename__ = 'retention_support_plan_source_links'
+
+    id = Column(Integer, primary_key=True)
+    detail_id = Column(
+        Integer, 
+        ForeignKey('retention_support_plan_details.id', ondelete='CASCADE'), 
+        nullable=False, 
+        index=True
+    )
+    plan_item_id = Column(
+        Integer, 
+        ForeignKey('retention_support_plan_items.id', ondelete='CASCADE'), 
+        nullable=True, 
+        index=True
+    )
+    
+    target_field = Column(String(100), nullable=False) # 反映先項目名
+    source_type = Column(String(50), nullable=False)   # 'USER_VOICE', 'EMPLOYER_FEEDBACK', 'SUPPORT_ACTION', 'MONTHLY_REPORT', 'STAFF_HEARING'
+    source_id = Column(Integer, nullable=True)         # 元レコードのID
+    excerpt_text = Column(Text, nullable=True)         # 採用時点の抜粋テキストスナップショット
+    
+    created_at = Column(DateTime, default=func.now(), nullable=False)
+
+    detail = db.relationship('RetentionSupportPlanDetail', back_populates='source_links')
+    plan_item = db.relationship('RetentionSupportPlanItem', back_populates='source_links')
+

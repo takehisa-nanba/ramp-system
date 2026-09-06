@@ -52,6 +52,116 @@ export interface SupportPlan extends SupportPlanSummary {
   created_at?: string;
 }
 
+export interface RetentionSupportPlanItemData {
+  id?: number;
+  item_number: number;
+  short_term_goal_id?: number | null;
+  challenge_topic?: string;
+  support_policy?: string;
+  support_content?: string;
+  support_period_start?: string;
+  support_period_end?: string;
+  support_frequency?: string;
+  role_sharing?: string;
+  implementation_status?: string;
+  achievement_status?: string;
+  effectiveness_satisfaction?: string;
+  remaining_challenges?: string;
+}
+
+export interface RetentionSourceLinkData {
+  id?: number;
+  plan_item_id?: number | null;
+  target_field: string;
+  source_type: string;
+  source_id?: number | null;
+  excerpt_text?: string;
+}
+
+export interface PlanAssistanceCandidate {
+  id: number;
+  date: string;
+  topic?: string;
+  content: string;
+  source_type: 'USER_VOICE' | 'EMPLOYER_FEEDBACK' | 'SUPPORT_ACTION' | 'MONTHLY_REPORT';
+  label: string;
+}
+
+export interface PlanInputAssistanceData {
+  contract_id: number;
+  user_id: number;
+  user_info_snapshot: {
+    user_name?: string;
+    user_name_kana?: string;
+    gender?: string;
+    birth_date?: string | null;
+    age_at_planning?: number | null;
+    support_level?: string;
+    disability_handbook_type?: string;
+  };
+  employment_info_snapshot: {
+    employer_name?: string;
+    employer_industry?: string;
+    employer_address?: string;
+    employer_tel?: string;
+    employer_contact_person?: string;
+    job_start_date?: string | null;
+    work_content?: string;
+    employment_type?: string;
+    wage_condition?: string;
+    holiday_condition?: string;
+    working_hours_and_break?: string;
+    physical_work_environment?: string;
+    human_work_environment?: string;
+    related_support_organizations?: string;
+  };
+  office_info_snapshot: {
+    office_name?: string;
+    office_number?: string;
+    office_address?: string;
+    office_tel?: string;
+    office_fax?: string;
+  };
+  candidates: {
+    voice_candidates: PlanAssistanceCandidate[];
+    feedback_candidates: PlanAssistanceCandidate[];
+    action_candidates: any[];
+    latest_report?: any;
+  };
+  current_plan?: {
+    id: number;
+    version: number;
+    overall_support_goal: string;
+    start_date?: string | null;
+    plan_end_date?: string | null;
+  } | null;
+}
+
+export interface SupportPlanDetailData extends SupportPlan {
+  support_plan_id: number;
+  long_term_goal?: {
+    id?: number;
+    description: string;
+    set_year_month?: string;
+    target_year_month?: string;
+    achievement_status?: string;
+  };
+  short_term_goal?: {
+    id?: number;
+    description: string;
+    set_year_month?: string;
+    target_year_month?: string;
+    achievement_status?: string;
+  };
+  user_info: any;
+  employment_info: any;
+  situation_info: any;
+  office_and_staff_info: any;
+  internal_info: any;
+  items: RetentionSupportPlanItemData[];
+  source_links: RetentionSourceLinkData[];
+}
+
 export interface CreateOrReviewPlanRequest {
   overall_support_goal: string;
   plan_end_date?: string;
@@ -59,6 +169,9 @@ export interface CreateOrReviewPlanRequest {
   review_date?: string;
   review_reason?: string;
   start_date?: string;
+  items_data?: RetentionSupportPlanItemData[];
+  source_links_data?: RetentionSourceLinkData[];
+  detail_fields?: Record<string, any>;
 }
 
 export interface EmploymentEpisode {
@@ -195,7 +308,7 @@ export const jobRetentionApi = {
     return res.data;
   },
 
-  // 支援計画 (随時見直し & 6か月上限ガード & 版管理)
+  // 支援計画 (随時見直し & 6か月上限ガード & 版管理 & 様式2入力支援)
   async getActiveSupportPlan(contractId: number): Promise<{ has_plan: boolean; plan: SupportPlan | null }> {
     const res = await apiClient.get<{ has_plan: boolean; plan: SupportPlan | null }>(
       `/job-retention/contracts/${contractId}/support-plan/active`
@@ -205,6 +318,20 @@ export const jobRetentionApi = {
 
   async listSupportPlans(contractId: number): Promise<SupportPlan[]> {
     const res = await apiClient.get<SupportPlan[]>(`/job-retention/contracts/${contractId}/support-plans`);
+    return res.data;
+  },
+
+  async getPlanAssistanceData(contractId: number): Promise<PlanInputAssistanceData> {
+    const res = await apiClient.get<PlanInputAssistanceData>(
+      `/job-retention/contracts/${contractId}/support-plan/assistance-data`
+    );
+    return res.data;
+  },
+
+  async getSupportPlanDetail(contractId: number, planId: number): Promise<SupportPlanDetailData> {
+    const res = await apiClient.get<SupportPlanDetailData>(
+      `/job-retention/contracts/${contractId}/support-plans/${planId}/detail`
+    );
     return res.data;
   },
 

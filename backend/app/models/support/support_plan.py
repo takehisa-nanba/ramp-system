@@ -48,10 +48,23 @@ class SupportPlan(db.Model):
     # これにより、計画作成当時の「意向」や「方針」を正確かつムダなく参照できる
     holistic_support_policy_id = Column(Integer, ForeignKey('holistic_support_policies.id'))
     
+    # ★ 共通基盤改善: サービス文脈FKの追加
+    office_service_configuration_id = Column(
+        Integer, 
+        ForeignKey('office_service_configurations.id'), 
+        nullable=True, 
+        index=True
+    )
+    
+    # ★ 共通基盤改善: 作成者と更新日時（sabikan_approved_byとは明確に分離）
+    created_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
     created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # --- リレーションシップ ---
     user = db.relationship('User', back_populates='support_plans')
+    created_by = db.relationship('Supporter', foreign_keys=[created_by_id])
+    office_service_configuration = db.relationship('OfficeServiceConfiguration', foreign_keys=[office_service_configuration_id])
     
     # 根拠となる方針へのリレーション
     holistic_policy = db.relationship('HolisticSupportPolicy')
@@ -81,6 +94,13 @@ class SupportPlan(db.Model):
     )    
     # 見直し申請からの逆参照
     review_requests = db.relationship('PlanReviewRequest', back_populates='plan', lazy='dynamic')
+    # ★ 就労定着支援固有 Detail への 1対1 リレーション
+    retention_detail = db.relationship(
+        'RetentionSupportPlanDetail', 
+        back_populates='support_plan', 
+        uselist=False, 
+        cascade="all, delete-orphan"
+    )
 
 # ====================================================================
 # 2. LongTermGoal (長期目標)
@@ -95,6 +115,11 @@ class LongTermGoal(db.Model):
     challenges = Column(Text, nullable=True) # 解決すべき課題・相談内容
     target_period_start = Column(Date)
     target_period_end = Column(Date)
+    
+    # ★ 厚労省様式対応: 設定年月・達成予定年月 (YYYY-MM) & 達成状況 (ACHIEVED, PARTIAL, NOT_ACHIEVED, NULL)
+    set_year_month = Column(String(7), nullable=True)
+    target_year_month = Column(String(7), nullable=True)
+    achievement_status = Column(String(20), nullable=True)
     
     plan = db.relationship('SupportPlan', back_populates='long_term_goals')
     short_term_goals = db.relationship('ShortTermGoal', back_populates='long_term_goal', cascade="all, delete-orphan")
@@ -117,8 +142,14 @@ class ShortTermGoal(db.Model):
     # 次回見直し予定日 (減算リスク回避の核)
     next_review_date = Column(Date) 
     
+    # ★ 厚労省様式対応: 設定年月・達成予定年月 (YYYY-MM) & 達成状況 (ACHIEVED, PARTIAL, NOT_ACHIEVED, NULL)
+    set_year_month = Column(String(7), nullable=True)
+    target_year_month = Column(String(7), nullable=True)
+    achievement_status = Column(String(20), nullable=True)
+    
     long_term_goal = db.relationship('LongTermGoal', back_populates='short_term_goals')
     individual_goals = db.relationship('IndividualSupportGoal', back_populates='short_term_goal', cascade="all, delete-orphan")
+    retention_items = db.relationship('RetentionSupportPlanItem', back_populates='short_term_goal', cascade="all, delete-orphan")
 
 # ====================================================================
 # 4. IndividualSupportGoal (支援の最小単位 / ガードレール)

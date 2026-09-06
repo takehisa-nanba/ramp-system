@@ -43,6 +43,12 @@ jobs:
               calculate_max_review_deadline,
               JobRetentionContract,
               RetentionSupportPlan,
+              RetentionSupportPlanDetail,
+              RetentionSupportPlanItem,
+              RetentionSupportPlanSourceLink,
+              SupportPlan,
+              LongTermGoal,
+              ShortTermGoal,
               MonthlyRetentionReport
           )
           from backend.app.services.job_retention_service import JobRetentionService
@@ -51,7 +57,7 @@ jobs:
 
       - name: Run Job Retention backend tests
         run: |
-          pytest backend/tests/test_job_retention_auth.py backend/tests/test_job_retention_slice1.py backend/tests/test_job_retention_slice2.py
+          pytest backend/tests/test_job_retention_auth.py backend/tests/test_job_retention_slice1.py backend/tests/test_job_retention_slice2.py backend/tests/test_job_retention_plan_integration.py
 
   frontend:
     name: Frontend Build

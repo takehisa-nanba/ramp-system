@@ -8,8 +8,12 @@ from backend.app.models import (
     JobRetentionContract, RetentionEmploymentEpisode,
     RetentionUserVoiceLog, RetentionEmployerFeedbackLog,
     RetentionSupportActionLog, MonthlyRetentionReport,
-    RetentionSupportPlan, calculate_max_review_deadline,
-    calculate_plan_end_date,
+    RetentionSupportPlan,
+    RetentionSupportPlanDetail, RetentionSupportPlanItem,
+    RetentionSupportPlanSourceLink,
+    SupportPlan, LongTermGoal, ShortTermGoal,
+    calculate_max_review_deadline, calculate_plan_end_date,
+    compute_retention_deadline_status,
     User, Supporter, AuditActionLog
 )
 
@@ -577,22 +581,338 @@ class JobRetentionService:
         ).first()
 
     # ====================================================================
-    # 支援計画 (随時見直し & 6か月上限ガード & 版管理)
+    # 支援計画 (共通SupportPlan + 定着Detail + 様式2入力支援)
     # ====================================================================
     @staticmethod
-    def get_active_support_plan(contract_id: int) -> Optional[RetentionSupportPlan]:
-        """現在有効(ACTIVE)な支援計画を取得"""
-        return RetentionSupportPlan.query.filter_by(
-            contract_id=contract_id,
-            status='ACTIVE'
-        ).first()
+    def get_active_support_plan(contract_id: int) -> Optional[RetentionSupportPlanDetail]:
+        """現在有効(ACTIVE)な就労定着支援計画を取得（新構造: RetentionSupportPlanDetail + SupportPlan）"""
+        return RetentionSupportPlanDetail.query.join(
+            SupportPlan, RetentionSupportPlanDetail.support_plan_id == SupportPlan.id
+        ).filter(
+            RetentionSupportPlanDetail.retention_contract_id == contract_id,
+            SupportPlan.plan_status == 'ACTIVE'
+        ).order_by(SupportPlan.plan_version.desc()).first()
 
     @staticmethod
-    def list_support_plans(contract_id: int) -> List[RetentionSupportPlan]:
-        """契約に紐づく支援計画の全版履歴を取得（新しい版順）"""
-        return RetentionSupportPlan.query.filter_by(
+    def list_support_plans(contract_id: int) -> List[RetentionSupportPlanDetail]:
+        """契約に紐づく就労定着支援計画の全版履歴を取得（新構造: 新しい版順）"""
+        return RetentionSupportPlanDetail.query.join(
+            SupportPlan, RetentionSupportPlanDetail.support_plan_id == SupportPlan.id
+        ).filter(
+            RetentionSupportPlanDetail.retention_contract_id == contract_id
+        ).order_by(SupportPlan.plan_version.desc()).all()
+
+    @staticmethod
+    def get_support_plan_detail(contract_id: int, plan_id: int) -> Optional[Dict[str, Any]]:
+        """厚労省様式2の全項目（基本情報スナップショット・支援内容①〜③・出所リンク等）を取得"""
+        detail = RetentionSupportPlanDetail.query.filter_by(
+            id=plan_id,
+            retention_contract_id=contract_id
+        ).first()
+
+        if not detail:
+            # support_plan_id での指定も許容
+            detail = RetentionSupportPlanDetail.query.filter_by(
+                support_plan_id=plan_id,
+                retention_contract_id=contract_id
+            ).first()
+
+        if not detail:
+            return None
+
+        sp = detail.support_plan
+        ltg = sp.long_term_goals[0] if sp.long_term_goals else None
+        stg = ltg.short_term_goals[0] if (ltg and ltg.short_term_goals) else None
+
+        status_info = detail.compute_deadline_status()
+
+        items = []
+        for it in detail.items:
+            items.append({
+                "id": it.id,
+                "item_number": it.item_number,
+                "short_term_goal_id": it.short_term_goal_id,
+                "challenge_topic": it.challenge_topic,
+                "support_policy": it.support_policy,
+                "support_content": it.support_content,
+                "support_period_start": it.support_period_start.isoformat() if it.support_period_start else None,
+                "support_period_end": it.support_period_end.isoformat() if it.support_period_end else None,
+                "support_frequency": it.support_frequency,
+                "role_sharing": it.role_sharing,
+                "implementation_status": it.implementation_status,
+                "achievement_status": it.achievement_status,
+                "effectiveness_satisfaction": it.effectiveness_satisfaction,
+                "remaining_challenges": it.remaining_challenges
+            })
+
+        source_links = []
+        for sl in detail.source_links:
+            source_links.append({
+                "id": sl.id,
+                "plan_item_id": sl.plan_item_id,
+                "target_field": sl.target_field,
+                "source_type": sl.source_type,
+                "source_id": sl.source_id,
+                "excerpt_text": sl.excerpt_text
+            })
+
+        return {
+            "id": detail.id,
+            "support_plan_id": sp.id,
+            "version": sp.plan_version,
+            "status": sp.plan_status,
+            "overall_support_goal": detail.overall_support_goal,
+            "start_date": sp.plan_start_date.isoformat() if sp.plan_start_date else None,
+            "plan_end_date": sp.plan_end_date.isoformat() if sp.plan_end_date else None,
+            "next_plan_start_date": detail.next_plan_start_date.isoformat() if detail.next_plan_start_date else None,
+            "next_review_deadline": detail.next_review_deadline.isoformat() if detail.next_review_deadline else None,
+            "review_date": detail.review_date.isoformat() if detail.review_date else None,
+            "review_reason": detail.review_reason,
+            "deadline_status": status_info["status_code"],
+            "days_diff": status_info["days_diff"],
+            "is_overdue": status_info["is_overdue"],
+            # 長期・短期目標 (共通Goalモデル)
+            "long_term_goal": {
+                "id": ltg.id if ltg else None,
+                "description": ltg.description if ltg else detail.overall_support_goal,
+                "set_year_month": ltg.set_year_month if ltg else None,
+                "target_year_month": ltg.target_year_month if ltg else None,
+                "achievement_status": ltg.achievement_status if ltg else None
+            } if ltg else None,
+            "short_term_goal": {
+                "id": stg.id if stg else None,
+                "description": stg.description if stg else detail.overall_support_goal,
+                "set_year_month": stg.set_year_month if stg else None,
+                "target_year_month": stg.target_year_month if stg else None,
+                "achievement_status": stg.achievement_status if stg else None
+            } if stg else None,
+            # 1. 利用者基本情報スナップショット
+            "user_info": {
+                "user_name": detail.user_name,
+                "user_name_kana": detail.user_name_kana,
+                "gender": detail.gender,
+                "birth_date": detail.birth_date.isoformat() if detail.birth_date else None,
+                "age_at_planning": detail.age_at_planning,
+                "support_level": detail.support_level,
+                "disability_handbook_type": detail.disability_handbook_type
+            },
+            # 2. 雇用先・職場環境・労働条件スナップショット
+            "employment_info": {
+                "employer_name": detail.employer_name,
+                "employer_industry": detail.employer_industry,
+                "employer_address": detail.employer_address,
+                "employer_tel": detail.employer_tel,
+                "employer_contact_person": detail.employer_contact_person,
+                "job_start_date": detail.job_start_date.isoformat() if detail.job_start_date else None,
+                "work_content": detail.work_content,
+                "employment_type": detail.employment_type,
+                "wage_condition": detail.wage_condition,
+                "holiday_condition": detail.holiday_condition,
+                "working_hours_and_break": detail.working_hours_and_break,
+                "physical_work_environment": detail.physical_work_environment,
+                "human_work_environment": detail.human_work_environment,
+                "related_support_organizations": detail.related_support_organizations
+            },
+            # 3. 本人の状況・生活環境・定着課題
+            "situation_info": {
+                "pre_employment_handover": detail.pre_employment_handover,
+                "user_wishes": detail.user_wishes,
+                "health_condition": detail.health_condition,
+                "living_environment_support": detail.living_environment_support,
+                "retention_challenges": detail.retention_challenges
+            },
+            # 4. 本人説明・同意 & 事業所・スタッフ
+            "office_and_staff_info": {
+                "office_name": detail.office_name,
+                "office_number": detail.office_number,
+                "office_address": detail.office_address,
+                "office_tel": detail.office_tel,
+                "office_fax": detail.office_fax,
+                "staff_creator_name": detail.staff_creator_name,
+                "staff_evaluator_name": detail.staff_evaluator_name,
+                "staff_manager_name": detail.staff_manager_name,
+                "staff_service_manager_name": detail.staff_service_manager_name,
+                "staff_job_supporter_name": detail.staff_job_supporter_name,
+                "staff_explainer_name": detail.staff_explainer_name,
+                "explained_date": detail.explained_date.isoformat() if detail.explained_date else None,
+                "agreed_date": detail.agreed_date.isoformat() if detail.agreed_date else None,
+                "consent_confirmed": detail.consent_confirmed,
+                "consent_notes": detail.consent_notes,
+                "evaluation_date": detail.evaluation_date.isoformat() if detail.evaluation_date else None,
+                "overall_evaluation": detail.overall_evaluation,
+                "special_notes": detail.special_notes
+            },
+            # 5. 内部整理情報
+            "internal_info": {
+                "internal_employer_wishes": detail.internal_employer_wishes,
+                "internal_overall_policy": detail.internal_overall_policy
+            },
+            # 支援内容・評価テーブル (①〜③)
+            "items": items,
+            # 出所リンク (プロベナンス)
+            "source_links": source_links
+        }
+
+    @staticmethod
+    def get_plan_input_assistance_data(contract_id: int) -> Dict[str, Any]:
+        """
+        厚労省様式2計画書作成のための入力支援データを取得する。
+        - 確定事実スナップショット（利用者基本情報・雇用先・事業所情報など）
+        - 一次情報候補（本人の声・企業フィードバック・支援アクション・月次レポート）
+        支援員が事実と判断を区別して計画書を作成できるように支援する。
+        """
+        contract = db.session.get(JobRetentionContract, contract_id)
+        if not contract:
+            raise ValueError("契約が見つかりません。")
+
+        user = contract.user
+        latest_ep = contract.episodes[-1] if contract.episodes else None
+        office_config = contract.office_service_configuration
+        office = office_config.office if office_config else None
+
+        # 1. 利用者基本情報の確定事実候補
+        birth_d = None
+        age_at_planning = None
+        gender_str = "未設定"
+        user_kana = None
+
+        if user:
+            user_kana = getattr(user, 'kana', None)
+            if hasattr(user, 'profile') and user.profile:
+                prof = user.profile
+                birth_d = getattr(prof, 'birth_date', None)
+                if birth_d:
+                    today = datetime.date.today()
+                    age_at_planning = today.year - birth_d.year - ((today.month, today.day) < (birth_d.month, birth_d.day))
+                gender_str = getattr(prof, 'gender', "未設定")
+
+        # 2. 雇用先・労働条件の確定事実候補
+        employer_name = latest_ep.workplace_name if latest_ep else "未登録"
+        job_start_d = latest_ep.job_start_date if latest_ep else contract.contract_start_date
+        job_title = latest_ep.job_title if latest_ep else ""
+        work_conditions = latest_ep.work_conditions if latest_ep else ""
+
+        # 3. 事業所・スタッフ確定事実候補
+        office_name = office.office_name if office else "就労定着支援事業所"
+        office_number = office_config.jigyosho_bango if office_config and hasattr(office_config, 'jigyosho_bango') else ""
+        office_address = getattr(office, 'address', "") if office else ""
+        office_tel = getattr(office, 'phone_number', "") if office else ""
+        office_fax = getattr(office, 'fax_number', "") if office else ""
+
+        # 4. 一次情報からの候補リスト
+        # 本人の声 (直近5件)
+        voice_candidates = []
+        for v in sorted(contract.voice_logs, key=lambda x: x.logged_at, reverse=True)[:5]:
+            v_text = v.raw_voice or v.trouble_point or v.success_point or "（記録あり）"
+            log_date_str = v.logged_at.strftime('%Y/%m/%d') if v.logged_at else ""
+            voice_candidates.append({
+                "id": v.id,
+                "date": log_date_str,
+                "topic": v.help_topic or "本人の声",
+                "content": v_text,
+                "source_type": "USER_VOICE",
+                "label": f"[{log_date_str}] {v.help_topic or '本人の声'}: {v_text[:40]}..."
+            })
+
+        # 企業フィードバック (直近5件)
+        feedback_candidates = []
+        for fb in sorted(contract.employer_feedback_logs, key=lambda x: x.logged_at, reverse=True)[:5]:
+            fb_text = fb.workplace_observation or fb.positive_changes or fb.consultation_topic or "（記録あり）"
+            fb_date_str = fb.logged_at.strftime('%Y/%m/%d') if fb.logged_at else ""
+            feedback_candidates.append({
+                "id": fb.id,
+                "date": fb_date_str,
+                "topic": fb.consultation_topic or "企業フィードバック",
+                "content": fb_text,
+                "source_type": "EMPLOYER_FEEDBACK",
+                "label": f"[{fb_date_str}] {fb.contact_person or '企業担当者'}: {fb_text[:40]}..."
+            })
+
+        # 支援アクション記録 (直近5件)
+        action_candidates = []
+        for act in sorted(contract.action_logs, key=lambda x: x.action_date, reverse=True)[:5]:
+            action_candidates.append({
+                "id": act.id,
+                "date": act.action_date.isoformat(),
+                "confirmed_situation": act.confirmed_situation,
+                "provided_support": act.provided_support,
+                "source_type": "SUPPORT_ACTION",
+                "label": f"[{act.action_date.strftime('%Y/%m/%d')}] 状況: {act.confirmed_situation[:30]}... / 支援: {act.provided_support[:30]}..."
+            })
+
+        # 月次レポート (直近1件)
+        latest_report = MonthlyRetentionReport.query.filter_by(
             contract_id=contract_id
-        ).order_by(RetentionSupportPlan.version.desc()).all()
+        ).order_by(MonthlyRetentionReport.report_year_month.desc()).first()
+
+        report_candidate = None
+        if latest_report:
+            report_candidate = {
+                "id": latest_report.id,
+                "report_year_month": latest_report.report_year_month,
+                "support_goal": latest_report.support_goal,
+                "support_content": latest_report.support_content,
+                "future_support_plan": latest_report.future_support_plan,
+                "stakeholder_efforts": latest_report.stakeholder_efforts,
+                "sharing_notes": latest_report.sharing_notes,
+                "source_type": "MONTHLY_REPORT"
+            }
+
+        # 現行ACTIVE計画（もしあれば次回見直し向けに参照）
+        active_plan = JobRetentionService.get_active_support_plan(contract_id)
+        current_plan_info = None
+        if active_plan:
+            current_plan_info = {
+                "id": active_plan.id,
+                "version": active_plan.version,
+                "overall_support_goal": active_plan.overall_support_goal,
+                "start_date": active_plan.start_date.isoformat() if active_plan.start_date else None,
+                "plan_end_date": active_plan.plan_end_date.isoformat() if active_plan.plan_end_date else None
+            }
+
+        return {
+            "contract_id": contract.id,
+            "user_id": contract.user_id,
+            "user_info_snapshot": {
+                "user_name": user.display_name if user else f"利用者#{contract.user_id}",
+                "user_name_kana": user_kana,
+                "gender": gender_str,
+                "birth_date": birth_d.isoformat() if birth_d else None,
+                "age_at_planning": age_at_planning,
+                "support_level": "就労定着",
+                "disability_handbook_type": "手帳保持"
+            },
+            "employment_info_snapshot": {
+                "employer_name": employer_name,
+                "employer_industry": "一般就労",
+                "employer_address": "",
+                "employer_tel": "",
+                "employer_contact_person": "",
+                "job_start_date": job_start_d.isoformat() if job_start_d else None,
+                "work_content": job_title,
+                "employment_type": "一般雇用",
+                "wage_condition": work_conditions,
+                "holiday_condition": "週休2日",
+                "working_hours_and_break": "フルタイム",
+                "physical_work_environment": "整備済み",
+                "human_work_environment": "指導員配置",
+                "related_support_organizations": "ハローワーク・地域障害者職業センター"
+            },
+            "office_info_snapshot": {
+                "office_name": office_name,
+                "office_number": office_number,
+                "office_address": office_address,
+                "office_tel": office_tel,
+                "office_fax": office_fax
+            },
+            "candidates": {
+                "voice_candidates": voice_candidates,
+                "feedback_candidates": feedback_candidates,
+                "action_candidates": action_candidates,
+                "latest_report": report_candidate
+            },
+            "current_plan": current_plan_info
+        }
 
     @staticmethod
     def create_or_review_support_plan(
@@ -603,17 +923,26 @@ class JobRetentionService:
         review_date: Optional[datetime.date] = None,
         review_reason: Optional[str] = None,
         start_date: Optional[datetime.date] = None,
-        supporter_id: Optional[int] = None
-    ) -> RetentionSupportPlan:
+        supporter_id: Optional[int] = None,
+        items_data: Optional[List[Dict[str, Any]]] = None,
+        source_links_data: Optional[List[Dict[str, Any]]] = None,
+        detail_fields: Optional[Dict[str, Any]] = None
+    ) -> RetentionSupportPlanDetail:
         """
-        支援計画の初回作成または随時見直しを行う。
+        就労定着支援計画の新規作成または随時見直しを行う。
+        共通個別支援計画基盤（SupportPlan, LongTermGoal, ShortTermGoal）と
+        定着支援固有拡張（RetentionSupportPlanDetail, RetentionSupportPlanItem, SourceLink）
+        を完全に統合して永続化する。
+
         - plan_end_date: 当該計画版の終了予定日 (原則: start_date + 6 calendar months - 1 day)
-        - 初回作成時: version=1, 基準日はstart_date (契約開始日等), 計画終了予定日 <= 基準日+6か月-1日
+        - 初回作成時: plan_version=1, 基準日はstart_date (契約開始日等), 終了予定日 <= 基準日+6か月-1日
         - 見直し時:
             - 以前のACTIVE版をARCHIVEDに変更
-            - 早期見直し時 (review_d <= 旧版終了予定日): 旧版の適用期間を前日(review_d - 1日)として連続保持
-            - version=前版+1, 基準日は見直し日, 新計画終了予定日 <= 見直し日+6か月-1日
-        - 監査ログを記録 (flush徹底)
+            - 早期見直し時 (review_d <= 旧版終了予定日): 旧版の終了日を前日(review_d - 1日)として連続保持
+            - 終了予定日後の遅延見直し: 旧版終了予定日+1日を新開始日として連続保持
+            - plan_version=前版+1, 基準日は見直し日, 新計画終了予定日 <= 見直し日+6か月-1日
+        - review_date / review_reason は RetentionSupportPlanDetail に保持（共通activated_at/explained_atに流用しない）
+        - 監査ログを記録
         """
         contract = db.session.get(JobRetentionContract, contract_id)
         if not contract:
@@ -625,10 +954,12 @@ class JobRetentionService:
         # 終了予定日の取得（plan_end_date優先、後方互換でnext_review_deadlineも受付）
         target_end_date = plan_end_date or next_review_deadline
 
-        active_plan = JobRetentionService.get_active_support_plan(contract_id)
+        active_detail = JobRetentionService.get_active_support_plan(contract_id)
 
-        if not active_plan:
+        if not active_detail:
+            # ========================
             # 初回作成
+            # ========================
             base_date = start_date or review_date or contract.contract_start_date or datetime.date.today()
             max_allowed = calculate_plan_end_date(base_date)
             if target_end_date is None:
@@ -640,7 +971,118 @@ class JobRetentionService:
             if target_end_date < base_date:
                 raise ValueError("計画終了予定日は開始日以降の日付を設定してください。")
 
-            new_plan = RetentionSupportPlan(
+            # 1. 共通親 SupportPlan 作成
+            new_sp = SupportPlan(
+                user_id=contract.user_id,
+                plan_version=1,
+                plan_status='ACTIVE', # 既存workflow体系: ACTIVE
+                plan_start_date=base_date,
+                plan_end_date=target_end_date,
+                activated_at=base_date,
+                office_service_configuration_id=contract.office_service_configuration_id,
+                created_by_id=supporter_id
+            )
+            db.session.add(new_sp)
+            db.session.flush()
+
+            # 2. 共通 LongTermGoal 作成 (本文は重複保存せず共通モデルに保持)
+            start_ym = base_date.strftime('%Y-%m')
+            end_ym = target_end_date.strftime('%Y-%m')
+            new_ltg = LongTermGoal(
+                plan_id=new_sp.id,
+                description=overall_support_goal.strip(),
+                challenges="就労定着",
+                target_period_start=base_date,
+                target_period_end=target_end_date,
+                set_year_month=start_ym,
+                target_year_month=end_ym
+            )
+            db.session.add(new_ltg)
+            db.session.flush()
+
+            # 3. 共通 ShortTermGoal 作成 (本文は重複保存せず共通モデルに保持)
+            new_stg = ShortTermGoal(
+                long_term_goal_id=new_ltg.id,
+                description=overall_support_goal.strip(),
+                target_period_start=base_date,
+                target_period_end=target_end_date,
+                next_review_date=target_end_date,
+                set_year_month=start_ym,
+                target_year_month=end_ym
+            )
+            db.session.add(new_stg)
+            db.session.flush()
+
+            # 4. 定着支援固有 Detail 作成
+            detail_data = detail_fields.copy() if detail_fields else {}
+            # 必須・基本項目のマージ
+            detail_data.setdefault('user_name', contract.user.display_name if contract.user else f"利用者#{contract.user_id}")
+            latest_ep = contract.episodes[-1] if contract.episodes else None
+            if latest_ep:
+                detail_data.setdefault('employer_name', latest_ep.workplace_name)
+                detail_data.setdefault('work_content', latest_ep.job_title)
+                detail_data.setdefault('wage_condition', latest_ep.work_conditions)
+                detail_data.setdefault('job_start_date', latest_ep.job_start_date)
+
+            new_detail = RetentionSupportPlanDetail(
+                support_plan_id=new_sp.id,
+                retention_contract_id=contract_id,
+                overall_support_goal=overall_support_goal.strip(),
+                review_date=review_date, # review_date は Detail に保持
+                review_reason=review_reason.strip() if review_reason else None,
+                **{k: v for k, v in detail_data.items() if hasattr(RetentionSupportPlanDetail, k) and k not in ['id', 'support_plan_id', 'retention_contract_id', 'overall_support_goal', 'review_date', 'review_reason']}
+            )
+            db.session.add(new_detail)
+            db.session.flush()
+
+            # 5. RetentionSupportPlanItem 作成 (様式2の①〜③、ShortTermGoalと明示的接続)
+            if items_data and len(items_data) > 0:
+                for idx, it in enumerate(items_data):
+                    item_rec = RetentionSupportPlanItem(
+                        detail_id=new_detail.id,
+                        short_term_goal_id=new_stg.id,
+                        item_number=it.get('item_number', idx + 1),
+                        challenge_topic=it.get('challenge_topic', '就労定着課題'),
+                        support_policy=it.get('support_policy', overall_support_goal.strip()),
+                        support_content=it.get('support_content', overall_support_goal.strip()),
+                        support_period_start=it.get('support_period_start', base_date),
+                        support_period_end=it.get('support_period_end', target_end_date),
+                        support_frequency=it.get('support_frequency', '月1回以上'),
+                        role_sharing=it.get('role_sharing'),
+                        implementation_status=it.get('implementation_status'),
+                        achievement_status=it.get('achievement_status'),
+                        effectiveness_satisfaction=it.get('effectiveness_satisfaction'),
+                        remaining_challenges=it.get('remaining_challenges')
+                    )
+                    db.session.add(item_rec)
+            else:
+                default_item = RetentionSupportPlanItem(
+                    detail_id=new_detail.id,
+                    short_term_goal_id=new_stg.id,
+                    item_number=1,
+                    challenge_topic="就労定着の安定化",
+                    support_policy=overall_support_goal.strip(),
+                    support_content=overall_support_goal.strip(),
+                    support_period_start=base_date,
+                    support_period_end=target_end_date,
+                    support_frequency="月1回以上"
+                )
+                db.session.add(default_item)
+
+            # 6. 一次情報出所追跡リンク作成
+            if source_links_data:
+                for sl in source_links_data:
+                    link_rec = RetentionSupportPlanSourceLink(
+                        detail_id=new_detail.id,
+                        target_field=sl.get('target_field', 'overall_support_goal'),
+                        source_type=sl.get('source_type', 'USER_VOICE'),
+                        source_id=sl.get('source_id'),
+                        excerpt_text=sl.get('excerpt_text')
+                    )
+                    db.session.add(link_rec)
+
+            # 7. 第1段階 互換性担保: 旧 retention_support_plans にも同期書き込み
+            old_compat_plan = RetentionSupportPlan(
                 contract_id=contract_id,
                 version=1,
                 overall_support_goal=overall_support_goal.strip(),
@@ -651,35 +1093,43 @@ class JobRetentionService:
                 status='ACTIVE',
                 created_by_id=supporter_id
             )
-            db.session.add(new_plan)
+            db.session.add(old_compat_plan)
             db.session.flush()
 
+            # 監査ログ
             audit = AuditActionLog(
                 actor_supporter_id=supporter_id,
                 user_id=contract.user_id,
                 action='CREATE_RETENTION_SUPPORT_PLAN',
-                entity_type='RetentionSupportPlan',
-                entity_id=new_plan.id,
-                after_value=f"Version: 1, Goal: {new_plan.overall_support_goal[:30]}, PlanEndDate: {new_plan.plan_end_date}",
-                reason="就労定着支援計画の新規作成"
+                entity_type='SupportPlan',
+                entity_id=new_sp.id,
+                after_value=f"Version: 1, Goal: {overall_support_goal[:30]}, PlanEndDate: {target_end_date}",
+                reason="就労定着支援計画（別紙様式2統合版）の新規作成"
             )
             db.session.add(audit)
             db.session.commit()
-            return new_plan
+            return new_detail
+
         else:
+            # ========================
             # 随時見直し（早期見直し・遅延見直し）
+            # ========================
+            old_sp = active_detail.support_plan
+            old_end_date = old_sp.plan_end_date
+
             review_d = review_date or datetime.date.today()
             if not review_reason or not review_reason.strip():
                 raise ValueError("計画見直し時は見直し理由の入力が必須です。")
 
             # 早期見直し vs 終了予定日後の遅延見直し
-            if review_d <= active_plan.plan_end_date:
+            if review_d <= old_end_date:
                 # 早期見直し (終了予定日以前または当日)
                 new_start_date = review_d
-                active_plan.plan_end_date = new_start_date - datetime.timedelta(days=1)
+                adjusted_old_end = new_start_date - datetime.timedelta(days=1)
+                old_sp.plan_end_date = adjusted_old_end
             else:
                 # 終了予定日後の遅延見直し (旧版終了予定日の翌日を起点とし、期間の空白を作らない)
-                new_start_date = active_plan.plan_end_date + datetime.timedelta(days=1)
+                new_start_date = old_end_date + datetime.timedelta(days=1)
 
             # 新版の標準 plan_end_date および6か月上限は new_start_date から計算
             max_allowed = calculate_plan_end_date(new_start_date)
@@ -693,11 +1143,142 @@ class JobRetentionService:
                 raise ValueError("計画終了予定日は計画開始日以降の日付を設定してください。")
 
             # 旧ACTIVE計画をアーカイブ
-            active_plan.status = 'ARCHIVED'
+            old_sp.plan_status = 'ARCHIVED'
             db.session.flush()
 
-            new_version = active_plan.version + 1
-            new_plan = RetentionSupportPlan(
+            # 旧互換テーブルのACTIVEレコードもアーカイブ
+            old_compat_active = RetentionSupportPlan.query.filter_by(
+                contract_id=contract_id,
+                status='ACTIVE'
+            ).first()
+            if old_compat_active:
+                old_compat_active.status = 'ARCHIVED'
+                if review_d <= old_end_date:
+                    old_compat_active.plan_end_date = new_start_date - datetime.timedelta(days=1)
+                db.session.flush()
+
+            new_version = old_sp.plan_version + 1
+
+            # 1. 共通親 SupportPlan 作成
+            new_sp = SupportPlan(
+                user_id=contract.user_id,
+                plan_version=new_version,
+                plan_status='ACTIVE', # 既存workflow体系: ACTIVE
+                plan_start_date=new_start_date,
+                plan_end_date=target_end_date,
+                activated_at=new_start_date,
+                office_service_configuration_id=contract.office_service_configuration_id,
+                created_by_id=supporter_id,
+                based_on_plan_id=old_sp.id
+            )
+            db.session.add(new_sp)
+            db.session.flush()
+
+            # 2. 共通 LongTermGoal 作成
+            start_ym = new_start_date.strftime('%Y-%m')
+            end_ym = target_end_date.strftime('%Y-%m')
+            new_ltg = LongTermGoal(
+                plan_id=new_sp.id,
+                description=overall_support_goal.strip(),
+                challenges="就労定着",
+                target_period_start=new_start_date,
+                target_period_end=target_end_date,
+                set_year_month=start_ym,
+                target_year_month=end_ym
+            )
+            db.session.add(new_ltg)
+            db.session.flush()
+
+            # 3. 共通 ShortTermGoal 作成
+            new_stg = ShortTermGoal(
+                long_term_goal_id=new_ltg.id,
+                description=overall_support_goal.strip(),
+                target_period_start=new_start_date,
+                target_period_end=target_end_date,
+                next_review_date=target_end_date,
+                set_year_month=start_ym,
+                target_year_month=end_ym
+            )
+            db.session.add(new_stg)
+            db.session.flush()
+
+            # 4. 定着支援固有 Detail 作成
+            detail_data = detail_fields.copy() if detail_fields else {}
+            # 前版スナップショットを継承しつつ更新
+            for col in [
+                'user_name', 'user_name_kana', 'gender', 'birth_date', 'age_at_planning',
+                'support_level', 'disability_handbook_type', 'employer_name', 'employer_industry',
+                'employer_address', 'employer_tel', 'employer_contact_person', 'job_start_date',
+                'work_content', 'employment_type', 'wage_condition', 'holiday_condition',
+                'working_hours_and_break', 'physical_work_environment', 'human_work_environment',
+                'related_support_organizations', 'pre_employment_handover', 'user_wishes',
+                'health_condition', 'living_environment_support', 'retention_challenges',
+                'office_name', 'office_number', 'office_address', 'office_tel', 'office_fax'
+            ]:
+                if col not in detail_data and hasattr(active_detail, col):
+                    val = getattr(active_detail, col)
+                    if val is not None:
+                        detail_data[col] = val
+
+            new_detail = RetentionSupportPlanDetail(
+                support_plan_id=new_sp.id,
+                retention_contract_id=contract_id,
+                overall_support_goal=overall_support_goal.strip(),
+                review_date=review_d, # review_date / review_reason は Detail に保持
+                review_reason=review_reason.strip(),
+                **{k: v for k, v in detail_data.items() if hasattr(RetentionSupportPlanDetail, k) and k not in ['id', 'support_plan_id', 'retention_contract_id', 'overall_support_goal', 'review_date', 'review_reason']}
+            )
+            db.session.add(new_detail)
+            db.session.flush()
+
+            # 5. RetentionSupportPlanItem 作成
+            if items_data and len(items_data) > 0:
+                for idx, it in enumerate(items_data):
+                    item_rec = RetentionSupportPlanItem(
+                        detail_id=new_detail.id,
+                        short_term_goal_id=new_stg.id,
+                        item_number=it.get('item_number', idx + 1),
+                        challenge_topic=it.get('challenge_topic', '就労定着課題'),
+                        support_policy=it.get('support_policy', overall_support_goal.strip()),
+                        support_content=it.get('support_content', overall_support_goal.strip()),
+                        support_period_start=it.get('support_period_start', new_start_date),
+                        support_period_end=it.get('support_period_end', target_end_date),
+                        support_frequency=it.get('support_frequency', '月1回以上'),
+                        role_sharing=it.get('role_sharing'),
+                        implementation_status=it.get('implementation_status'),
+                        achievement_status=it.get('achievement_status'),
+                        effectiveness_satisfaction=it.get('effectiveness_satisfaction'),
+                        remaining_challenges=it.get('remaining_challenges')
+                    )
+                    db.session.add(item_rec)
+            else:
+                default_item = RetentionSupportPlanItem(
+                    detail_id=new_detail.id,
+                    short_term_goal_id=new_stg.id,
+                    item_number=1,
+                    challenge_topic="就労定着の継続支援",
+                    support_policy=overall_support_goal.strip(),
+                    support_content=overall_support_goal.strip(),
+                    support_period_start=new_start_date,
+                    support_period_end=target_end_date,
+                    support_frequency="月1回以上"
+                )
+                db.session.add(default_item)
+
+            # 6. 一次情報出所追跡リンク作成
+            if source_links_data:
+                for sl in source_links_data:
+                    link_rec = RetentionSupportPlanSourceLink(
+                        detail_id=new_detail.id,
+                        target_field=sl.get('target_field', 'overall_support_goal'),
+                        source_type=sl.get('source_type', 'USER_VOICE'),
+                        source_id=sl.get('source_id'),
+                        excerpt_text=sl.get('excerpt_text')
+                    )
+                    db.session.add(link_rec)
+
+            # 7. 第1段階 互換性担保: 旧 retention_support_plans にも同期書き込み
+            old_compat_plan = RetentionSupportPlan(
                 contract_id=contract_id,
                 version=new_version,
                 overall_support_goal=overall_support_goal.strip(),
@@ -708,18 +1289,20 @@ class JobRetentionService:
                 status='ACTIVE',
                 created_by_id=supporter_id
             )
-            db.session.add(new_plan)
+            db.session.add(old_compat_plan)
             db.session.flush()
 
+            # 監査ログ
             audit = AuditActionLog(
                 actor_supporter_id=supporter_id,
                 user_id=contract.user_id,
                 action='REVIEW_RETENTION_SUPPORT_PLAN',
-                entity_type='RetentionSupportPlan',
-                entity_id=new_plan.id,
-                after_value=f"Version: {new_version} (from {active_plan.version}), Goal: {new_plan.overall_support_goal[:30]}, PlanEndDate: {new_plan.plan_end_date}",
+                entity_type='SupportPlan',
+                entity_id=new_sp.id,
+                after_value=f"Version: {new_version} (from {old_sp.plan_version}), Goal: {overall_support_goal[:30]}, PlanEndDate: {target_end_date}",
                 reason=f"就労定着支援計画の随時見直し（理由: {review_reason.strip()[:50]}）"
             )
             db.session.add(audit)
             db.session.commit()
-            return new_plan
+            return new_detail
+
