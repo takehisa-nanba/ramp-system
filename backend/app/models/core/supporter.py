@@ -26,11 +26,18 @@ class Supporter(db.Model):
     # ★ NEW: 職員コード (Quick Authentication/Business Key)
     staff_code = Column(String(20), nullable=False, unique=True, index=True)
     
-    # --- 基本情報 (平文・業務上必須) ---
     last_name = Column(String(50), nullable=False, index=True)
     first_name = Column(String(50), nullable=False, index=True)
     last_name_kana = Column(String(50), nullable=False)
     first_name_kana = Column(String(50), nullable=False)
+
+    @property
+    def full_name(self) -> str:
+        return f"{self.last_name} {self.first_name}"
+
+    @property
+    def name(self) -> str:
+        return self.full_name
     
     # 所属事業所 (ホームベース / JOBロールの基本単位)
     office_id = Column(Integer, ForeignKey('office_settings.id'), nullable=True, index=True)

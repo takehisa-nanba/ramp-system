@@ -181,8 +181,12 @@ def record_consent(plan_id):
             user_id=user_id,
             document_type='SUPPORT_PLAN',
             document_id=plan_id,
+            document_version=plan.plan_version,
+            action='CONSENT',
+            signature_method='LEGACY_STAFF_RECORDED',
             consent_proof=consent_proof,
-            generated_document_url=generated_document_url
+            generated_document_url=generated_document_url,
+            recorded_by_supporter_id=supporter_id
         )
         db.session.add(consent_log)
         db.session.commit()

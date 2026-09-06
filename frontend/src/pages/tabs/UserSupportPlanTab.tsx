@@ -27,8 +27,11 @@ import {
   type CaseConferenceItem,
   type UserPiiResponse,
 } from '../../services/userService';
-import { X } from 'lucide-react';
+import { X, Printer } from 'lucide-react';
 import { UXField, TextAreaWithCounter } from '../../components/common/UXFields';
+import { SignatureModal } from '../../components/documents/SignatureModal';
+import { A4PrintDocumentView, type DocumentSnapshot } from '../../components/documents/A4PrintDocumentView';
+import client from '../../services/apiClient';
 
 const statusLabel: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: '有効 (ACTIVE)', color: 'bg-emerald-100 text-emerald-700' },
@@ -112,6 +115,25 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   const [signerName, setSignerName] = useState('');
   const [consentSubmitting, setConsentSubmitting] = useState(false);
   const [consentError, setConsentError] = useState<string | null>(null);
+
+  // 新・確定・交付・署名モーダル用
+  const [selectedPlanForConsentModal, setSelectedPlanForConsentModal] = useState<any | null>(null);
+  const [previewSnapshot, setPreviewSnapshot] = useState<DocumentSnapshot | null>(null);
+  const [previewConsent, setPreviewConsent] = useState<any | null>(null);
+  const [showA4Modal, setShowA4Modal] = useState(false);
+
+  const handleOpenA4Preview = async (planId: number) => {
+    try {
+      const res = await client.get<{ snapshot: DocumentSnapshot; consent: any }>(
+        `/api/user-mypage/documents/SUPPORT_PLAN/${planId}/rendered`
+      );
+      setPreviewSnapshot(res.data.snapshot);
+      setPreviewConsent(res.data.consent);
+      setShowA4Modal(true);
+    } catch (err) {
+      console.error('A4プレビューの取得に失敗しました', err);
+    }
+  };
 
   // データ一括ロード
   const loadAllData = async () => {
@@ -1147,22 +1169,32 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             </h3>
             <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg">工程 5/7</span>
           </div>
-          {latestPlanStatus === 'PENDING_CONSENT' ? (
+          {(() => {
+            const pendingPlan = plansData?.plan_history.find(p => p.plan_status === 'PENDING_CONSENT');
+            return latestPlanStatus === 'PENDING_CONSENT' && pendingPlan ? (
             <div className="bg-amber-50/60 border border-amber-200 p-5 rounded-2xl flex items-center justify-between">
               <div>
                 <p className="text-sm font-black text-amber-900">利用者同意待ちの計画があります</p>
                 <p className="text-xs text-amber-700 mt-0.5">計画案の説明を行い、同意（デジタル署名または受領済登録）を完了させてください。</p>
               </div>
-              <button 
-                onClick={() => {
-                  setConsentError(null);
-                  setSignerName('');
-                  setShowConsentModal(true);
-                }}
-                className="flex items-center gap-1 bg-amber-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-amber-700 transition-colors shadow-sm"
-              >
-                同意手続きに進む <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => pendingPlan && handleOpenA4Preview(pendingPlan.id)}
+                  className="flex items-center gap-1 bg-white border border-amber-300 text-amber-800 px-3 py-2 rounded-xl font-bold text-xs hover:bg-amber-50 transition-colors shadow-sm"
+                >
+                  <Printer className="w-3.5 h-3.5" /> A4プレビュー
+                </button>
+                <button 
+                  onClick={() => {
+                    if (pendingPlan) {
+                      setSelectedPlanForConsentModal(pendingPlan);
+                    }
+                  }}
+                  className="flex items-center gap-1 bg-amber-600 text-white px-3.5 py-2 rounded-xl font-bold text-xs hover:bg-amber-700 transition-colors shadow-sm"
+                >
+                  交付・署名管理へ進む <ArrowRight className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="border border-dashed border-slate-200 p-6 rounded-2xl text-center">
@@ -1170,7 +1202,8 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
               <p className="text-sm font-bold text-slate-500">同意手続き待ちの計画はありません</p>
               <p className="text-xs text-slate-400 mt-1">計画原案が確定し承認されると、同意手続きに進むことができます。</p>
             </div>
-          )}
+          );
+          })()}
         </div>
 
         {/* 8. 有効な計画 / ACTIVE計画 */}
@@ -1624,6 +1657,36 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             </div>
           </div>
         </div>
+      )}
+
+      {/* 新・確定・交付・署名モーダル */}
+      {selectedPlanForConsentModal && (
+        <SignatureModal
+          isOpen={true}
+          onClose={() => setSelectedPlanForConsentModal(null)}
+          documentType="SUPPORT_PLAN"
+          documentId={selectedPlanForConsentModal.id}
+          documentTitle={`個別支援計画 第${selectedPlanForConsentModal.version || 1}版`}
+          isStaffMode={true}
+          onSuccess={() => {
+            setSelectedPlanForConsentModal(null);
+            loadAllData();
+          }}
+          onOpenPreview={() => handleOpenA4Preview(selectedPlanForConsentModal.id)}
+        />
+      )}
+
+      {/* A4 帳票プレビューモーダル */}
+      {showA4Modal && previewSnapshot && (
+        <A4PrintDocumentView
+          snapshot={previewSnapshot}
+          consentInfo={previewConsent}
+          onClose={() => {
+            setShowA4Modal(false);
+            setPreviewSnapshot(null);
+            setPreviewConsent(null);
+          }}
+        />
       )}
 
       {/* 計画承認確認モーダル */}

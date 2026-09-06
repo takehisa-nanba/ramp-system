@@ -1,7 +1,7 @@
 # backend/app/models/support/job_retention.py
 
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, UniqueConstraint, Index
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, UniqueConstraint, Index, JSON
 from sqlalchemy.orm import relationship
 import dateutil.relativedelta
 import datetime
@@ -231,6 +231,9 @@ class MonthlyRetentionReport(db.Model):
     created_by_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
     created_at = Column(DateTime, default=func.now(), nullable=False)
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now(), nullable=False)
+
+    # ★ 文書不変性: 確定時の一次情報・要約・公式帳票項目のスナップショット（Source of Truth）
+    document_snapshot = Column(JSON, nullable=True)
 
     contract = relationship('JobRetentionContract', back_populates='monthly_reports')
     created_by = relationship('Supporter', foreign_keys=[created_by_id])

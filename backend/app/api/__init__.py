@@ -24,6 +24,7 @@ from .export import export_bp
 from .support_records import bp as support_records_bp
 from .activities import activities_bp
 from .job_retention import job_retention_bp
+from .consents import consents_bp, user_documents_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
@@ -48,5 +49,7 @@ ALL_BLUEPRINTS = [
     support_records_bp,
     activities_bp,
     job_retention_bp,
+    consents_bp,
+    user_documents_bp,
 ]
 

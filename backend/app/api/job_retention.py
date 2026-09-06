@@ -611,6 +611,7 @@ def preview_monthly_report(contract_id: int, year_month: str):
         existing = JobRetentionService.get_monthly_report(contract_id, year_month)
         if existing:
             return jsonify({
+                "id": existing.id,
                 "contract_id": contract_id,
                 "report_year_month": year_month,
                 # 内部整理項目
@@ -858,6 +859,7 @@ def create_or_review_support_plan(contract_id: int):
         detail_fields = data.get('detail_fields')
         long_term_goal_data = data.get('long_term_goal_data')
         short_term_goal_data = data.get('short_term_goal_data')
+        initial_status = data.get('initial_status', 'DRAFT')
 
         plan = JobRetentionService.create_or_review_support_plan(
             contract_id=contract_id,
@@ -871,7 +873,8 @@ def create_or_review_support_plan(contract_id: int):
             source_links_data=source_links_data,
             detail_fields=detail_fields,
             long_term_goal_data=long_term_goal_data,
-            short_term_goal_data=short_term_goal_data
+            short_term_goal_data=short_term_goal_data,
+            initial_status=initial_status
         )
         status_info = plan.compute_deadline_status()
         return jsonify({

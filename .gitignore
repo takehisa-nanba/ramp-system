@@ -105,3 +105,8 @@ test_*.py
 
 # Scratch scripts
 scripts/patches/
+
+# Uploaded Evidence
+backend/app/uploads/**/*
+!backend/app/uploads/**/.gitkeep
+

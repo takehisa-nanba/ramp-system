@@ -5,7 +5,7 @@ from datetime import datetime, date, timedelta # timedeltaを追加し、日付�
 from enum import Enum as PyEnum
 
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, Enum # Enumを統合
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, Enum, JSON
 from sqlalchemy.dialects.postgresql import UUID # PostgreSQL環境を想定
 
 # ====================================================================
@@ -61,9 +61,13 @@ class SupportPlan(db.Model):
     created_at = Column(DateTime, default=func.now())
     updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
     
+    # ★ 文書不変性: 確定時の全構成・マスタ情報スナップショット（Source of Truth）
+    document_snapshot = Column(JSON, nullable=True)
+    
     # --- リレーションシップ ---
     user = db.relationship('User', back_populates='support_plans')
     created_by = db.relationship('Supporter', foreign_keys=[created_by_id])
+    sabikan_approved_by = db.relationship('Supporter', foreign_keys=[sabikan_approved_by_id])
     office_service_configuration = db.relationship('OfficeServiceConfiguration', foreign_keys=[office_service_configuration_id])
     
     # 根拠となる方針へのリレーション

@@ -167,7 +167,7 @@ def test_create_support_plan_success_and_guard(app, auth_setup):
     assert res_auto.status_code == 201
     plan_data = res_auto.get_json()["plan"]
     assert plan_data["version"] == 1
-    assert plan_data["status"] == "ACTIVE"
+    assert plan_data["status"] == "DRAFT"
     assert plan_data["start_date"] == "2026-09-01"
     assert plan_data["plan_end_date"] == "2027-02-28"
     assert plan_data["next_plan_start_date"] == "2027-03-01"
@@ -197,7 +197,8 @@ def test_review_support_plan_early_review_continuous_history(app, auth_setup):
         overall_support_goal="初期目標: 職場定着と基本ルーチンの確立",
         start_date=datetime.date(2026, 9, 1),
         plan_end_date=datetime.date(2027, 2, 28),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
 
     # 見直し理由なしで見直そうとすると 400
@@ -220,7 +221,8 @@ def test_review_support_plan_early_review_continuous_history(app, auth_setup):
         json={
             "overall_support_goal": "新目標: 業務量増加に伴う体調管理の自律",
             "review_date": "2026-11-01",
-            "review_reason": "配置転換に伴う支援方針の早期見直し"
+            "review_reason": "配置転換に伴う支援方針の早期見直し",
+            "initial_status": "ACTIVE"
         }
     )
     assert res_review.status_code == 201
@@ -279,7 +281,8 @@ def test_review_support_plan_delayed_review_continuous_history(app, auth_setup):
         overall_support_goal="初期目標: 職場定着と基本ルーチンの確立",
         start_date=datetime.date(2026, 9, 1),
         plan_end_date=datetime.date(2027, 2, 28),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
 
     # 2. 終了予定日後の遅延見直し実行 (見直し日: 2027-03-15)
@@ -289,7 +292,8 @@ def test_review_support_plan_delayed_review_continuous_history(app, auth_setup):
         json={
             "overall_support_goal": "新目標: 遅延見直し後の業務自律化",
             "review_date": "2027-03-15",
-            "review_reason": "定期見直しの遅延実施"
+            "review_reason": "定期見直しの遅延実施",
+            "initial_status": "ACTIVE"
         }
     )
     assert res_review.status_code == 201
@@ -378,7 +382,8 @@ def test_first_month_report_proposes_active_plan_goal(app, auth_setup):
         overall_support_goal="職場での主体的SOS発信力を身につける",
         start_date=datetime.date(2026, 9, 1),
         plan_end_date=datetime.date(2027, 2, 28),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
 
     # 1. 前月確定レポートがない初月(2026-09) -> 支援計画の目標が初期提案値になる

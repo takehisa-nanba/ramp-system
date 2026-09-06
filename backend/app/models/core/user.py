@@ -38,6 +38,9 @@ class User(db.Model):
     # ★ 復職支援ケースフラグ（原理14）
     is_return_to_work_case = Column(Boolean, default=False)
     
+    # ★ 電子交付・電子署名除外例外フラグ（False=事業所標準に従う, True=この利用者のみ紙運用強制）
+    electronic_document_opt_out = Column(Boolean, default=False, nullable=False)
+    
     remarks = Column(Text) # 職員が使用する内部的な備考欄
 
     # --- タイムスタンプ・論理削除 ---

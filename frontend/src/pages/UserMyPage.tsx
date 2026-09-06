@@ -1,6 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import type { MyPageTodayResponse } from '../services/userMyPageApi';
 import { getMyPageToday, postMyPageAttendance, postMyPageDailyLog } from '../services/userMyPageApi';
+import client from '../services/apiClient';
+import { A4PrintDocumentView, type DocumentSnapshot } from '../components/documents/A4PrintDocumentView';
+import { SignatureModal } from '../components/documents/SignatureModal';
+import { FileText, Printer, ShieldAlert } from 'lucide-react';
+
+interface PendingDocumentItem {
+  document_type: 'SUPPORT_PLAN' | 'RETENTION_SUPPORT_REPORT';
+  document_id: number;
+  document_version: number;
+  title: string;
+  delivered_at: string | null;
+  action_required: 'CONSENT' | 'ACKNOWLEDGEMENT';
+  is_retention_plan?: boolean;
+}
+
+interface DeliveredDocumentItem {
+  delivery_id: number;
+  document_type: 'SUPPORT_PLAN' | 'RETENTION_SUPPORT_REPORT';
+  document_id: number;
+  document_version: number;
+  title: string;
+  delivered_at: string | null;
+  viewed_at: string | null;
+  status: string;
+  is_signed: boolean;
+}
 
 const UserMyPage: React.FC = () => {
   const [data, setData] = useState<MyPageTodayResponse | null>(null);
@@ -15,8 +41,22 @@ const UserMyPage: React.FC = () => {
   const [savingLog, setSavingLog] = useState(false);
   const [hasSavedLog, setHasSavedLog] = useState(false);
 
+  // 電子交付・署名管理 State
+  const [pendingDocs, setPendingDocs] = useState<PendingDocumentItem[]>([]);
+  const [deliveredDocs, setDeliveredDocs] = useState<DeliveredDocumentItem[]>([]);
+  const [loadingDocs, setLoadingDocs] = useState(false);
+
+  // A4プレビュー Modal State
+  const [previewSnapshot, setPreviewSnapshot] = useState<DocumentSnapshot | null>(null);
+  const [previewConsent, setPreviewConsent] = useState<any | null>(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  // 署名モーダル State
+  const [selectedDocForSign, setSelectedDocForSign] = useState<PendingDocumentItem | null>(null);
+
   useEffect(() => {
     fetchData();
+    fetchDocuments();
   }, []);
 
   const fetchData = async () => {
@@ -36,13 +76,42 @@ const UserMyPage: React.FC = () => {
     }
   };
 
+  const fetchDocuments = async () => {
+    try {
+      setLoadingDocs(true);
+      const [pendingRes, deliveredRes] = await Promise.all([
+        client.get<{ pending_documents: PendingDocumentItem[] }>('/api/user-mypage/documents/pending'),
+        client.get<{ delivered_documents: DeliveredDocumentItem[] }>('/api/user-mypage/documents/delivered')
+      ]);
+      setPendingDocs(pendingRes.data.pending_documents || []);
+      setDeliveredDocs(deliveredRes.data.delivered_documents || []);
+    } catch (err) {
+      console.error('文書一覧の取得に失敗しました', err);
+    } finally {
+      setLoadingDocs(false);
+    }
+  };
+
+  const handleOpenRenderedDocument = async (docType: string, docId: number) => {
+    try {
+      const res = await client.get<{ snapshot: DocumentSnapshot; consent: any }>(
+        `/api/user-mypage/documents/${docType}/${docId}/rendered`
+      );
+      setPreviewSnapshot(res.data.snapshot);
+      setPreviewConsent(res.data.consent);
+      setShowPreviewModal(true);
+      // 再取得して閲覧日時を同期
+      await fetchDocuments();
+    } catch (err) {
+      setError('文書の表示に失敗しました。');
+    }
+  };
+
   const handleAttendance = async (type: 'CHECK_IN' | 'CHECK_OUT') => {
     try {
       await postMyPageAttendance(type);
       setSuccessMsg(type === 'CHECK_IN' ? '通所を記録しました！' : '退所を記録しました！お疲れ様でした。');
-      await fetchData(); // Refresh data
-      
-      // hide success msg after 3 seconds
+      await fetchData();
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       setError('打刻に失敗しました。');
@@ -61,7 +130,6 @@ const UserMyPage: React.FC = () => {
       setSuccessMsg('日報を保存しました！');
       setHasSavedLog(true);
       await fetchData();
-      
       setTimeout(() => setSuccessMsg(null), 3000);
     } catch (err) {
       setError('保存に失敗しました。');
@@ -79,23 +147,18 @@ const UserMyPage: React.FC = () => {
     );
   }
 
-  if (!data) {
-    return (
-      <div className="p-8">
-        <div className="bg-red-50 text-red-600 p-4 rounded-xl border border-red-100">
-          データが見つかりません
-        </div>
-      </div>
-    );
-  }
-
-  const { attendance } = data;
+  const attendance = data?.attendance || {
+    checked_in: false,
+    check_in_time: null,
+    checked_out: false,
+    check_out_time: null,
+  };
   const canCheckIn = !attendance.checked_in;
   const canCheckOut = attendance.checked_in && !attendance.checked_out;
 
   return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      
+    <div className="max-w-4xl mx-auto p-4 sm:p-6 lg:p-8 space-y-8">
+      {/* Toast Messages */}
       {successMsg && (
         <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl border border-emerald-200 font-bold flex items-center justify-between animate-in fade-in slide-in-from-top-4">
           {successMsg}
@@ -110,8 +173,95 @@ const UserMyPage: React.FC = () => {
 
       <div>
         <h1 className="text-2xl font-black text-slate-800 tracking-tight">マイページ</h1>
-        <p className="text-slate-500 mt-1 text-sm font-medium">毎日の打刻と振り返りを行いましょう</p>
+        <p className="text-slate-500 mt-1 text-sm font-medium">日報の記入、通所打刻、交付文書の確認・署名が行えます</p>
       </div>
+
+      {/* ============================================================== */}
+      {/* 交付文書・署名確認エリア */}
+      {/* ============================================================== */}
+      {loadingDocs && (
+        <div className="flex items-center justify-center p-4">
+          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-indigo-600"></div>
+          <span className="ml-2 text-xs text-slate-500 font-medium">交付文書を確認中...</span>
+        </div>
+      )}
+      {pendingDocs.length > 0 && (
+        <div className="bg-amber-50/80 rounded-3xl p-6 border-2 border-amber-200 shadow-sm space-y-4">
+          <div className="flex items-center space-x-2 text-amber-900">
+            <ShieldAlert className="w-5 h-5 text-amber-600 flex-shrink-0" />
+            <h2 className="text-base font-bold">確認・署名が必要な文書があります（{pendingDocs.length}件）</h2>
+          </div>
+          <div className="space-y-3">
+            {pendingDocs.map((doc) => (
+              <div
+                key={`${doc.document_type}_${doc.document_id}`}
+                className="bg-white p-4 rounded-2xl border border-amber-200 shadow-sm flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3"
+              >
+                <div className="flex items-start space-x-3">
+                  <FileText className="w-5 h-5 text-indigo-600 mt-0.5" />
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-sm">{doc.title}</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      交付日: {doc.delivered_at ? doc.delivered_at.slice(0, 10) : '未設定'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2 w-full sm:w-auto">
+                  <button
+                    onClick={() => handleOpenRenderedDocument(doc.document_type, doc.document_id)}
+                    className="flex-1 sm:flex-initial px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
+                  >
+                    内容を確認する
+                  </button>
+                  <button
+                    onClick={() => setSelectedDocForSign(doc)}
+                    className="flex-1 sm:flex-initial px-4 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-sm"
+                  >
+                    {doc.action_required === 'CONSENT' ? '同意・電子署名する' : '確認を完了する'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 交付済み文書一覧 */}
+      {deliveredDocs.length > 0 && (
+        <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/40 border border-slate-100">
+          <h2 className="text-lg font-black text-slate-800 mb-4 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-indigo-600" />
+            <span>交付済み文書一覧</span>
+          </h2>
+          <div className="space-y-2">
+            {deliveredDocs.map((doc) => (
+              <div
+                key={doc.delivery_id}
+                className="p-3 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 flex justify-between items-center text-xs transition"
+              >
+                <div className="flex items-center space-x-3">
+                  <span className={`px-2 py-0.5 rounded-full font-bold text-[10px] ${
+                    doc.is_signed ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {doc.is_signed ? '署名済' : '未署名'}
+                  </span>
+                  <span className="font-semibold text-slate-800">{doc.title}</span>
+                  <span className="text-slate-500 hidden sm:inline">
+                    (交付日: {doc.delivered_at ? doc.delivered_at.slice(0, 10) : '-'})
+                  </span>
+                </div>
+                <button
+                  onClick={() => handleOpenRenderedDocument(doc.document_type, doc.document_id)}
+                  className="flex items-center space-x-1 px-3 py-1 bg-white hover:bg-slate-50 border border-slate-300 text-slate-700 font-medium rounded-xl transition"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>A4帳票閲覧</span>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Attendance Section */}
       <div className="bg-white rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-200/40 border border-slate-100">
@@ -232,6 +382,37 @@ const UserMyPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {/* A4 帳票プレビューモーダル */}
+      {showPreviewModal && previewSnapshot && (
+        <A4PrintDocumentView
+          snapshot={previewSnapshot}
+          consentInfo={previewConsent}
+          onClose={() => {
+            setShowPreviewModal(false);
+            setPreviewSnapshot(null);
+            setPreviewConsent(null);
+          }}
+        />
+      )}
+
+      {/* 本人電子署名モーダル */}
+      {selectedDocForSign && (
+        <SignatureModal
+          isOpen={true}
+          onClose={() => setSelectedDocForSign(null)}
+          documentType={selectedDocForSign.document_type}
+          documentId={selectedDocForSign.document_id}
+          documentTitle={selectedDocForSign.title}
+          isStaffMode={false} // 本人モード
+          onSuccess={() => {
+            setSelectedDocForSign(null);
+            fetchDocuments();
+            setSuccessMsg('電子署名が完了しました。');
+          }}
+          onOpenPreview={() => handleOpenRenderedDocument(selectedDocForSign.document_type, selectedDocForSign.document_id)}
+        />
+      )}
     </div>
   );
 };

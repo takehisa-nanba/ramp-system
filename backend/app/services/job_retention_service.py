@@ -555,7 +555,15 @@ class JobRetentionService:
         report.stakeholder_efforts = report_data.get('stakeholder_efforts')
         report.sharing_notes = report_data.get('sharing_notes')
 
-        report.status = 'FINALIZED' if finalize else 'DRAFT'
+        if finalize:
+            from backend.app.services.document_consent_service import DocumentConsentService
+            report.status = 'FINALIZED'
+            db.session.flush() # ID確定
+            report.document_snapshot = DocumentConsentService.generate_document_snapshot(
+                'RETENTION_SUPPORT_REPORT', report.id
+            )
+        else:
+            report.status = 'DRAFT'
 
         try:
             # 監査ログ記録前に flush して実 entity_id を確定する
@@ -958,7 +966,8 @@ class JobRetentionService:
         source_links_data: Optional[List[Dict[str, Any]]] = None,
         detail_fields: Optional[Dict[str, Any]] = None,
         long_term_goal_data: Optional[Dict[str, Any]] = None,
-        short_term_goal_data: Optional[Dict[str, Any]] = None
+        short_term_goal_data: Optional[Dict[str, Any]] = None,
+        initial_status: str = 'DRAFT'
     ) -> RetentionSupportPlanDetail:
         """
         就労定着支援計画の新規作成または随時見直しを行う。
@@ -966,10 +975,11 @@ class JobRetentionService:
         定着支援固有拡張（RetentionSupportPlanDetail, RetentionSupportPlanItem, SourceLink）
         を完全に統合して永続化する。
 
+        - plan_status: initial_status (デフォルト: 'DRAFT')
         - plan_end_date: 当該計画版の終了予定日 (原則: start_date + 6 calendar months - 1 day)
         - 初回作成時: plan_version=1, review_date=None, review_reason=None (初回策定は見直し理由ではない)
         - 見直し時:
-            - 以前のACTIVE版をARCHIVEDに変更
+            - initial_status == 'DRAFT' の場合、旧ACTIVE版はアーカイブせずACTIVEを維持
             - 早期見直し時 (review_d <= 旧版終了予定日): 旧版の終了日を前日(review_d - 1日)として連続保持
             - 終了予定日後の遅延見直し: 旧版終了予定日+1日を新開始日として連続保持
             - plan_version=前版+1, 基準日は見直し日, 新計画終了予定日 <= 見直し日+6か月-1日
@@ -1013,10 +1023,10 @@ class JobRetentionService:
             new_sp = SupportPlan(
                 user_id=contract.user_id,
                 plan_version=1,
-                plan_status='ACTIVE',
+                plan_status=initial_status,
                 plan_start_date=base_date,
                 plan_end_date=target_end_date,
-                activated_at=base_date,
+                activated_at=base_date if initial_status == 'ACTIVE' else None,
                 office_service_configuration_id=contract.office_service_configuration_id,
                 created_by_id=supporter_id
             )
@@ -1154,7 +1164,7 @@ class JobRetentionService:
                 review_date=init_review_date, # 初回は None
                 review_reason=init_review_reason, # 初回は None
                 plan_end_date=target_end_date,
-                status='ACTIVE',
+                status=initial_status,
                 created_by_id=supporter_id
             )
             db.session.add(old_compat_plan)
@@ -1206,20 +1216,21 @@ class JobRetentionService:
             if target_end_date < new_start_date:
                 raise ValueError("計画終了予定日は計画開始日以降の日付を設定してください。")
 
-            # 旧ACTIVE計画をアーカイブ
-            old_sp.plan_status = 'ARCHIVED'
-            db.session.flush()
-
-            # 旧互換テーブルのACTIVEレコードもアーカイブ
-            old_compat_active = RetentionSupportPlan.query.filter_by(
-                contract_id=contract_id,
-                status='ACTIVE'
-            ).first()
-            if old_compat_active:
-                old_compat_active.status = 'ARCHIVED'
-                if review_d <= old_end_date:
-                    old_compat_active.plan_end_date = new_start_date - datetime.timedelta(days=1)
+            # initial_status == 'ACTIVE' の場合のみ即時アーカイブ（下書き・確定待ち中は旧版ACTIVEを維持）
+            if initial_status == 'ACTIVE':
+                old_sp.plan_status = 'ARCHIVED'
                 db.session.flush()
+
+                # 旧互換テーブルのACTIVEレコードもアーカイブ
+                old_compat_active = RetentionSupportPlan.query.filter_by(
+                    contract_id=contract_id,
+                    status='ACTIVE'
+                ).first()
+                if old_compat_active:
+                    old_compat_active.status = 'ARCHIVED'
+                    if review_d <= old_end_date:
+                        old_compat_active.plan_end_date = new_start_date - datetime.timedelta(days=1)
+                    db.session.flush()
 
             new_version = old_sp.plan_version + 1
 
@@ -1227,10 +1238,10 @@ class JobRetentionService:
             new_sp = SupportPlan(
                 user_id=contract.user_id,
                 plan_version=new_version,
-                plan_status='ACTIVE',
+                plan_status=initial_status,
                 plan_start_date=new_start_date,
                 plan_end_date=target_end_date,
-                activated_at=new_start_date,
+                activated_at=new_start_date if initial_status == 'ACTIVE' else None,
                 office_service_configuration_id=contract.office_service_configuration_id,
                 created_by_id=supporter_id,
                 based_on_plan_id=old_sp.id
@@ -1382,7 +1393,7 @@ class JobRetentionService:
                 review_date=review_d,
                 review_reason=review_reason.strip(),
                 plan_end_date=target_end_date,
-                status='ACTIVE',
+                status=initial_status,
                 created_by_id=supporter_id
             )
             db.session.add(old_compat_plan)

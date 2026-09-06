@@ -281,17 +281,33 @@ class SupportPlanService:
             raise ValidationError("Consent log mismatch.")
 
         # 既存のACTIVE計画があればアーカイブ（連続性を実現）
-        old_active_plan = SupportPlan.query.filter_by(
-            user_id=plan.user_id,
-            plan_status='ACTIVE'
+        old_active_plan = SupportPlan.query.filter(
+            SupportPlan.user_id == plan.user_id,
+            SupportPlan.id != plan.id,
+            SupportPlan.plan_status == 'ACTIVE'
         ).first()
         if old_active_plan:
             old_active_plan.plan_status = 'ARCHIVED'
             db.session.add(old_active_plan)
+            # 互換テーブルの旧版も同期
+            if old_active_plan.retention_detail and old_active_plan.retention_detail.legacy_retention_plan_id:
+                from backend.app.models.support.job_retention import RetentionSupportPlan
+                legacy_old = db.session.get(RetentionSupportPlan, old_active_plan.retention_detail.legacy_retention_plan_id)
+                if legacy_old:
+                    legacy_old.status = 'ARCHIVED'
+                    db.session.add(legacy_old)
 
         # ★ LOCK 2: 最終確定 (ACTIVE化)
         plan.plan_status = 'ACTIVE'
         consent_log.plan = plan 
+        
+        # 互換テーブルの新版も同期
+        if plan.retention_detail and plan.retention_detail.legacy_retention_plan_id:
+            from backend.app.models.support.job_retention import RetentionSupportPlan
+            legacy_new = db.session.get(RetentionSupportPlan, plan.retention_detail.legacy_retention_plan_id)
+            if legacy_new:
+                legacy_new.status = 'ACTIVE'
+                db.session.add(legacy_new)
         
         db.session.add(plan)
         db.session.add(consent_log)

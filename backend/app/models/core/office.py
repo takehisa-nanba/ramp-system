@@ -62,6 +62,7 @@ class OfficeSetting(db.Model):
     municipality_id = Column(Integer, ForeignKey('municipality_master.id'), nullable=False, index=True) 
     
     is_active = Column(Boolean, default=True, nullable=False)
+    electronic_document_enabled = Column(Boolean, default=False, nullable=False) # 事業所全体で電子交付・電子署名運用を有効にするか（False=原則紙運用, True=原則電子運用）
     office_seal_image_url = Column(String(500), nullable=True)
     
     # 所在地・連絡先

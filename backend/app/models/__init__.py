@@ -123,7 +123,7 @@ from backend.app.models.finance.billing_data import (
 )
 from backend.app.models.finance.accounting_management import (
     MonthlyBillingSummary, ClientInvoice, AgencyReceiptStatement, DocumentConsentLog,
-    CorporateTransferLog
+    DocumentDeliveryLog, CorporateTransferLog
 )
 from backend.app.models.finance.wage_management import (
     SalesInvoice, UserWageLog

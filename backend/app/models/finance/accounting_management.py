@@ -123,25 +123,71 @@ class DocumentConsentLog(db.Model):
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     
     # どの文書に対する同意か (汎用リレーション)
-    document_type = Column(String(50), nullable=False) # (例: 'SUPPORT_PLAN', 'MONITORING_REPORT')
+    document_type = Column(String(50), nullable=False) # (例: 'SUPPORT_PLAN', 'RETENTION_SUPPORT_REPORT')
     document_id = Column(Integer, nullable=False, index=True)
+    document_version = Column(Integer, nullable=False) # 文書版数（defaultなし、明示必須）
+    action = Column(String(30), nullable=False) # 'CONSENT'（計画同意）または 'ACKNOWLEDGEMENT'（レポート確認）
     
-    # --- 証跡（原理1） ---
-    consent_timestamp = Column(DateTime, nullable=False, default=func.now())
-    # (例: 'OTL_TOKEN_ID_...', 'PIN_HASH_...', 'DIGITAL_SIGNATURE_ID')
+    # --- 署名・同意証跡 ---
+    signature_method = Column(String(30), nullable=False) # 'USER_DIGITAL', 'PAPER_UPLOAD', 'LEGACY_STAFF_RECORDED'
+    consent_timestamp = Column(DateTime, nullable=False, default=func.now()) # 本人が署名または確認した日時
     consent_proof = Column(String(255)) 
     
-    # 同意がなされた時点での、システム自動生成された証憑PDFのURL
+    # 本人へ提示・交付した確定版文書URL
     generated_document_url = Column(String(500)) 
+    
+    # 紙署名の場合の署名済み証拠ファイルURL (画像/PDF)
+    evidence_file_url = Column(String(500), nullable=True)
+    
+    # 登録職員情報
+    recorded_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    recorded_at = Column(DateTime, nullable=False, default=func.now()) # システムへ証跡を登録した日時
 
-    user = db.relationship('User')
-    # SupportPlanへのリレーション (SupportPlan側で定義)
+    user = db.relationship('User', foreign_keys=[user_id])
+    recorded_by_supporter = db.relationship('Supporter', foreign_keys=[recorded_by_supporter_id])
+    
+    # SupportPlanへのリレーション
     plan = db.relationship(
         'SupportPlan', 
         primaryjoin="and_(DocumentConsentLog.document_id == SupportPlan.id, DocumentConsentLog.document_type == 'SUPPORT_PLAN')",
         foreign_keys="DocumentConsentLog.document_id",
         back_populates='consent_log'
     )
+
+# ====================================================================
+# 5. DocumentDeliveryLog (文書交付・閲覧履歴)
+# ====================================================================
+class DocumentDeliveryLog(db.Model):
+    """
+    確定文書の交付・閲覧履歴。
+    同意・確認証跡（DocumentConsentLog）とは分離し、
+    電磁的交付（DIGITAL）や紙交付（PAPER）の事実および初回閲覧を記録する。
+    """
+    __tablename__ = 'document_delivery_logs'
+    __table_args__ = (
+        db.UniqueConstraint(
+            'document_type', 'document_id', 'document_version', 'recipient_user_id', 'delivery_method',
+            name='uq_doc_delivery_recipient_method'
+        ),
+    )
+
+    id = Column(Integer, primary_key=True)
+    document_type = Column(String(50), nullable=False, index=True) # 'SUPPORT_PLAN', 'RETENTION_SUPPORT_REPORT'
+    document_id = Column(Integer, nullable=False, index=True)
+    document_version = Column(Integer, nullable=False) # defaultなし（アプリケーション側でVersion明示必須、Fail Closed）
+
+    recipient_user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True) # 本人限定、NOT NULL
+
+    delivery_method = Column(String(20), nullable=False) # 'DIGITAL', 'PAPER'
+    delivered_at = Column(DateTime, nullable=False, default=func.now())
+    viewed_at = Column(DateTime, nullable=True) # 初回閲覧日時
+
+    delivered_by_supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=True)
+    created_at = Column(DateTime, nullable=False, default=func.now())
+
+    recipient_user = db.relationship('User', foreign_keys=[recipient_user_id])
+    delivered_by = db.relationship('Supporter', foreign_keys=[delivered_by_supporter_id])
+
 
 class CorporateTransferLog(db.Model):
     """

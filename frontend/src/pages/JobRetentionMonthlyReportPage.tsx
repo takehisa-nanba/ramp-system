@@ -4,7 +4,9 @@ import { jobRetentionApi } from '../services/jobRetentionApi';
 import type { RetentionContract, MonthlyRetentionReportData, SupportPlan } from '../services/jobRetentionApi';
 import { RetentionPlanBanner } from '../components/retention/RetentionPlanBanner';
 import { RetentionPlanReviewModal } from '../components/retention/RetentionPlanReviewModal';
-import { FileText, Save, CheckCircle2, ArrowLeft, Calendar, Sparkles, AlertCircle, Target, ArrowRight, ShieldCheck } from 'lucide-react';
+import { A4PrintDocumentView } from '../components/documents/A4PrintDocumentView';
+import { SignatureModal } from '../components/documents/SignatureModal';
+import { FileText, Save, CheckCircle2, ArrowLeft, Calendar, Sparkles, AlertCircle, Target, ArrowRight, ShieldCheck, Printer, Send, Lock } from 'lucide-react';
 
 export const JobRetentionMonthlyReportPage: React.FC = () => {
   const { contractId } = useParams<{ contractId: string }>();
@@ -19,12 +21,15 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
   const [activePlan, setActivePlan] = useState<SupportPlan | null>(null);
   const [historyPlans, setHistoryPlans] = useState<SupportPlan[]>([]);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [isConsentModalOpen, setIsConsentModalOpen] = useState(false);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const cid = contractId ? parseInt(contractId, 10) : 0;
+  const isFinalized = reportData?.status === 'FINALIZED';
 
   useEffect(() => {
     if (!cid) return;
@@ -53,7 +58,7 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
   };
 
   const handleFieldChange = (field: keyof MonthlyRetentionReportData, value: string) => {
-    if (!reportData) return;
+    if (!reportData || isFinalized) return;
     setReportData({
       ...reportData,
       [field]: value
@@ -70,9 +75,14 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
       setSuccessMsg(res.msg);
       setReportData({
         ...reportData,
+        id: res.id || reportData.id,
         status: finalize ? 'FINALIZED' : 'DRAFT'
       });
       setTimeout(() => setSuccessMsg(null), 4000);
+      if (finalize) {
+        // 確定後、交付モーダルへの案内も可能
+        loadData();
+      }
     } catch (err: any) {
       setErrorMsg(err?.response?.data?.msg || 'レポートの保存に失敗しました。');
     } finally {
@@ -120,15 +130,36 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
           </p>
         </div>
 
-        {/* 対象月選択 */}
-        <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
-          <Calendar className="w-4 h-4 text-indigo-600" />
-          <input
-            type="month"
-            value={yearMonth}
-            onChange={(e) => setYearMonth(e.target.value)}
-            className="text-xs font-semibold text-slate-700 focus:outline-none"
-          />
+        {/* 対象月選択 & 確定時アクション */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200 shadow-sm">
+            <Calendar className="w-4 h-4 text-indigo-600" />
+            <input
+              type="month"
+              value={yearMonth}
+              onChange={(e) => setYearMonth(e.target.value)}
+              className="text-xs font-semibold text-slate-700 focus:outline-none"
+            />
+          </div>
+
+          {isFinalized && reportData?.id && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsPreviewModalOpen(true)}
+                className="px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                A4プレビュー・印刷
+              </button>
+              <button
+                onClick={() => setIsConsentModalOpen(true)}
+                className="px-3 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+              >
+                <Send className="w-3.5 h-3.5" />
+                交付・同意管理
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -190,8 +221,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.support_goal || ''}
                 onChange={(e) => handleFieldChange('support_goal', e.target.value)}
                 rows={2}
+                readOnly={isFinalized}
                 placeholder="初月は全体計画の目標から、通常月は前月確定レポートの今後の支援内容から提案されます。"
-                className="w-full p-3 text-xs rounded-xl border border-indigo-200 bg-indigo-50/20 focus:bg-white focus:ring-2 focus:ring-indigo-500 leading-relaxed font-medium"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed font-medium ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-indigo-200 bg-indigo-50/20 focus:bg-white focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -204,8 +240,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.support_content || ''}
                 onChange={(e) => handleFieldChange('support_content', e.target.value)}
                 rows={3}
+                readOnly={isFinalized}
                 placeholder="本人への定期面談、職場訪問等の具体的な支援内容"
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -218,8 +259,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.support_result || ''}
                 onChange={(e) => handleFieldChange('support_result', e.target.value)}
                 rows={3}
+                readOnly={isFinalized}
                 placeholder="支援の結果確認された状況、本人の安定度・変化"
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -235,8 +281,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.future_support_plan || ''}
                 onChange={(e) => handleFieldChange('future_support_plan', e.target.value)}
                 rows={2}
+                readOnly={isFinalized}
                 placeholder="次月に向けて継続・強化する支援方針（確定すると次月の当月目標に引き継がれます）"
-                className="w-full p-3 text-xs rounded-xl border border-emerald-200 bg-emerald-50/20 focus:bg-white focus:ring-2 focus:ring-emerald-500 leading-relaxed font-medium"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed font-medium ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-emerald-200 bg-emerald-50/20 focus:bg-white focus:ring-2 focus:ring-emerald-500'
+                }`}
               />
             </div>
 
@@ -249,8 +300,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.stakeholder_efforts || ''}
                 onChange={(e) => handleFieldChange('stakeholder_efforts', e.target.value)}
                 rows={2}
+                readOnly={isFinalized}
                 placeholder="本人・事業主・医療機関・地域障害者職業センター等の取組状況"
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -263,8 +319,13 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.sharing_notes || ''}
                 onChange={(e) => handleFieldChange('sharing_notes', e.target.value)}
                 rows={2}
+                readOnly={isFinalized}
                 placeholder="関係者間で共有すべき留意事項・確認結果"
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
           </div>
@@ -297,7 +358,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.interview_records || ''}
                 onChange={(e) => handleFieldChange('interview_records', e.target.value)}
                 rows={3}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border font-mono leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -309,7 +375,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.company_visit_records || ''}
                 onChange={(e) => handleFieldChange('company_visit_records', e.target.value)}
                 rows={3}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 font-mono leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border font-mono leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
           </div>
@@ -324,7 +395,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.work_status_summary || ''}
                 onChange={(e) => handleFieldChange('work_status_summary', e.target.value)}
                 rows={4}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -336,7 +412,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.life_status_summary || ''}
                 onChange={(e) => handleFieldChange('life_status_summary', e.target.value)}
                 rows={4}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
           </div>
@@ -351,7 +432,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.user_coping_summary || ''}
                 onChange={(e) => handleFieldChange('user_coping_summary', e.target.value)}
                 rows={4}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
 
@@ -363,7 +449,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
                 value={reportData.employer_feedback_summary || ''}
                 onChange={(e) => handleFieldChange('employer_feedback_summary', e.target.value)}
                 rows={4}
-                className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+                readOnly={isFinalized}
+                className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                  isFinalized
+                    ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                    : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+                }`}
               />
             </div>
           </div>
@@ -377,7 +468,12 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
               value={reportData.support_details || ''}
               onChange={(e) => handleFieldChange('support_details', e.target.value)}
               rows={3}
-              className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed mb-4"
+              readOnly={isFinalized}
+              className={`w-full p-3 text-xs rounded-xl border leading-relaxed mb-4 ${
+                isFinalized
+                  ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                  : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+              }`}
             />
 
             <label className="block text-xs font-bold text-slate-800 mb-1">
@@ -387,27 +483,63 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
               value={reportData.future_support_policy || ''}
               onChange={(e) => handleFieldChange('future_support_policy', e.target.value)}
               rows={3}
-              className="w-full p-3 text-xs rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 leading-relaxed"
+              readOnly={isFinalized}
+              className={`w-full p-3 text-xs rounded-xl border leading-relaxed ${
+                isFinalized
+                  ? 'border-slate-200 bg-slate-100/70 text-slate-700 cursor-default'
+                  : 'border-slate-200 focus:ring-2 focus:ring-indigo-500'
+              }`}
             />
           </div>
 
           {/* アクションバー */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200">
-            <button
-              onClick={() => handleSave(false)}
-              disabled={saving}
-              className="px-5 py-2.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all disabled:opacity-50"
-            >
-              {saving ? '保存中...' : '下書き保存'}
-            </button>
-            <button
-              onClick={() => handleSave(true)}
-              disabled={saving}
-              className="px-6 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
-            >
-              <Save className="w-4 h-4" />
-              {saving ? '処理中...' : 'レポートを確定する'}
-            </button>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-200">
+            <div>
+              {isFinalized && (
+                <span className="text-xs text-slate-500 flex items-center gap-1.5 font-medium">
+                  <Lock className="w-3.5 h-3.5 text-slate-400" />
+                  確定済み文書のため編集はロックされています
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              {isFinalized ? (
+                <>
+                  <button
+                    onClick={() => setIsPreviewModalOpen(true)}
+                    className="px-5 py-2.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+                  >
+                    <Printer className="w-4 h-4" />
+                    A4プレビュー・印刷
+                  </button>
+                  <button
+                    onClick={() => setIsConsentModalOpen(true)}
+                    className="px-6 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm flex items-center gap-1.5 transition-all"
+                  >
+                    <Send className="w-4 h-4" />
+                    交付・同意管理を開く
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    onClick={() => handleSave(false)}
+                    disabled={saving}
+                    className="px-5 py-2.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl shadow-sm transition-all disabled:opacity-50"
+                  >
+                    {saving ? '保存中...' : '下書き保存'}
+                  </button>
+                  <button
+                    onClick={() => handleSave(true)}
+                    disabled={saving}
+                    className="px-6 py-2.5 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-sm flex items-center gap-1.5 transition-all disabled:opacity-50"
+                  >
+                    <Save className="w-4 h-4" />
+                    {saving ? '処理中...' : 'レポートを確定する'}
+                  </button>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -421,6 +553,49 @@ export const JobRetentionMonthlyReportPage: React.FC = () => {
           userName={contract?.user_name || ''}
           activePlan={activePlan}
           onSaved={(_newPlan) => {
+            loadData();
+          }}
+        />
+      )}
+
+      {/* A4プレビューモーダル */}
+      {isPreviewModalOpen && reportData?.id && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-sm flex items-start justify-center p-4 sm:p-6">
+          <div className="relative bg-slate-100 rounded-2xl shadow-2xl max-w-5xl w-full my-8 p-6">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200">
+              <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+                <Printer className="w-5 h-5 text-indigo-600" />
+                就労定着支援状況報告書（様式1） A4完成版プレビュー・印刷
+              </h3>
+              <button
+                onClick={() => setIsPreviewModalOpen(false)}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-lg"
+              >
+                閉じる
+              </button>
+            </div>
+            <A4PrintDocumentView
+              documentType="RETENTION_SUPPORT_REPORT"
+              documentId={reportData.id}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* 交付・同意管理モーダル */}
+      {isConsentModalOpen && reportData?.id && (
+        <SignatureModal
+          isOpen={isConsentModalOpen}
+          onClose={() => {
+            setIsConsentModalOpen(false);
+            loadData();
+          }}
+          documentType="RETENTION_SUPPORT_REPORT"
+          documentId={reportData.id}
+          documentTitle={`就労定着支援状況報告書 (${yearMonth})`}
+          userName={contract?.user_name || ''}
+          mode="staff_manage"
+          onStatusChange={() => {
             loadData();
           }}
         />

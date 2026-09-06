@@ -231,6 +231,7 @@ export interface SupportActionLog {
 }
 
 export interface MonthlyRetentionReportData {
+  id?: number;
   contract_id: number;
   report_year_month: string;
   // 内部整理項目

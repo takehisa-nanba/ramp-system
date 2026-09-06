@@ -95,7 +95,8 @@ def test_support_plan_integration_and_goal_models(app, auth_setup):
         source_links_data=source_links_input,
         detail_fields=detail_fields_input,
         long_term_goal_data=long_term_goal_input,
-        short_term_goal_data=short_term_goal_input
+        short_term_goal_data=short_term_goal_input,
+        initial_status='ACTIVE'
     )
 
     # 1. 共通親 SupportPlan の検証
@@ -216,6 +217,7 @@ def test_input_assistance_and_detail_api(app, client, auth_setup):
         headers=headers,
         json={
             "overall_support_goal": "業務習熟と自己管理の確立",
+            "initial_status": "ACTIVE",
             "start_date": "2026-09-01",
             "plan_end_date": "2027-02-28",
             "review_date": "2026-09-04",
@@ -282,7 +284,8 @@ def test_plan_review_workflow_and_detail_continuity(app, auth_setup):
         overall_support_goal="初期定着目標",
         start_date=datetime.date(2026, 9, 1),
         plan_end_date=datetime.date(2027, 2, 28),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
     sp1 = d1.support_plan
     assert sp1.plan_version == 1
@@ -299,7 +302,8 @@ def test_plan_review_workflow_and_detail_continuity(app, auth_setup):
         review_date=datetime.date(2026, 11, 15),
         review_reason="業務負荷の増大に伴う配慮見直し",
         plan_end_date=datetime.date(2027, 5, 14),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
     sp2 = d2.support_plan
     assert sp2.plan_version == 2
@@ -379,7 +383,8 @@ def test_monthly_report_support_goal_inheritance_rules(app, auth_setup):
         overall_support_goal="初月用ACTIVE計画目標",
         start_date=datetime.date(2026, 9, 1),
         plan_end_date=datetime.date(2027, 2, 28),
-        supporter_id=staff_a.id
+        supporter_id=staff_a.id,
+        initial_status='ACTIVE'
     )
 
     # 1. 契約初月 ("2026-09") のプレビュー -> ACTIVE 計画の目標が提案される
@@ -706,6 +711,9 @@ def test_migration_downgrade_upgrade_data_integrity(app):
         # 架空の「就労定着」LTGが作られていないこと
         fictitious_ltg = LongTermGoal.query.filter_by(challenges="就労定着").count()
         assert fictitious_ltg == 0
+
+    # 他テストのために必ず head まで upgrade を完了させる
+    command.upgrade(alembic_cfg, "head")
 
 
 
