@@ -57,7 +57,7 @@ jobs:
 
       - name: Run Job Retention backend tests
         run: |
-          pytest backend/tests/test_job_retention_auth.py backend/tests/test_job_retention_slice1.py backend/tests/test_job_retention_slice2.py backend/tests/test_job_retention_plan_integration.py backend/tests/test_document_consent_unification.py backend/tests/test_document_consent_hardening.py
+          pytest backend/tests/test_job_retention_auth.py backend/tests/test_job_retention_slice1.py backend/tests/test_job_retention_slice2.py backend/tests/test_job_retention_plan_integration.py backend/tests/test_document_consent_unification.py backend/tests/test_document_consent_hardening.py backend/tests/test_document_settings.py
 
   frontend:
     name: Frontend Build
