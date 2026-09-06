@@ -14,7 +14,7 @@ import DashboardPage from './pages/DashboardPage';
 import UserListPage from './pages/UserListPage';
 import UserDetailPage from './pages/UserDetailPage';
 import ActionItemsPage from './pages/ActionItemsPage';
-import SettingsPage from './pages/SettingsPage';
+import SettingsPageWithDocuments from './pages/SettingsPageWithDocuments';
 import { DailyScheduleActualPage } from './pages/DailyScheduleActualPage';
 import AITestPage from './pages/AITestPage';
 import StaffAttendancePage from './pages/StaffAttendancePage';
@@ -121,7 +121,7 @@ const App: React.FC = () => {
             <Route path="/ai-test" element={<AITestPage />} />
             <Route path="/attendance" element={<StaffAttendancePage />} />
             <Route path="/records" element={<SupportRecordsPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/settings" element={<SettingsPageWithDocuments />} />
 
             {/* 就労定着支援ドメイン (支援員用) */}
             <Route path="/job-retention" element={<JobRetentionStaffDashboardPage />} />
