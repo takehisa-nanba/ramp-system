@@ -29,6 +29,7 @@ from .consents import consents_bp, user_documents_bp
 # 文書確定・交付・署名基盤のFail Closedガードと互換ハードニングを登録する。
 # Blueprint定義後、appへのregister_blueprint前に読み込む必要がある。
 from . import document_consent_hardening  # noqa: F401,E402
+from . import document_consent_runtime_fixes  # noqa: F401,E402
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 ALL_BLUEPRINTS = [
