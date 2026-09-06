@@ -26,8 +26,9 @@ from .activities import activities_bp
 from .job_retention import job_retention_bp
 from .consents import consents_bp, user_documents_bp
 
-# 文書確定・交付・署名基盤のFail Closedガードと互換ハードニングを登録する。
+# 文書確定・交付・署名基盤の設定ルートとFail Closedガードを登録する。
 # Blueprint定義後、appへのregister_blueprint前に読み込む必要がある。
+from . import document_settings  # noqa: F401,E402
 from . import document_consent_hardening  # noqa: F401,E402
 from . import document_consent_runtime_fixes  # noqa: F401,E402
 
