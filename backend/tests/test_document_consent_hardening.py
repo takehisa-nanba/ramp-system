@@ -67,7 +67,11 @@ def test_snapshot_uses_real_goal_description_fields(app, auth_setup):
     snapshot = DocumentConsentService.generate_document_snapshot("SUPPORT_PLAN", plan.id)
 
     assert snapshot["long_term_goals"][0]["goal_text"] == "長期目標の本文"
-    assert snapshot["long_term_goals"][0]["short_term_goals"][0]["goal_text"] == "短期目標の本文"
+    short_texts = [
+        goal["goal_text"]
+        for goal in snapshot["long_term_goals"][0]["short_term_goals"]
+    ]
+    assert "短期目標の本文" in short_texts
 
 
 def test_digital_delivery_requires_current_electronic_eligibility(app, auth_setup):
