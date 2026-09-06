@@ -502,7 +502,167 @@ def test_input_assistance_real_models_and_no_dummy_strings(app, auth_setup):
     assert u_snap["birth_date"] == "1995-05-20"
     assert u_snap["gender"] == "女性"
     assert u_snap["support_level"] == "区分3"
-    assert u_snap["disability_handbook_type"] == "精神2級"
+    # 要件2: 手帳等級（精神2級）から手帳種別を推測しないため None
+    assert u_snap["disability_handbook_type"] is None
+    # 参考候補として手帳等級が提供されること
+    assert data_filled["candidates"]["handbook_level_candidate"] == "精神2級"
+
+
+def test_plan_snapshot_immutability_and_full_fields(app, auth_setup):
+    """
+    【追加要件1検証: 計画確定時の確定事実スナップショット完全保存 & 過去版のデータ不変性】
+    1. 計画作成時に UserPII, エピソード, 事業所情報から確定事実が Snapshot 保存されること。
+    2. user_name は User.display_name で代用せず、UserPII 実名を snapshot すること。
+    3. その後、UserPII / Episode / OfficeSetting が変更されても、過去版の計画スナップショットは変わらないこと。
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+    user = contract_a.user
+
+    # UserPII, 雇用エピソード, 事業所設定の実データ確認/セットアップ
+    from backend.app.models import UserPII, RetentionEmploymentEpisode, OfficeSetting
+    if not user.pii:
+        pii = UserPII(
+            user_id=user.id,
+            last_name="確定",
+            first_name="太郎",
+            last_name_kana="カクテイ",
+            first_name_kana="タロウ",
+            birth_date=datetime.date(1990, 1, 15)
+        )
+        db.session.add(pii)
+    else:
+        user.pii.last_name = "確定"
+        user.pii.last_name_kana = "カクテイ"
+        user.pii.first_name = "太郎"
+        user.pii.first_name_kana = "タロウ"
+        user.pii.birth_date = datetime.date(1990, 1, 15)
+    db.session.commit()
+
+    # 1. 計画策定 (v1)
+    plan_v1 = JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="スナップショット不変性検証目標",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id,
+        detail_fields={
+            "disability_handbook_type": "精神障害者保健福祉手帳"
+        }
+    )
+
+    detail_v1 = JobRetentionService.get_support_plan_detail(contract_a.id, plan_v1.id)
+    # User.display_name（「利用者A」）ではなく UserPII 実名が保存されていること
+    assert detail_v1["user_info"]["user_name"] == "確定 太郎"
+    assert detail_v1["user_info"]["user_name_kana"] == "カクテイ タロウ"
+    assert detail_v1["user_info"]["birth_date"] == "1990-01-15"
+    assert detail_v1["user_info"]["disability_handbook_type"] == "精神障害者保健福祉手帳"
+
+    initial_employer_name = detail_v1["employment_info"]["employer_name"]
+    initial_office_name = detail_v1["office_and_staff_info"]["office_name"]
+
+    # 2. マスター / 一次情報データを後から変更する
+    user.pii.last_name = "変更後氏名"
+    user.display_name = "変更後表示名"
+    latest_ep = contract_a.episodes[-1] if contract_a.episodes else None
+    if latest_ep:
+        latest_ep.workplace_name = "全新規株式会社"
+    office_config = contract_a.office_service_configuration
+    if office_config and office_config.office:
+        office_config.office.office_name = "改装後新事業所"
+    db.session.commit()
+
+    # 3. 過去版 (v1) を再度取得 -> スナップショットが保存されているため一切変わらないこと
+    detail_v1_reloaded = JobRetentionService.get_support_plan_detail(contract_a.id, plan_v1.id)
+    assert detail_v1_reloaded["user_info"]["user_name"] == "確定 太郎" # 変更後の「変更後氏名」にならない
+    assert detail_v1_reloaded["employment_info"]["employer_name"] == initial_employer_name # 「全新規株式会社」にならない
+    assert detail_v1_reloaded["office_and_staff_info"]["office_name"] == initial_office_name # 「改装後新事業所」にならない
+
+
+def test_handbook_type_not_inferred_from_level_and_user_input(app, auth_setup):
+    """
+    【追加要件2検証: 障害者手帳「種別」を等級から推測しない】
+    - UserPII.handbook_level = "精神2級" のとき、入力支援APIの disability_handbook_type は None
+    - 手帳等級と手帳種別を混同せず、UI/支援員が明示的に入力・確認した値が保存されること
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+    user = contract_a.user
+
+    from backend.app.models import UserPII
+    if not user.pii:
+        user.pii = UserPII(user_id=user.id, handbook_level="身体1級")
+    else:
+        user.pii.handbook_level = "身体1級"
+    db.session.commit()
+
+    assist = JobRetentionService.get_plan_input_assistance_data(contract_a.id)
+    # 種別は等級から推測しないため None
+    assert assist["user_info_snapshot"]["disability_handbook_type"] is None
+    # 候補として等級は確認できる
+    assert assist["candidates"]["handbook_level_candidate"] == "身体1級"
+
+    # 支援員が明示的に手帳種別「身体障害者手帳」を指定して保存
+    plan = JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="手帳種別明示確認目標",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id,
+        detail_fields={
+            "disability_handbook_type": "身体障害者手帳"
+        }
+    )
+    assert plan.disability_handbook_type == "身体障害者手帳"
+
+
+def test_item_support_period_not_auto_filled(app, auth_setup):
+    """
+    【追加要件3検証: 支援項目の期間を自動補完しない】
+    - support_period_start / support_period_end が未入力の場合、
+      計画全体の start_date / plan_end_date を自動設定せず NULL として保存すること。
+    """
+    contract_a = auth_setup["contract_a"]
+    staff_a = auth_setup["staff_a"]
+
+    # 1. 支援期間を未入力で作成
+    plan = JobRetentionService.create_or_review_support_plan(
+        contract_id=contract_a.id,
+        overall_support_goal="期間自動補完廃止検証目標",
+        start_date=datetime.date(2026, 9, 1),
+        plan_end_date=datetime.date(2027, 2, 28),
+        supporter_id=staff_a.id,
+        items_data=[
+            {
+                "item_number": 1,
+                "challenge_topic": "通勤安定",
+                "support_policy": "時差出勤",
+                "support_content": "月次面談",
+                "support_period_start": None, # 空欄
+                "support_period_end": None     # 空欄
+            },
+            {
+                "item_number": 2,
+                "challenge_topic": "作業集中",
+                "support_policy": "タイマー活用",
+                "support_content": "業務観察",
+                "support_period_start": "2026-10-01", # 明示的に入力
+                "support_period_end": "2026-12-31"     # 明示的に入力
+            }
+        ]
+    )
+
+    detail = JobRetentionService.get_support_plan_detail(contract_a.id, plan.id)
+    items = detail["items"]
+    assert len(items) == 2
+
+    # 未入力項目は計画全体の期間（2026-09-01〜2027-02-28）に自動補完されず None (NULL) であること
+    assert items[0]["support_period_start"] is None
+    assert items[0]["support_period_end"] is None
+
+    # 明示的に入力した項目はその値が保存されること
+    assert items[1]["support_period_start"] == "2026-10-01"
+    assert items[1]["support_period_end"] == "2026-12-31"
 
 
 def test_migration_downgrade_upgrade_data_integrity(app):

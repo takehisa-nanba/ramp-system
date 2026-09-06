@@ -91,6 +91,29 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
   const [consentNotes, setConsentNotes] = useState('');
   const [staffExplainerName, setStaffExplainerName] = useState('');
 
+  // 確定事実スナップショット（様式2公式項目・要件1）
+  const [snapshotUserName, setSnapshotUserName] = useState('');
+  const [snapshotUserNameKana, setSnapshotUserNameKana] = useState('');
+  const [snapshotGender, setSnapshotGender] = useState('');
+  const [snapshotBirthDate, setSnapshotBirthDate] = useState('');
+  const [snapshotAge, setSnapshotAge] = useState<number | null>(null);
+  const [snapshotSupportLevel, setSnapshotSupportLevel] = useState('');
+  const [snapshotHandbookType, setSnapshotHandbookType] = useState(''); // 要件2: 身体／療育／精神（等級から推測しない）
+
+  const [snapshotEmployerName, setSnapshotEmployerName] = useState('');
+  const [snapshotEmployerIndustry, setSnapshotEmployerIndustry] = useState('');
+  const [snapshotEmployerAddress, setSnapshotEmployerAddress] = useState('');
+  const [snapshotEmployerTel, setSnapshotEmployerTel] = useState('');
+  const [snapshotEmployerContactPerson, setSnapshotEmployerContactPerson] = useState('');
+  const [snapshotJobStartDate, setSnapshotJobStartDate] = useState('');
+  const [snapshotWorkContent, setSnapshotWorkContent] = useState('');
+
+  const [snapshotOfficeName, setSnapshotOfficeName] = useState('');
+  const [snapshotOfficeNumber, setSnapshotOfficeNumber] = useState('');
+  const [snapshotOfficeAddress, setSnapshotOfficeAddress] = useState('');
+  const [snapshotOfficeTel, setSnapshotOfficeTel] = useState('');
+  const [snapshotOfficeFax, setSnapshotOfficeFax] = useState('');
+
   // 支援内容・評価テーブル (①〜③)
   const [items, setItems] = useState<RetentionSupportPlanItemData[]>([
     {
@@ -98,6 +121,8 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       challenge_topic: '',
       support_policy: '',
       support_content: '',
+      support_period_start: '',
+      support_period_end: '',
       support_frequency: '',
       role_sharing: ''
     }
@@ -151,15 +176,47 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       jobRetentionApi.getPlanAssistanceData(contractId)
         .then((data) => {
           setAssistanceData(data);
-          // 確定事実から初期値を補完（すでに登録済みの実データがある場合のみ）
-          if (data.employment_info_snapshot) {
-            if (data.employment_info_snapshot.physical_work_environment) setPhysicalEnv(data.employment_info_snapshot.physical_work_environment);
-            if (data.employment_info_snapshot.human_work_environment) setHumanEnv(data.employment_info_snapshot.human_work_environment);
-            if (data.employment_info_snapshot.related_support_organizations) setRelatedOrgs(data.employment_info_snapshot.related_support_organizations);
-            if (data.employment_info_snapshot.employment_type) setEmploymentType(data.employment_info_snapshot.employment_type);
-            if (data.employment_info_snapshot.wage_condition) setWageCondition(data.employment_info_snapshot.wage_condition);
-            if (data.employment_info_snapshot.holiday_condition) setHolidayCondition(data.employment_info_snapshot.holiday_condition);
-            if (data.employment_info_snapshot.working_hours_and_break) setWorkingHoursAndBreak(data.employment_info_snapshot.working_hours_and_break);
+          // 1. 利用者基本情報確定事実スナップショット初期化
+          const u = data.user_info_snapshot;
+          if (u) {
+            setSnapshotUserName(u.user_name || userName || '');
+            setSnapshotUserNameKana(u.user_name_kana || '');
+            setSnapshotGender(u.gender || '');
+            setSnapshotBirthDate(u.birth_date || '');
+            setSnapshotAge(u.age_at_planning ?? null);
+            setSnapshotSupportLevel(u.support_level || '');
+            // 要件2: 手帳種別（身体／療育／精神）は等級から推測しない
+            setSnapshotHandbookType(u.disability_handbook_type || '');
+          }
+
+          // 2. 雇用先・就労事実スナップショット初期化
+          const em = data.employment_info_snapshot;
+          if (em) {
+            setSnapshotEmployerName(em.employer_name || '');
+            setSnapshotEmployerIndustry(em.employer_industry || '');
+            setSnapshotEmployerAddress(em.employer_address || '');
+            setSnapshotEmployerTel(em.employer_tel || '');
+            setSnapshotEmployerContactPerson(em.employer_contact_person || '');
+            setSnapshotJobStartDate(em.job_start_date || '');
+            setSnapshotWorkContent(em.work_content || '');
+
+            if (em.physical_work_environment) setPhysicalEnv(em.physical_work_environment);
+            if (em.human_work_environment) setHumanEnv(em.human_work_environment);
+            if (em.related_support_organizations) setRelatedOrgs(em.related_support_organizations);
+            if (em.employment_type) setEmploymentType(em.employment_type);
+            if (em.wage_condition) setWageCondition(em.wage_condition);
+            if (em.holiday_condition) setHolidayCondition(em.holiday_condition);
+            if (em.working_hours_and_break) setWorkingHoursAndBreak(em.working_hours_and_break);
+          }
+
+          // 3. 事業所スナップショット初期化
+          const off = data.office_info_snapshot;
+          if (off) {
+            setSnapshotOfficeName(off.office_name || '');
+            setSnapshotOfficeNumber(off.office_number || '');
+            setSnapshotOfficeAddress(off.office_address || '');
+            setSnapshotOfficeTel(off.office_tel || '');
+            setSnapshotOfficeFax(off.office_fax || '');
           }
         })
         .catch((err) => {
@@ -169,7 +226,7 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
           setLoadingAssistance(false);
         });
     }
-  }, [isOpen, activePlan, isReview, contractId]);
+  }, [isOpen, activePlan, isReview, contractId, userName]);
 
   // 開始日変更時に上限終了予定日を再計算
   const handleStartDateChange = (newDate: string) => {
@@ -308,15 +365,15 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
       setSubmitting(true);
       setErrorMsg(null);
 
-      // 有効な入力があるアイテムのみ送信
+      // 有効な入力があるアイテムのみ送信 (要件3: support_period_start / end を自動補完しない)
       const validItems = items.filter(
         (it) => (it.challenge_topic && it.challenge_topic.trim()) ||
                 (it.support_policy && it.support_policy.trim()) ||
                 (it.support_content && it.support_content.trim())
       ).map((it) => ({
         ...it,
-        support_period_start: it.support_period_start || startDate,
-        support_period_end: it.support_period_end || planEndDate
+        support_period_start: it.support_period_start ? it.support_period_start : undefined,
+        support_period_end: it.support_period_end ? it.support_period_end : undefined
       }));
 
       const res = await jobRetentionApi.createOrReviewSupportPlan(contractId, {
@@ -339,6 +396,32 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
         items_data: validItems.length > 0 ? validItems : undefined,
         source_links_data: sourceLinks,
         detail_fields: {
+          // 利用者基本情報確定スナップショット (要件1)
+          user_name: snapshotUserName || undefined,
+          user_name_kana: snapshotUserNameKana || undefined,
+          gender: snapshotGender || undefined,
+          birth_date: snapshotBirthDate || undefined,
+          age_at_planning: snapshotAge !== null ? snapshotAge : undefined,
+          support_level: snapshotSupportLevel || undefined,
+          disability_handbook_type: snapshotHandbookType || undefined,
+
+          // 雇用先確定スナップショット (要件1)
+          employer_name: snapshotEmployerName || undefined,
+          employer_industry: snapshotEmployerIndustry || undefined,
+          employer_address: snapshotEmployerAddress || undefined,
+          employer_tel: snapshotEmployerTel || undefined,
+          employer_contact_person: snapshotEmployerContactPerson || undefined,
+          job_start_date: snapshotJobStartDate || undefined,
+          work_content: snapshotWorkContent || undefined,
+
+          // 事業所確定スナップショット (要件1)
+          office_name: snapshotOfficeName || undefined,
+          office_number: snapshotOfficeNumber || undefined,
+          office_address: snapshotOfficeAddress || undefined,
+          office_tel: snapshotOfficeTel || undefined,
+          office_fax: snapshotOfficeFax || undefined,
+
+          // 労働条件・環境・引継情報
           employment_type: employmentType || undefined,
           wage_condition: wageCondition || undefined,
           holiday_condition: holidayCondition || undefined,
@@ -466,12 +549,30 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                     <UserCheck className="w-4 h-4 text-indigo-600" />
                     利用者基本情報（一次モデル取得）
                   </div>
-                  <div className="text-xs space-y-1 text-slate-600">
-                    <p><span className="text-slate-400">氏名:</span> {assistanceData?.user_info_snapshot.user_name || userName}</p>
-                    <p><span className="text-slate-400">ふりがな:</span> {assistanceData?.user_info_snapshot.user_name_kana || '未登録'}</p>
-                    <p><span className="text-slate-400">性別 / 生年月日:</span> {assistanceData?.user_info_snapshot.gender || '未登録'} / {assistanceData?.user_info_snapshot.birth_date || '未登録'} {assistanceData?.user_info_snapshot.age_at_planning !== null && assistanceData?.user_info_snapshot.age_at_planning !== undefined ? `(${assistanceData.user_info_snapshot.age_at_planning}歳)` : ''}</p>
-                    <p><span className="text-slate-400">障害支援区分:</span> {assistanceData?.user_info_snapshot.support_level || '未登録'}</p>
-                    <p><span className="text-slate-400">障害者手帳区分:</span> {assistanceData?.user_info_snapshot.disability_handbook_type || '未登録'}</p>
+                  <div className="text-xs space-y-1.5 text-slate-600">
+                    <p><span className="text-slate-400">氏名:</span> {snapshotUserName || userName}</p>
+                    <p><span className="text-slate-400">ふりがな:</span> {snapshotUserNameKana || '未登録'}</p>
+                    <p><span className="text-slate-400">性別 / 生年月日:</span> {snapshotGender || '未登録'} / {snapshotBirthDate || '未登録'} {snapshotAge !== null && snapshotAge !== undefined ? `(${snapshotAge}歳)` : ''}</p>
+                    <p><span className="text-slate-400">障害支援区分:</span> {snapshotSupportLevel || '未登録'}</p>
+                    <div className="pt-1">
+                      <div className="flex items-center justify-between text-[11px] mb-1">
+                        <span className="font-bold text-slate-700">障害者手帳種別（様式2公式項目・要確認）:</span>
+                        {assistanceData?.candidates.handbook_level_candidate && (
+                          <span className="text-amber-700 font-medium">登録等級（参考）: {assistanceData.candidates.handbook_level_candidate}</span>
+                        )}
+                      </div>
+                      <select
+                        value={snapshotHandbookType}
+                        onChange={(e) => setSnapshotHandbookType(e.target.value)}
+                        className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs bg-white text-slate-700 font-medium"
+                      >
+                        <option value="">未設定（手帳種別を支援員が確認・選択してください）</option>
+                        <option value="身体障害者手帳">身体障害者手帳</option>
+                        <option value="療育手帳">療育手帳（愛の手帳・みどりの手帳等）</option>
+                        <option value="精神障害者保健福祉手帳">精神障害者保健福祉手帳</option>
+                        <option value="手帳なし">手帳なし</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
@@ -910,6 +1011,44 @@ export const RetentionPlanReviewModal: React.FC<Props> = ({
                           placeholder="例: 月次面談での睡眠・疲労度確認、企業担当者との連絡調整"
                           className="w-full px-3 py-2 border border-slate-200 rounded-lg bg-white text-xs"
                         />
+                      </div>
+                      <div className="md:col-span-2 grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 bg-white rounded-lg border border-slate-200">
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-slate-600 font-medium text-[11px]">支援期間 開始日（未入力可）</label>
+                            <button
+                              type="button"
+                              onClick={() => handleItemChange(idx, 'support_period_start', startDate)}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium underline"
+                            >
+                              計画開始日（{startDate}）を反映
+                            </button>
+                          </div>
+                          <input
+                            type="date"
+                            value={it.support_period_start || ''}
+                            onChange={(e) => handleItemChange(idx, 'support_period_start', e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                          />
+                        </div>
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <label className="block text-slate-600 font-medium text-[11px]">支援期間 終了日（未入力可）</label>
+                            <button
+                              type="button"
+                              onClick={() => handleItemChange(idx, 'support_period_end', planEndDate)}
+                              className="text-[10px] text-indigo-600 hover:text-indigo-800 font-medium underline"
+                            >
+                              計画終了日（{planEndDate}）を反映
+                            </button>
+                          </div>
+                          <input
+                            type="date"
+                            value={it.support_period_end || ''}
+                            onChange={(e) => handleItemChange(idx, 'support_period_end', e.target.value)}
+                            className="w-full px-2.5 py-1.5 border border-slate-200 rounded-lg text-xs"
+                          />
+                        </div>
                       </div>
                       <div className="md:col-span-2">
                         <label className="block text-slate-600 font-medium mb-1">関係者の役割分担</label>

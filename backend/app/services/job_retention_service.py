@@ -804,8 +804,8 @@ class JobRetentionService:
                     age_at_planning = today.year - birth_d.year - ((today.month, today.day) < (birth_d.month, birth_d.day))
                 if pii.gender_legal:
                     gender_str = pii.gender_legal.name
-                if pii.handbook_level:
-                    handbook_type = pii.handbook_level
+                # 手帳種別（身体／療育／精神）を等級から推測しない（要件2: 明示的一次情報がない場合はNULL）
+                handbook_type = None
 
             # 障害支援区分: ServiceCertificate の最新証から取得
             if hasattr(user, 'certificates') and user.certificates:
@@ -938,7 +938,8 @@ class JobRetentionService:
                 "feedback_candidates": feedback_candidates,
                 "action_candidates": action_candidates,
                 "latest_report": report_candidate,
-                "work_conditions_candidate": raw_work_conditions
+                "work_conditions_candidate": raw_work_conditions,
+                "handbook_level_candidate": pii.handbook_level if (user and getattr(user, 'pii', None)) else None
             },
             "current_plan": current_plan_info
         }
@@ -1060,14 +1061,38 @@ class JobRetentionService:
 
             # 4. 定着支援固有 Detail 作成
             detail_data = detail_fields.copy() if detail_fields else {}
-            # 利用者名
-            detail_data.setdefault('user_name', contract.user.display_name if contract.user else f"利用者#{contract.user_id}")
-            latest_ep = contract.episodes[-1] if contract.episodes else None
-            if latest_ep:
-                detail_data.setdefault('employer_name', latest_ep.workplace_name)
-                detail_data.setdefault('work_content', latest_ep.job_title)
-                detail_data.setdefault('job_start_date', latest_ep.job_start_date)
-                # work_conditions を wage_condition に自動代入しない (要件3)
+            # 一次モデルから確定できるスナップショットを取得・補完 (要件1: display_name代用禁止, 確定事実をsnapshot保存)
+            input_assist = JobRetentionService.get_plan_input_assistance_data(contract_id)
+            u_snap = input_assist.get("user_info_snapshot", {})
+            e_snap = input_assist.get("employment_info_snapshot", {})
+            o_snap = input_assist.get("office_info_snapshot", {})
+
+            # 利用者基本情報スナップショット
+            detail_data.setdefault('user_name', u_snap.get('user_name') or (contract.user.display_name if contract.user else f"利用者#{contract.user_id}"))
+            detail_data.setdefault('user_name_kana', u_snap.get('user_name_kana'))
+            detail_data.setdefault('gender', u_snap.get('gender'))
+            if 'birth_date' not in detail_data and u_snap.get('birth_date'):
+                detail_data['birth_date'] = datetime.date.fromisoformat(u_snap['birth_date'])
+            detail_data.setdefault('age_at_planning', u_snap.get('age_at_planning'))
+            detail_data.setdefault('support_level', u_snap.get('support_level'))
+            detail_data.setdefault('disability_handbook_type', u_snap.get('disability_handbook_type'))
+
+            # 雇用先・労働条件スナップショット
+            detail_data.setdefault('employer_name', e_snap.get('employer_name'))
+            detail_data.setdefault('employer_industry', e_snap.get('employer_industry'))
+            detail_data.setdefault('employer_address', e_snap.get('employer_address'))
+            detail_data.setdefault('employer_tel', e_snap.get('employer_tel'))
+            detail_data.setdefault('employer_contact_person', e_snap.get('employer_contact_person'))
+            if 'job_start_date' not in detail_data and e_snap.get('job_start_date'):
+                detail_data['job_start_date'] = datetime.date.fromisoformat(e_snap['job_start_date'])
+            detail_data.setdefault('work_content', e_snap.get('work_content'))
+
+            # 事業所スナップショット
+            detail_data.setdefault('office_name', o_snap.get('office_name'))
+            detail_data.setdefault('office_number', o_snap.get('office_number'))
+            detail_data.setdefault('office_address', o_snap.get('office_address'))
+            detail_data.setdefault('office_tel', o_snap.get('office_tel'))
+            detail_data.setdefault('office_fax', o_snap.get('office_fax'))
 
             new_detail = RetentionSupportPlanDetail(
                 support_plan_id=new_sp.id,
@@ -1080,9 +1105,16 @@ class JobRetentionService:
             db.session.add(new_detail)
             db.session.flush()
 
-            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ保存、架空デフォルト生成禁止)
+            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ保存、架空デフォルト生成禁止、期間自動補完禁止)
             if items_data and len(items_data) > 0:
                 for idx, it in enumerate(items_data):
+                    p_start = it.get('support_period_start')
+                    p_end = it.get('support_period_end')
+                    if isinstance(p_start, str):
+                        p_start = datetime.date.fromisoformat(p_start) if p_start.strip() else None
+                    if isinstance(p_end, str):
+                        p_end = datetime.date.fromisoformat(p_end) if p_end.strip() else None
+
                     item_rec = RetentionSupportPlanItem(
                         detail_id=new_detail.id,
                         short_term_goal_id=new_stg.id if new_stg else None,
@@ -1090,8 +1122,8 @@ class JobRetentionService:
                         challenge_topic=it.get('challenge_topic'),
                         support_policy=it.get('support_policy'),
                         support_content=it.get('support_content'),
-                        support_period_start=it.get('support_period_start', base_date),
-                        support_period_end=it.get('support_period_end', target_end_date),
+                        support_period_start=p_start, # 未入力なら None (計画全体のstart_dateへの自動補完禁止)
+                        support_period_end=p_end,     # 未入力なら None (計画全体のplan_end_dateへの自動補完禁止)
                         support_frequency=it.get('support_frequency'),
                         role_sharing=it.get('role_sharing'),
                         implementation_status=it.get('implementation_status'),
@@ -1244,7 +1276,7 @@ class JobRetentionService:
 
             # 4. 定着支援固有 Detail 作成
             detail_data = detail_fields.copy() if detail_fields else {}
-            # 前版スナップショットを継承しつつ更新
+            # 前版スナップショットを継承しつつ更新（過去版を開いた際のデータ不変性を維持）
             for col in [
                 'user_name', 'user_name_kana', 'gender', 'birth_date', 'age_at_planning',
                 'support_level', 'disability_handbook_type', 'employer_name', 'employer_industry',
@@ -1260,6 +1292,36 @@ class JobRetentionService:
                     if val is not None:
                         detail_data[col] = val
 
+            # 前版にも未設定の確定事実があれば入力支援データから初期補完
+            input_assist = JobRetentionService.get_plan_input_assistance_data(contract_id)
+            u_snap = input_assist.get("user_info_snapshot", {})
+            e_snap = input_assist.get("employment_info_snapshot", {})
+            o_snap = input_assist.get("office_info_snapshot", {})
+
+            detail_data.setdefault('user_name', u_snap.get('user_name') or (contract.user.display_name if contract.user else f"利用者#{contract.user_id}"))
+            detail_data.setdefault('user_name_kana', u_snap.get('user_name_kana'))
+            detail_data.setdefault('gender', u_snap.get('gender'))
+            if 'birth_date' not in detail_data and u_snap.get('birth_date'):
+                detail_data['birth_date'] = datetime.date.fromisoformat(u_snap['birth_date'])
+            detail_data.setdefault('age_at_planning', u_snap.get('age_at_planning'))
+            detail_data.setdefault('support_level', u_snap.get('support_level'))
+            detail_data.setdefault('disability_handbook_type', u_snap.get('disability_handbook_type'))
+
+            detail_data.setdefault('employer_name', e_snap.get('employer_name'))
+            detail_data.setdefault('employer_industry', e_snap.get('employer_industry'))
+            detail_data.setdefault('employer_address', e_snap.get('employer_address'))
+            detail_data.setdefault('employer_tel', e_snap.get('employer_tel'))
+            detail_data.setdefault('employer_contact_person', e_snap.get('employer_contact_person'))
+            if 'job_start_date' not in detail_data and e_snap.get('job_start_date'):
+                detail_data['job_start_date'] = datetime.date.fromisoformat(e_snap['job_start_date'])
+            detail_data.setdefault('work_content', e_snap.get('work_content'))
+
+            detail_data.setdefault('office_name', o_snap.get('office_name'))
+            detail_data.setdefault('office_number', o_snap.get('office_number'))
+            detail_data.setdefault('office_address', o_snap.get('office_address'))
+            detail_data.setdefault('office_tel', o_snap.get('office_tel'))
+            detail_data.setdefault('office_fax', o_snap.get('office_fax'))
+
             new_detail = RetentionSupportPlanDetail(
                 support_plan_id=new_sp.id,
                 retention_contract_id=contract_id,
@@ -1271,9 +1333,16 @@ class JobRetentionService:
             db.session.add(new_detail)
             db.session.flush()
 
-            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ、架空生成禁止)
+            # 5. RetentionSupportPlanItem 作成 (UI入力値のみ、架空生成禁止、期間自動補完禁止)
             if items_data and len(items_data) > 0:
                 for idx, it in enumerate(items_data):
+                    p_start = it.get('support_period_start')
+                    p_end = it.get('support_period_end')
+                    if isinstance(p_start, str):
+                        p_start = datetime.date.fromisoformat(p_start) if p_start.strip() else None
+                    if isinstance(p_end, str):
+                        p_end = datetime.date.fromisoformat(p_end) if p_end.strip() else None
+
                     item_rec = RetentionSupportPlanItem(
                         detail_id=new_detail.id,
                         short_term_goal_id=new_stg.id if new_stg else None,
@@ -1281,8 +1350,8 @@ class JobRetentionService:
                         challenge_topic=it.get('challenge_topic'),
                         support_policy=it.get('support_policy'),
                         support_content=it.get('support_content'),
-                        support_period_start=it.get('support_period_start', new_start_date),
-                        support_period_end=it.get('support_period_end', target_end_date),
+                        support_period_start=p_start, # 未入力なら None (新計画開始日への自動補完禁止)
+                        support_period_end=p_end,     # 未入力なら None (計画終了予定日への自動補完禁止)
                         support_frequency=it.get('support_frequency'),
                         role_sharing=it.get('role_sharing'),
                         implementation_status=it.get('implementation_status'),

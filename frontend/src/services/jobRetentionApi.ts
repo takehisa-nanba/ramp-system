@@ -128,6 +128,7 @@ export interface PlanInputAssistanceData {
     action_candidates: any[];
     latest_report?: any;
     work_conditions_candidate?: string | null;
+    handbook_level_candidate?: string | null;
   };
   current_plan?: {
     id: number;
