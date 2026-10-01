@@ -5,6 +5,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import SupportPlan, IndividualSupportGoal
 from backend.app.services.support_plan_service import SupportPlanService
+from backend.app.utils.errors import AppError
 from backend.app.services.core_service import check_permission, parse_jwt_identity
 
 plans_bp = Blueprint('plans', __name__, url_prefix='/api/plans')
@@ -73,18 +74,15 @@ def create_plan():
         new_plan = support_plan_service.create_plan_draft(
             user_id=user_id,
             created_by_id=supporter_id,
-            based_on_policy_id=policy.id
+            based_on_policy_id=policy.id,
+            office_service_configuration_id=data.get("office_service_configuration_id"),
+            requested_start_date=plan_start_date,
+            requested_end_date=plan_end_date
         )
         
         # 明示的な原案作成日を設定
         new_plan.draft_created_at = date.today()
-        
-        # 期間パラメータがあれば上書き
-        if plan_start_date:
-            new_plan.plan_start_date = datetime.strptime(plan_start_date, "%Y-%m-%d").date()
-        if plan_end_date:
-            new_plan.plan_end_date = datetime.strptime(plan_end_date, "%Y-%m-%d").date()
-            
+
         db.session.commit()
         return jsonify({
             "msg": "Plan draft created successfully",
@@ -93,6 +91,9 @@ def create_plan():
             "status": new_plan.plan_status
         }), 201
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Plan creation failed: {e}"}), 500
@@ -243,6 +244,9 @@ def activate_plan(plan_id):
             "status": final_plan.plan_status
         }), 200
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Activation failed: {e}"}), 500
@@ -346,6 +350,7 @@ def create_next_draft(plan_id):
         # 新規 DRAFT 計画の作成
         new_plan = SupportPlan(
             user_id=old_plan.user_id,
+            office_service_configuration_id=old_plan.office_service_configuration_id,
             plan_version=old_plan.plan_version + 1,
             plan_status='DRAFT',
             plan_start_date=start_date,
@@ -353,6 +358,7 @@ def create_next_draft(plan_id):
             based_on_plan_id=old_plan.id,
             holistic_support_policy_id=old_plan.holistic_support_policy_id
         )
+        support_plan_service.set_plan_period(new_plan)
         db.session.add(new_plan)
         db.session.flush()
 
@@ -397,6 +403,9 @@ def create_next_draft(plan_id):
             "status": new_plan.plan_status
         }), 201
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Cloning plan failed: {e}"}), 500
@@ -452,10 +461,7 @@ def update_plan(plan_id):
     from backend.app.models import HolisticSupportPolicy
     
     try:
-        if plan_start_date:
-            plan.plan_start_date = datetime.strptime(plan_start_date, "%Y-%m-%d").date()
-        if plan_end_date:
-            plan.plan_end_date = datetime.strptime(plan_end_date, "%Y-%m-%d").date()
+        support_plan_service.set_plan_period(plan, plan_start_date, plan_end_date)
             
         if user_intention_content or support_policy_content:
             if plan.holistic_policy:
@@ -475,6 +481,9 @@ def update_plan(plan_id):
         db.session.commit()
         return jsonify({"msg": "Plan updated successfully"}), 200
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Failed to update plan: {e}"}), 500

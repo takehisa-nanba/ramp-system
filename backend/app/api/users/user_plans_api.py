@@ -2,7 +2,7 @@
 GET /api/users/<user_id>/support-plans
 利用者の個別支援計画一覧（有効計画 + 履歴）を返す。
 """
-from flask import jsonify
+from flask import jsonify, request
 from flask_jwt_extended import jwt_required
 from backend.app import db
 from backend.app.models import User, SupportPlan, LongTermGoal, ShortTermGoal, IndividualSupportGoal
@@ -24,6 +24,7 @@ def _serialize_plan_summary(plan: SupportPlan) -> dict:
 
     return {
         "id": plan.id,
+        "office_service_configuration_id": plan.office_service_configuration_id,
         "plan_version": plan.plan_version,
         "plan_status": plan.plan_status,
         "start_date": plan.plan_start_date.isoformat() if plan.plan_start_date else None,
@@ -79,6 +80,7 @@ def _serialize_active_plan(plan: SupportPlan) -> dict:
 
     return {
         "id": plan.id,
+        "office_service_configuration_id": plan.office_service_configuration_id,
         "plan_version": plan.plan_version,
         "plan_status": plan.plan_status,
         "start_date": plan.plan_start_date.isoformat() if plan.plan_start_date else None,
@@ -113,8 +115,10 @@ def get_user_support_plans(user_id: int):
             }
         }), 404
 
-    active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
-    history_plans = user.support_plans.filter(
+    config_id = request.args.get('office_service_configuration_id', type=int)
+    plans = user.support_plans.filter_by(office_service_configuration_id=config_id)
+    active_plan = plans.filter_by(plan_status='ACTIVE').first()
+    history_plans = plans.filter(
         SupportPlan.plan_status.in_(['ARCHIVED', 'DRAFT', 'PENDING_CONSENT', 'PENDING_CONFERENCE'])
     ).order_by(SupportPlan.created_at.desc()).all()
 

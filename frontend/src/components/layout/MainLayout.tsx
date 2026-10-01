@@ -36,6 +36,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
     { name: '支援記録', path: '/records', icon: <FileEdit size={18} /> },
     { name: '勤怠・シフト', path: '/attendance', icon: <Clock size={18} /> },
     { name: '日別予定・実績', path: '/daily-schedules', icon: <Calendar size={18} /> },
+    { name: '定着支援利用者', path: '/job-retention', icon: <Users size={18} /> },
     { name: '利用者一覧', path: '/users', icon: <Users size={18} /> },
     { name: '管理確認事項', path: '/action-items', icon: <Bell size={18} /> },
     { name: 'AIテスト', path: '/ai-test', icon: <MessageSquare size={18} /> },

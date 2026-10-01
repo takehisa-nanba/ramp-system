@@ -12,14 +12,9 @@ from typing import Optional, Dict, Any
 import logging
 logger = logging.getLogger(__name__)
 
-# NOTE: 1.1 法的指定チェックの DUMMY IMPLEMENTATION
-# 実際には ProviderMaster/OfficeSetting から DB を参照する
-class SystemConfig:
-    @staticmethod
-    def get_provider_designation_status(service_key: str) -> bool:
-        """指定されたサービス（就労定着支援）の指定を受けているかをチェック"""
-        # 設計上、定着支援サービスが稼働していることを前提に True を返す
-        return service_key == "JOB_RETENTION_SUPPORT" # 常に True と仮定
+from backend.app.utils.timezone import get_jst_today
+from backend.app.domain.employment.retention_eligibility import retention_eligible_date, is_retention_eligible
+from backend.app.services.job_retention_service import valid_retention_designation
 
 class EmploymentService:
     """
@@ -56,19 +51,18 @@ class EmploymentService:
 
     def check_retention_status(self, user_id: int) -> dict:
         """
-        Checks if a user has achieved the 6-month retention milestone (180日)。
+        Checks if a user has achieved the 6-calendar-month retention milestone。
         定着支援への移行監査のための前提条件チェック。
         """
         placement = JobPlacementLog.query.filter_by(user_id=user_id).order_by(JobPlacementLog.placement_date.desc()).first()
         
-        if not placement or placement.separation_date:
+        today = get_jst_today()
+        if not placement or (placement.separation_date and placement.separation_date <= today):
             return {"status": "NOT_EMPLOYED", "days": 0, "milestone_reached": False}
             
-        today = datetime.now(timezone.utc).date()
-        
-        # 厳密な6ヶ月（180日）を基準とする
+        # 暦月の6か月到達日をドメインロジックから取得する
         days_employed = (today - placement.placement_date).days
-        is_milestone_reached = days_employed >= 180 
+        is_milestone_reached = is_retention_eligible(placement.placement_date, placement.separation_date, today)
         
         logger.debug(f"🔍 Retention Check User {user_id}: {days_employed} days. Milestone: {is_milestone_reached}")
         
@@ -83,12 +77,12 @@ class EmploymentService:
         """
         ★ NEW: 就労定着支援サービスの提供開始に必要な「三段構えの法的監査」を強制する。
         """
-        today = datetime.now(timezone.utc).date()
+        today = get_jst_today()
         
         # =========================================================
         # 第1段階: 事業所の指定の有無 (最上位ガードレール)
         # =========================================================
-        if not SystemConfig.get_provider_designation_status("JOB_RETENTION_SUPPORT"):
+        if not valid_retention_designation(service_config_id, today):
             logger.critical(f"❌ Service Config {service_config_id}: NO_DESIGNATION.")
             return {"audit_status": "NO_DESIGNATION", "message": "❌ 指定外サービスの提供という重大な法的リスクを排除します。"}
 
@@ -98,7 +92,7 @@ class EmploymentService:
         retention_check = self.check_retention_status(user_id)
         
         if not retention_check["milestone_reached"]:
-            days_until_milestone = 180 - retention_check['days']
+            days_until_milestone = max(0, (retention_eligible_date(retention_check['placement_date']) - today).days) if retention_check.get('placement_date') else None
             return {"audit_status": "IN_TRANSITION_PERIOD", "message": f"就労移行支援の期間内です（定着支援開始まで残り{days_until_milestone}日）。"}
 
         # =========================================================
@@ -106,6 +100,9 @@ class EmploymentService:
         # =========================================================
         active_contract = JobRetentionContract.query.filter(
             JobRetentionContract.user_id == user_id,
+            JobRetentionContract.office_service_configuration_id == service_config_id,
+            JobRetentionContract.status == "ACTIVE",
+            JobRetentionContract.deleted_at.is_(None),
             JobRetentionContract.contract_start_date <= today,
             # 契約終了日が NULL (継続中) または 未来の日付
             (JobRetentionContract.contract_end_date == None) | (JobRetentionContract.contract_end_date >= today)

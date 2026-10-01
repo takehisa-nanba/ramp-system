@@ -2,7 +2,7 @@
 
 # 修正点: 'from backend.app.extensions' (絶対参照)
 from backend.app.extensions import db
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func
+from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Date, DateTime, Text, func, Index, CheckConstraint, text
 
 # ====================================================================
 # 1. JobRetentionContract (就労定着支援 - 契約)
@@ -14,6 +14,12 @@ class JobRetentionContract(db.Model):
     User.status_id = '定着支援中' の期間を管理する。
     """
     __tablename__ = 'job_retention_contracts'
+    __table_args__ = (
+        CheckConstraint("status != 'ACTIVE' OR office_service_configuration_id IS NOT NULL", name='ck_retention_active_service'),
+        Index('uq_retention_active_user', 'user_id', unique=True,
+              postgresql_where=text("status = 'ACTIVE' AND deleted_at IS NULL"),
+              sqlite_where=text("status = 'ACTIVE' AND deleted_at IS NULL")),
+    )
     
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
@@ -21,19 +27,29 @@ class JobRetentionContract(db.Model):
     contract_start_date = Column(Date, nullable=False) # 契約開始日
     contract_end_date = Column(Date, nullable=False) # 契約終了日 (最長3年)
     
+    # NULL is reserved for legacy contracts requiring explicit reconciliation.
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
+    status = Column(String(30), nullable=False, default='LEGACY_REVIEW', server_default='LEGACY_REVIEW')
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+    deleted_at = Column(DateTime)
+    deleted_by_id = Column(Integer, ForeignKey('supporters.id'))
+    delete_reason = Column(Text)
+    service_configuration = db.relationship('OfficeServiceConfiguration')
+
     # 契約内容（支援頻度、費用など）の詳細情報
     contract_details = Column(Text)
     
     # --- リレーションシップ ---
     user = db.relationship('User', back_populates='retention_contracts')
-    retention_records = db.relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic', cascade="all, delete-orphan")
+    retention_records = db.relationship('JobRetentionRecord', back_populates='contract', lazy='dynamic')
 
 # ====================================================================
 # 2. JobRetentionRecord (就労定着支援 - 実施記録)
 # ====================================================================
 class JobRetentionRecord(db.Model):
     """
-    就労定着支援の実施記録（JobRetentionContractと1対多）。
+    互換性保持専用の旧実施記録。新規の支援事実は SupportRecord に記録する。
     請求対象となる支援の監査証跡（原理1）。
     """
     __tablename__ = 'job_retention_records'
