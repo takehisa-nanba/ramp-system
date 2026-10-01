@@ -1,0 +1,310 @@
+{
+  "schema": {
+    "absence_response_logs": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".absence_response_logs_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "absence_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "linked_plan_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "response_method", "nullable": false, "type": "VARCHAR(50)"},
+        {"default": null, "name": "response_summary", "nullable": false, "type": "TEXT"},
+        {"default": null, "name": "response_supporter_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "response_timestamp", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "user_daily_log_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["linked_plan_id"], "name": "fk_absence_response_logs_support_plans", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "support_plans"},
+        {"constrained_columns": ["response_supporter_id"], "name": "absence_response_logs_response_supporter_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["user_daily_log_id"], "name": "absence_response_logs_user_daily_log_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "user_daily_logs"},
+        {"constrained_columns": ["user_id"], "name": "absence_response_logs_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["absence_date"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_absence_response_logs_absence_date", "unique": false},
+        {"column_names": ["linked_plan_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_absence_response_logs_linked_plan_id", "unique": false},
+        {"column_names": ["user_daily_log_id"], "dialect_options": {"postgresql_include": []}, "duplicates_constraint": "absence_response_logs_user_daily_log_id_key", "include_columns": [], "name": "absence_response_logs_user_daily_log_id_key", "unique": true},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_absence_response_logs_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "absence_response_logs_pkey"},
+      "unique": [
+        {"column_names": ["user_daily_log_id"], "dialect_options": {"postgresql_include": [], "postgresql_nulls_not_distinct": false}, "name": "absence_response_logs_user_daily_log_id_key"}
+      ]
+    },
+    "document_consent_logs": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".document_consent_logs_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": "now()", "name": "recorded_at", "nullable": false, "type": "TIMESTAMP"},
+        {"default": null, "name": "action", "nullable": true, "type": "VARCHAR(30)"},
+        {"default": null, "name": "consent_proof", "nullable": true, "type": "VARCHAR(255)"},
+        {"default": null, "name": "consent_timestamp", "nullable": false, "type": "TIMESTAMP"},
+        {"default": null, "name": "document_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "document_type", "nullable": false, "type": "VARCHAR(50)"},
+        {"default": null, "name": "document_version", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "evidence_file_url", "nullable": true, "type": "VARCHAR(500)"},
+        {"default": null, "name": "generated_document_url", "nullable": true, "type": "VARCHAR(500)"},
+        {"default": null, "name": "recorded_by_supporter_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "signature_method", "nullable": true, "type": "VARCHAR(30)"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["recorded_by_supporter_id"], "name": "fk_document_consent_recorded_by", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["user_id"], "name": "document_consent_logs_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["document_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_document_consent_logs_document_id", "unique": false},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_document_consent_logs_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "document_consent_logs_pkey"},
+      "unique": []
+    },
+    "job_retention_contracts": {
+      "checks": [
+        {"name": "ck_retention_active_service", "sqltext": "status::text <> 'ACTIVE'::text OR office_service_configuration_id IS NOT NULL"}
+      ],
+      "columns": [
+        {"default": "'LEGACY_REVIEW'::character varying", "name": "status", "nullable": false, "type": "VARCHAR(30)"},
+        {"default": "'NOT_SET'::character varying", "name": "consent_status", "nullable": false, "type": "VARCHAR(50)"},
+        {"default": "false", "name": "is_company_involved", "nullable": false, "type": "BOOLEAN"},
+        {"default": "nextval('\"public\".job_retention_contracts_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": "now()", "name": "created_at", "nullable": false, "type": "TIMESTAMP"},
+        {"default": "now()", "name": "updated_at", "nullable": false, "type": "TIMESTAMP"},
+        {"default": null, "name": "contract_details", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "contract_end_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "contract_start_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "delete_reason", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "deleted_at", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "deleted_by_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "office_service_configuration_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["deleted_by_id"], "name": "fk_retention_deleted_by", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["office_service_configuration_id"], "name": "fk_job_retention_contracts_service_config", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_service_configurations"},
+        {"constrained_columns": ["user_id"], "name": "job_retention_contracts_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["office_service_configuration_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_job_retention_contracts_office_service_configuration_id", "unique": false},
+        {"column_names": ["status"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_job_retention_contracts_status", "unique": false},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": [], "postgresql_where": "(((status)::text = 'ACTIVE'::text) AND (deleted_at IS NULL))"}, "include_columns": [], "name": "uq_retention_active_user", "unique": true},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_job_retention_contracts_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "job_retention_contracts_pkey"},
+      "unique": []
+    },
+    "job_retention_records": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".job_retention_records_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "contract_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "document_url", "nullable": true, "type": "VARCHAR(500)"},
+        {"default": null, "name": "record_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "support_details", "nullable": false, "type": "TEXT"},
+        {"default": null, "name": "support_method", "nullable": false, "type": "VARCHAR(50)"},
+        {"default": null, "name": "supporter_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["contract_id"], "name": "job_retention_records_contract_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "job_retention_contracts"},
+        {"constrained_columns": ["supporter_id"], "name": "job_retention_records_supporter_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"}
+      ],
+      "indexes": [
+        {"column_names": ["contract_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_job_retention_records_contract_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "job_retention_records_pkey"},
+      "unique": []
+    },
+    "staff_activity_allocation_logs": {
+      "checks": [
+        {"name": "chk_allocated_minutes_positive", "sqltext": "allocated_minutes IS NULL OR allocated_minutes >= 0"}
+      ],
+      "columns": [
+        {"default": "0", "name": "allocated_duration_seconds", "nullable": false, "type": "INTEGER"},
+        {"default": "nextval('\"public\".staff_activity_allocation_logs_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "activity_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "allocated_minutes", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "allocation_end_time", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "allocation_recording_mode", "nullable": true, "type": "VARCHAR(20)"},
+        {"default": null, "name": "allocation_start_time", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "allocation_type", "nullable": true, "type": "VARCHAR(50)"},
+        {"default": null, "name": "approver_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "is_governance_task", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "job_title_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "office_service_configuration_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "staff_activity_master_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "supporter_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "supporter_timecard_id", "nullable": true, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["approver_id"], "name": "staff_activity_allocation_logs_approver_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["job_title_id"], "name": "fk_staff_activity_allocation_logs_job_title_id", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "job_title_master"},
+        {"constrained_columns": ["office_service_configuration_id"], "name": "fk_staff_activity_allocation_logs_office_service_config_id", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_service_configurations"},
+        {"constrained_columns": ["staff_activity_master_id"], "name": "staff_activity_allocation_logs_staff_activity_master_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "staff_activity_master"},
+        {"constrained_columns": ["supporter_id"], "name": "staff_activity_allocation_logs_supporter_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["supporter_timecard_id"], "name": "fk_staff_activity_allocation_logs_supporter_timecard_id", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporter_timecards"}
+      ],
+      "indexes": [
+        {"column_names": ["office_service_configuration_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_staff_activity_allocation_logs_office_service_config_3c2d", "unique": false},
+        {"column_names": ["supporter_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_staff_activity_allocation_logs_supporter_id", "unique": false},
+        {"column_names": ["supporter_timecard_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_staff_activity_allocation_logs_supporter_timecard_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "staff_activity_allocation_logs_pkey"},
+      "unique": []
+    },
+    "support_plans": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".support_plans_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": "now()", "name": "updated_at", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "activated_at", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "based_on_plan_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "consented_at", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "created_at", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "created_by_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "document_snapshot", "nullable": true, "type": "JSON"},
+        {"default": null, "name": "draft_created_at", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "explained_at", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "holistic_support_policy_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "office_service_configuration_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "plan_end_date", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "plan_start_date", "nullable": true, "type": "DATE"},
+        {"default": null, "name": "plan_status", "nullable": false, "type": "VARCHAR(30)"},
+        {"default": null, "name": "plan_version", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "sabikan_approved_at", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "sabikan_approved_by_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "timeline_deviation_reason", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["based_on_plan_id"], "name": "support_plans_based_on_plan_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "support_plans"},
+        {"constrained_columns": ["created_by_id"], "name": "fk_support_plans_created_by", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["holistic_support_policy_id"], "name": "support_plans_holistic_support_policy_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "holistic_support_policies"},
+        {"constrained_columns": ["office_service_configuration_id"], "name": "fk_support_plans_service_config", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_service_configurations"},
+        {"constrained_columns": ["sabikan_approved_by_id"], "name": "support_plans_sabikan_approved_by_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["user_id"], "name": "support_plans_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["office_service_configuration_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_plans_office_service_configuration_id", "unique": false},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_plans_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "support_plans_pkey"},
+      "unique": []
+    },
+    "support_records": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".support_records_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "decision_reason", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "location_detail", "nullable": true, "type": "VARCHAR(255)"},
+        {"default": null, "name": "location_type", "nullable": true, "type": "VARCHAR(50)"},
+        {"default": null, "name": "log_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "observation_note", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "office_service_configuration_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "support_content", "nullable": false, "type": "TEXT"},
+        {"default": null, "name": "support_duration_seconds", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "support_end_time", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "support_goal_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "support_plan_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "support_record_type", "nullable": false, "type": "VARCHAR(30)"},
+        {"default": null, "name": "support_start_time", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "supporter_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "user_daily_log_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"}
+      ],
+      "fks": [
+        {"constrained_columns": ["office_service_configuration_id"], "name": "fk_support_records_service_config", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_service_configurations"},
+        {"constrained_columns": ["support_goal_id"], "name": "support_records_support_goal_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "individual_support_goals"},
+        {"constrained_columns": ["support_plan_id"], "name": "support_records_support_plan_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "support_plans"},
+        {"constrained_columns": ["supporter_id"], "name": "support_records_supporter_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"},
+        {"constrained_columns": ["user_daily_log_id"], "name": "support_records_user_daily_log_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "user_daily_logs"},
+        {"constrained_columns": ["user_id"], "name": "support_records_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["log_date"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_records_log_date", "unique": false},
+        {"column_names": ["office_service_configuration_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_records_office_service_configuration_id", "unique": false},
+        {"column_names": ["user_daily_log_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_records_user_daily_log_id", "unique": false},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_support_records_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "support_records_pkey"},
+      "unique": []
+    },
+    "supporter_timecards": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".supporter_timecards_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "absence_type", "nullable": true, "type": "VARCHAR(50)"},
+        {"default": null, "name": "check_in", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "check_in_location", "nullable": true, "type": "VARCHAR(255)"},
+        {"default": null, "name": "check_out", "nullable": true, "type": "TIMESTAMP"},
+        {"default": null, "name": "check_out_location", "nullable": true, "type": "VARCHAR(255)"},
+        {"default": null, "name": "deemed_work_minutes", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "facility_out_minutes", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "is_absent", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "location_detail", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "location_type", "nullable": true, "type": "VARCHAR(50)"},
+        {"default": null, "name": "office_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "office_service_configuration_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "scheduled_work_minutes", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "sequence_no", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "supporter_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "total_break_minutes", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "work_date", "nullable": false, "type": "DATE"}
+      ],
+      "fks": [
+        {"constrained_columns": ["office_id"], "name": "supporter_timecards_office_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_settings"},
+        {"constrained_columns": ["office_service_configuration_id"], "name": "supporter_timecards_office_service_configuration_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "office_service_configurations"},
+        {"constrained_columns": ["supporter_id"], "name": "supporter_timecards_supporter_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "supporters"}
+      ],
+      "indexes": [
+        {"column_names": ["office_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_supporter_timecards_office_id", "unique": false},
+        {"column_names": ["office_service_configuration_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_supporter_timecards_office_service_configuration_id", "unique": false},
+        {"column_names": ["supporter_id", "work_date", "sequence_no"], "dialect_options": {"postgresql_include": []}, "duplicates_constraint": "uq_supporter_timecards_supporter_date_seq", "include_columns": [], "name": "uq_supporter_timecards_supporter_date_seq", "unique": true},
+        {"column_names": ["supporter_id"], "dialect_options": {"postgresql_include": [], "postgresql_where": "((check_in IS NOT NULL) AND (check_out IS NULL))"}, "include_columns": [], "name": "uq_supporter_ongoing_timecard", "unique": true},
+        {"column_names": ["supporter_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_supporter_timecards_supporter_id", "unique": false},
+        {"column_names": ["work_date"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_supporter_timecards_work_date", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "supporter_timecards_pkey"},
+      "unique": [
+        {"column_names": ["supporter_id", "work_date", "sequence_no"], "dialect_options": {"postgresql_include": [], "postgresql_nulls_not_distinct": false}, "name": "uq_supporter_timecards_supporter_date_seq"}
+      ]
+    },
+    "user_daily_logs": {
+      "checks": [],
+      "columns": [
+        {"default": "nextval('\"public\".user_daily_logs_id_seq'::regclass)", "name": "id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "auto_created", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "challenge_analysis_notes", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "created_reason", "nullable": true, "type": "VARCHAR(100)"},
+        {"default": null, "name": "custom_data", "nullable": true, "type": "JSON"},
+        {"default": null, "name": "evening_completed", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "external_location_detail", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "failure_factor_id", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "grooming_check", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "heartwarming_episode", "nullable": true, "type": "TEXT"},
+        {"default": null, "name": "location_type", "nullable": false, "type": "VARCHAR(50)"},
+        {"default": null, "name": "log_date", "nullable": false, "type": "DATE"},
+        {"default": null, "name": "log_status", "nullable": false, "type": "VARCHAR(30)"},
+        {"default": null, "name": "morning_completed", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "physical_condition_score", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "sleep_quality_score", "nullable": true, "type": "INTEGER"},
+        {"default": null, "name": "staff_effectiveness_flag", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "support_content_notes", "nullable": false, "type": "TEXT"},
+        {"default": null, "name": "user_effectiveness_flag", "nullable": true, "type": "BOOLEAN"},
+        {"default": null, "name": "user_id", "nullable": false, "type": "INTEGER"},
+        {"default": null, "name": "user_self_evaluation", "nullable": true, "type": "TEXT"}
+      ],
+      "fks": [
+        {"constrained_columns": ["failure_factor_id"], "name": "user_daily_logs_failure_factor_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "failure_factor_master"},
+        {"constrained_columns": ["user_id"], "name": "user_daily_logs_user_id_fkey", "options": {}, "referred_columns": ["id"], "referred_schema": "public", "referred_table": "users"}
+      ],
+      "indexes": [
+        {"column_names": ["log_date"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_user_daily_logs_log_date", "unique": false},
+        {"column_names": ["user_id", "log_date"], "dialect_options": {"postgresql_include": []}, "duplicates_constraint": "uq_user_daily_log_user_date", "include_columns": [], "name": "uq_user_daily_log_user_date", "unique": true},
+        {"column_names": ["user_id"], "dialect_options": {"postgresql_include": []}, "include_columns": [], "name": "ix_user_daily_logs_user_id", "unique": false}
+      ],
+      "pk": {"constrained_columns": ["id"], "dialect_options": {"postgresql_include": []}, "name": "user_daily_logs_pkey"},
+      "unique": [
+        {"column_names": ["user_id", "log_date"], "dialect_options": {"postgresql_include": [], "postgresql_nulls_not_distinct": false}, "name": "uq_user_daily_log_user_date"}
+      ]
+    }
+  }
+}
