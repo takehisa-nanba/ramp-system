@@ -8,7 +8,7 @@ from unittest.mock import patch
 from sqlalchemy import text
 
 
-def exercise(app, engine):
+def exercise(app, engine, full=True):
     results = []
     from backend.app import db
     from backend.app.models import (User, StatusMaster, Corporation, MunicipalityMaster, OfficeSetting,
@@ -102,87 +102,88 @@ def exercise(app, engine):
                 release.set()
             return lead.result(timeout=10), follow.result(timeout=10)
 
-    with patch('backend.app.services.job_retention_service.get_jst_today', return_value=date(2026,10,1)):
-        ids = setup()
-        assert race(start, start, True) == ('OK', 'ConflictError')
-        with app.app_context():
-            assert JobRetentionContract.query.filter_by(user_id=ids[0]).count() == 1
-            assert AuditActionLog.query.filter_by(action='START_RETENTION_SUPPORT', user_id=ids[0]).count() == 1
-        results.append('simultaneous_start_one_contract_one_audit')
+    if full:
+        with patch('backend.app.services.job_retention_service.get_jst_today', return_value=date(2026,10,1)):
+            ids = setup()
+            assert race(start, start, True) == ('OK', 'ConflictError')
+            with app.app_context():
+                assert JobRetentionContract.query.filter_by(user_id=ids[0]).count() == 1
+                assert AuditActionLog.query.filter_by(action='START_RETENTION_SUPPORT', user_id=ids[0]).count() == 1
+            results.append('simultaneous_start_one_contract_one_audit')
 
-        for finish_first in (True, False):
+            for finish_first in (True, False):
+                ids = setup()
+                with app.app_context():
+                    contract_id = start().id
+                    plan_id, consent_id = pending_plan()
+                finish = lambda: JobRetentionService.finish_retention_support(contract_id,date(2026,10,1),ids[1],'test')
+                activate = lambda: SupportPlanService().finalize_and_activate_plan(plan_id,consent_id)
+                if finish_first:
+                    assert race(finish, activate, True) == ('OK','ValidationError')
+                else:
+                    assert race(activate, finish) == ('OK','OK')
+                with app.app_context():
+                    assert db.session.get(JobRetentionContract, contract_id).status == 'FINISHED'
+                    plan = db.session.get(SupportPlan,plan_id)
+                    assert plan.plan_status == ('PENDING_CONSENT' if finish_first else 'ARCHIVED')
+                    assert plan.plan_end_date == date(2027,9,29)
+                results.append('finish_before_activate' if finish_first else 'activate_before_finish')
+
+            ids = setup()
+            def raw_insert():
+                db.session.add(JobRetentionContract(user_id=ids[0],office_service_configuration_id=ids[2],
+                    contract_start_date=date(2026,9,30),contract_end_date=date(2027,9,29),status='ACTIVE'))
+                db.session.flush()
+            assert race(raw_insert,raw_insert) == ('OK','IntegrityError')
+            with app.app_context(): assert JobRetentionContract.query.filter_by(user_id=ids[0]).count() == 1
+            results.append('partial_unique_index_concurrent_conflict')
+
             ids = setup()
             with app.app_context():
-                contract_id = start().id
-                plan_id, consent_id = pending_plan()
-            finish = lambda: JobRetentionService.finish_retention_support(contract_id,date(2026,10,1),ids[1],'test')
-            activate = lambda: SupportPlanService().finalize_and_activate_plan(plan_id,consent_id)
-            if finish_first:
-                assert race(finish, activate, True) == ('OK','ValidationError')
-            else:
-                assert race(activate, finish) == ('OK','OK')
-            with app.app_context():
-                assert db.session.get(JobRetentionContract, contract_id).status == 'FINISHED'
-                plan = db.session.get(SupportPlan,plan_id)
-                assert plan.plan_status == ('PENDING_CONSENT' if finish_first else 'ARCHIVED')
-                assert plan.plan_end_date == date(2027,9,29)
-            results.append('finish_before_activate' if finish_first else 'activate_before_finish')
-
-        ids = setup()
-        def raw_insert():
-            db.session.add(JobRetentionContract(user_id=ids[0],office_service_configuration_id=ids[2],
-                contract_start_date=date(2026,9,30),contract_end_date=date(2027,9,29),status='ACTIVE'))
-            db.session.flush()
-        assert race(raw_insert,raw_insert) == ('OK','IntegrityError')
-        with app.app_context(): assert JobRetentionContract.query.filter_by(user_id=ids[0]).count() == 1
-        results.append('partial_unique_index_concurrent_conflict')
-
-        ids = setup()
-        with app.app_context():
-            contract_id=start().id
-            plan_id,consent_id=pending_plan()
-            SupportPlanService().finalize_and_activate_plan(plan_id,consent_id);db.session.commit()
-            audits=AuditActionLog.query.count()
-            def fail(*args):
-                db.session.flush()
-                raise RuntimeError('injected')
-            with patch.object(JobRetentionService,'audit',side_effect=fail):
-                try: JobRetentionService.finish_retention_support(contract_id,date(2026,10,1),ids[1],'test')
-                except RuntimeError: pass
-                else: raise AssertionError('failure not injected')
-            db.session.expire_all()
-            assert db.session.get(JobRetentionContract,contract_id).status=='ACTIVE'
-            assert db.session.get(JobRetentionContract,contract_id).contract_end_date==date(2027,9,29)
-            assert db.session.get(SupportPlan,plan_id).plan_status=='ACTIVE'
-            assert AuditActionLog.query.count()==audits
-        results.append('finish_rollback_after_flush')
-
-        ids = setup()
-        with app.app_context():
-            contract_id=start().id
-            old_id,old_consent=pending_plan()
-            SupportPlanService().finalize_and_activate_plan(old_id,old_consent);db.session.commit()
-            new_id,new_consent=pending_plan()
-            audits=AuditActionLog.query.count()
-            original_add=db.session.add
-            def fail_activation(entity,*args,**kwargs):
-                if isinstance(entity,AuditActionLog) and entity.action=='ACTIVATE_SUPPORT_PLAN':
+                contract_id=start().id
+                plan_id,consent_id=pending_plan()
+                SupportPlanService().finalize_and_activate_plan(plan_id,consent_id);db.session.commit()
+                audits=AuditActionLog.query.count()
+                def fail(*args):
                     db.session.flush()
                     raise RuntimeError('injected')
-                return original_add(entity,*args,**kwargs)
-            with patch.object(db.session,'add',side_effect=fail_activation):
-                try:
-                    SupportPlanService().finalize_and_activate_plan(new_id,new_consent)
-                    db.session.commit()
-                except RuntimeError:
-                    db.session.rollback()
-                else: raise AssertionError('failure not injected')
-            db.session.expire_all()
-            assert db.session.get(SupportPlan,old_id).plan_status=='ACTIVE'
-            assert db.session.get(SupportPlan,new_id).plan_status=='PENDING_CONSENT'
-            assert db.session.get(SupportPlan,new_id).plan_end_date==date(2027,9,29)
-            assert AuditActionLog.query.count()==audits
-        results.append('activation_rollback_after_flush')
+                with patch.object(JobRetentionService,'audit',side_effect=fail):
+                    try: JobRetentionService.finish_retention_support(contract_id,date(2026,10,1),ids[1],'test')
+                    except RuntimeError: pass
+                    else: raise AssertionError('failure not injected')
+                db.session.expire_all()
+                assert db.session.get(JobRetentionContract,contract_id).status=='ACTIVE'
+                assert db.session.get(JobRetentionContract,contract_id).contract_end_date==date(2027,9,29)
+                assert db.session.get(SupportPlan,plan_id).plan_status=='ACTIVE'
+                assert AuditActionLog.query.count()==audits
+            results.append('finish_rollback_after_flush')
+
+            ids = setup()
+            with app.app_context():
+                contract_id=start().id
+                old_id,old_consent=pending_plan()
+                SupportPlanService().finalize_and_activate_plan(old_id,old_consent);db.session.commit()
+                new_id,new_consent=pending_plan()
+                audits=AuditActionLog.query.count()
+                original_add=db.session.add
+                def fail_activation(entity,*args,**kwargs):
+                    if isinstance(entity,AuditActionLog) and entity.action=='ACTIVATE_SUPPORT_PLAN':
+                        db.session.flush()
+                        raise RuntimeError('injected')
+                    return original_add(entity,*args,**kwargs)
+                with patch.object(db.session,'add',side_effect=fail_activation):
+                    try:
+                        SupportPlanService().finalize_and_activate_plan(new_id,new_consent)
+                        db.session.commit()
+                    except RuntimeError:
+                        db.session.rollback()
+                    else: raise AssertionError('failure not injected')
+                db.session.expire_all()
+                assert db.session.get(SupportPlan,old_id).plan_status=='ACTIVE'
+                assert db.session.get(SupportPlan,new_id).plan_status=='PENDING_CONSENT'
+                assert db.session.get(SupportPlan,new_id).plan_end_date==date(2027,9,29)
+                assert AuditActionLog.query.count()==audits
+            results.append('activation_rollback_after_flush')
     from backend.tests.retention_migrated_api_scenarios import exercise_update_api
     with patch('backend.app.services.job_retention_service.get_jst_today', return_value=date(2026,10,1)):
         results.extend(exercise_update_api(app, setup()))
