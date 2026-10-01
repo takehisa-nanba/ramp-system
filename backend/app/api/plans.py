@@ -244,6 +244,9 @@ def activate_plan(plan_id):
             "status": final_plan.plan_status
         }), 200
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Activation failed: {e}"}), 500

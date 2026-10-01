@@ -6,7 +6,7 @@ from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
 from backend.app.extensions import db
 from backend.app.models import (User, Supporter, OfficeServiceConfiguration, ServiceTypeMaster,
-    ServiceCertificate, GrantedService, JobPlacementLog, JobRetentionContract, AuditActionLog)
+    ServiceCertificate, GrantedService, JobPlacementLog, JobRetentionContract, AuditActionLog, SupportPlan)
 from backend.app.services.core_service import check_permission
 from backend.app.utils.errors import ValidationError, PermissionDenied, NotFoundError, BusinessRuleError, ConflictError
 from backend.app.utils.timezone import get_jst_today
@@ -159,6 +159,20 @@ class JobRetentionService:
         if not isinstance(reason, str) or not reason.strip():
             raise ValidationError('終了理由を入力してください。')
         before = cls.serialize(contract)
+        plans = SupportPlan.query.filter_by(
+            user_id=contract.user_id,
+            office_service_configuration_id=contract.office_service_configuration_id,
+            plan_status='ACTIVE').with_for_update().populate_existing().all()
+        for plan in plans:
+            plan.plan_status = 'ARCHIVED'
+            # Signed document dates are immutable; only lifecycle status changes.
+            db.session.add(AuditActionLog(
+                actor_supporter_id=actor_id, user_id=contract.user_id,
+                action='ARCHIVE_SUPPORT_PLAN', entity_type='SupportPlan', entity_id=plan.id,
+                before_value=json.dumps({'plan_status': 'ACTIVE'}),
+                after_value=json.dumps({'plan_status': 'ARCHIVED'}),
+                reason=f'定着支援契約 {contract.id} 終了: {reason}',
+                ip_address=ip_address, user_agent=user_agent))
         contract.status = 'FINISHED'
         contract.contract_end_date = end_date
         cls.audit(contract, actor_id, 'FINISH_RETENTION_SUPPORT', before, reason, ip_address, user_agent)

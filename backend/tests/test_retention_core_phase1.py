@@ -171,7 +171,9 @@ def test_plan_activation_does_not_archive_transition(retention):
     from backend.app.services.support_plan_service import SupportPlanService
     _,user,staff,config,*_ = retention
     transition=SupportPlan(user_id=user.id,plan_status='ACTIVE')
-    retention_plan=SupportPlan(user_id=user.id,plan_status='PENDING_CONSENT',office_service_configuration_id=config.id)
+    contract = start(retention)
+    retention_plan=SupportPlan(user_id=user.id,plan_status='PENDING_CONSENT',office_service_configuration_id=config.id,
+        plan_start_date=contract.contract_start_date, plan_end_date=contract.contract_end_date)
     db.session.add_all([transition,retention_plan]);db.session.flush()
     consent=DocumentConsentLog(user_id=user.id,document_type='SUPPORT_PLAN',document_id=retention_plan.id,consent_proof='DIGITAL_SIGNATURE')
     db.session.add(consent);db.session.flush()
@@ -318,3 +320,161 @@ def test_employment_separation_date_matches_domain(retention, monkeypatch, separ
     result = EmploymentService().check_retention_status(user.id)
     assert result['status'] == expected
     assert result['milestone_reached'] == is_retention_eligible(placement.placement_date, separation, today)
+
+
+def consented_retention_plan(retention, contract):
+    from backend.app.models import DocumentConsentLog
+    plan = SupportPlan(user_id=retention[1].id, office_service_configuration_id=retention[3].id,
+        plan_status='PENDING_CONSENT', plan_start_date=contract.contract_start_date,
+        plan_end_date=contract.contract_end_date)
+    db.session.add(plan); db.session.flush()
+    consent = DocumentConsentLog(user_id=plan.user_id, document_type='SUPPORT_PLAN',
+        document_id=plan.id, consent_proof='DIGITAL_SIGNATURE')
+    db.session.add(consent); db.session.commit()
+    return plan, consent
+
+
+@pytest.mark.parametrize('change,allowed', [
+    ('exact', True), ('start_before', False), ('end_after', False),
+    ('finished', False), ('deleted', False), ('missing_start', False),
+])
+def test_activation_revalidates_contract(retention, change, allowed):
+    from backend.app.services.support_plan_service import SupportPlanService
+    contract = start(retention)
+    plan, consent = consented_retention_plan(retention, contract)
+    if change == 'start_before': contract.contract_start_date += timedelta(days=1)
+    elif change == 'end_after': contract.contract_end_date -= timedelta(days=1)
+    elif change == 'finished': contract.status = 'FINISHED'
+    elif change == 'deleted': contract.deleted_at = date(2026,10,1)
+    elif change == 'missing_start': plan.plan_start_date = None
+    db.session.commit()
+    audit_count = AuditActionLog.query.count()
+    if allowed:
+        SupportPlanService().finalize_and_activate_plan(plan.id, consent.id)
+        db.session.commit()
+        assert plan.plan_status == 'ACTIVE'
+    else:
+        with pytest.raises(AppError):
+            SupportPlanService().finalize_and_activate_plan(plan.id, consent.id)
+        assert plan.plan_status == 'PENDING_CONSENT'
+        assert AuditActionLog.query.count() == audit_count
+
+
+@pytest.mark.parametrize('end_date', [date(2026,9,30), date(2026,10,1)])
+def test_finish_archives_only_matching_active_plans(retention, end_date):
+    from backend.app.services.support_plan_service import SupportPlanService
+    contract = start(retention)
+    plan, consent = consented_retention_plan(retention, contract)
+    SupportPlanService().finalize_and_activate_plan(plan.id, consent.id)
+    others = []
+    for state in ('DRAFT', 'PENDING_CONSENT', 'PENDING_CONFERENCE', 'ARCHIVED'):
+        others.append(SupportPlan(user_id=plan.user_id, office_service_configuration_id=plan.office_service_configuration_id,
+            plan_status=state, plan_start_date=plan.plan_start_date, plan_end_date=plan.plan_end_date))
+    others.append(SupportPlan(user_id=plan.user_id, plan_status='ACTIVE'))
+    another_user = User(display_name='匿名B', status_id=retention[1].status_id)
+    db.session.add(another_user); db.session.flush()
+    others.append(SupportPlan(user_id=another_user.id, office_service_configuration_id=plan.office_service_configuration_id,
+        plan_status='ACTIVE'))
+    db.session.add_all(others); db.session.commit()
+    original_dates = (plan.plan_start_date, plan.plan_end_date)
+    states = {p.id: p.plan_status for p in others}
+    JobRetentionService.finish_retention_support(contract.id, end_date, retention[2].id, '契約終了')
+    db.session.expire_all()
+    assert plan.plan_status == 'ARCHIVED'
+    assert (plan.plan_start_date, plan.plan_end_date) == original_dates
+    assert contract.status == 'FINISHED'
+    assert {p.id: p.plan_status for p in others} == states
+    assert AuditActionLog.query.filter_by(action='ARCHIVE_SUPPORT_PLAN', entity_id=plan.id).count() == 1
+    pending = next(p for p in others if p.plan_status == 'PENDING_CONSENT')
+    from backend.app.models import DocumentConsentLog
+    pending_consent = DocumentConsentLog(user_id=pending.user_id, document_type='SUPPORT_PLAN',
+        document_id=pending.id, consent_proof='DIGITAL_SIGNATURE')
+    db.session.add(pending_consent); db.session.commit()
+    with pytest.raises(AppError):
+        SupportPlanService().finalize_and_activate_plan(pending.id, pending_consent.id)
+    assert pending.plan_status == 'PENDING_CONSENT'
+
+
+def test_finish_audit_failure_rolls_back_contract_and_plans(retention, monkeypatch):
+    from backend.app.services.support_plan_service import SupportPlanService
+    contract = start(retention)
+    plan, consent = consented_retention_plan(retention, contract)
+    SupportPlanService().finalize_and_activate_plan(plan.id, consent.id)
+    db.session.commit()
+    original_end = contract.contract_end_date
+    plan_end = plan.plan_end_date
+    audit_count = AuditActionLog.query.count()
+    def fail(*args):
+        db.session.flush()  # Roll back even after all lifecycle updates reach the DB.
+        raise RuntimeError('audit unavailable')
+    monkeypatch.setattr(JobRetentionService, 'audit', fail)
+    with pytest.raises(RuntimeError):
+        JobRetentionService.finish_retention_support(contract.id,date(2026,10,1),retention[2].id,'契約終了')
+    db.session.expire_all()
+    assert contract.status == 'ACTIVE'
+    assert contract.contract_end_date == original_end
+    assert plan.plan_status == 'ACTIVE'
+    assert plan.plan_end_date == plan_end
+    assert AuditActionLog.query.count() == audit_count
+
+
+def test_activation_failure_rolls_back_replaced_plan(retention, monkeypatch):
+    from backend.app.services.support_plan_service import SupportPlanService
+    contract = start(retention)
+    old, old_consent = consented_retention_plan(retention, contract)
+    SupportPlanService().finalize_and_activate_plan(old.id, old_consent.id)
+    db.session.commit()
+    new, consent = consented_retention_plan(retention, contract)
+    audit_count = AuditActionLog.query.count()
+    original_add = db.session.add
+    def fail_audit(entity, *args, **kwargs):
+        if isinstance(entity, AuditActionLog) and entity.action == 'ACTIVATE_SUPPORT_PLAN':
+            db.session.flush()
+            raise RuntimeError('audit unavailable')
+        return original_add(entity, *args, **kwargs)
+    monkeypatch.setattr(db.session, 'add', fail_audit)
+    # The plan service leaves transaction ownership with its caller, like the API.
+    with pytest.raises(RuntimeError):
+        try:
+            SupportPlanService().finalize_and_activate_plan(new.id, consent.id)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            raise
+    db.session.expire_all()
+    assert old.plan_status == 'ACTIVE'
+    assert new.plan_status == 'PENDING_CONSENT'
+    assert new.plan_end_date == contract.contract_end_date
+    assert AuditActionLog.query.count() == audit_count
+
+
+@pytest.mark.parametrize('failure', ['finished', 'audit'])
+def test_activation_api_rolls_back(retention, monkeypatch, failure):
+    from backend.app.models import JobTitleMaster, SupporterJobAssignment
+    app, user, staff, config, *_ = retention
+    contract = start(retention)
+    plan, consent = consented_retention_plan(retention, contract)
+    title = JobTitleMaster(title_name='サービス管理責任者')
+    db.session.add(title); db.session.flush()
+    db.session.add(SupporterJobAssignment(supporter_id=staff.id, job_title_id=title.id,
+        office_service_configuration_id=config.id, start_date=date(2020,1,1), assigned_minutes=2400))
+    db.session.commit()
+    if failure == 'finished':
+        JobRetentionService.finish_retention_support(contract.id,date(2026,10,1),staff.id,'終了')
+    audit_count = AuditActionLog.query.count()
+    if failure == 'audit':
+        original_add = db.session.add
+        def fail(entity, *args, **kwargs):
+            if isinstance(entity, AuditActionLog) and entity.action == 'ACTIVATE_SUPPORT_PLAN':
+                db.session.flush()
+                raise RuntimeError('audit unavailable')
+            return original_add(entity, *args, **kwargs)
+        monkeypatch.setattr(db.session, 'add', fail)
+    headers = {'Authorization': 'Bearer ' + create_access_token(identity=f'staff:{staff.id}')}
+    response = app.test_client().post(f'/api/plans/{plan.id}/activate', headers=headers,
+        json={'consent_log_id': consent.id})
+    assert response.status_code == (400 if failure == 'finished' else 500)
+    db.session.expire_all()
+    assert plan.plan_status == 'PENDING_CONSENT'
+    assert plan.activated_at is None
+    assert AuditActionLog.query.count() == audit_count

@@ -63,7 +63,7 @@ class SupportPlanService:
             JobRetentionContract.status == 'ACTIVE',
             JobRetentionContract.deleted_at.is_(None),
             JobRetentionContract.contract_start_date <= start_date,
-            JobRetentionContract.contract_end_date >= end_date).first()
+            JobRetentionContract.contract_end_date >= end_date).with_for_update().populate_existing().first()
         if not contract:
             raise ValidationError('計画期間は開始済みの定着支援契約期間内に設定してください。')
 
@@ -347,6 +347,9 @@ class SupportPlanService:
         if not consent_log or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN':
             logger.warning(f"❌ Consent log {consent_log_id} mismatch with Plan {plan_id}.")
             raise ValidationError("Consent log mismatch.")
+
+        # Serialize activation with contract finish using the same contract lock.
+        self.validate_retention_plan_period(plan, plan.plan_start_date, plan.plan_end_date)
 
         # 既存のACTIVE計画があればアーカイブ（連続性を実現）
         old_active_plan = SupportPlan.query.filter_by(
