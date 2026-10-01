@@ -118,7 +118,7 @@ def get_user_support_plans(user_id: int):
     config_id = request.args.get('office_service_configuration_id', type=int)
     plans = user.support_plans.filter_by(office_service_configuration_id=config_id)
     active_plan = plans.filter_by(plan_status='ACTIVE').first()
-    history_plans = user.support_plans.filter(
+    history_plans = plans.filter(
         SupportPlan.plan_status.in_(['ARCHIVED', 'DRAFT', 'PENDING_CONSENT', 'PENDING_CONFERENCE'])
     ).order_by(SupportPlan.created_at.desc()).all()
 

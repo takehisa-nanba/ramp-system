@@ -56,11 +56,10 @@ class EmploymentService:
         """
         placement = JobPlacementLog.query.filter_by(user_id=user_id).order_by(JobPlacementLog.placement_date.desc()).first()
         
-        if not placement or placement.separation_date:
+        today = get_jst_today()
+        if not placement or (placement.separation_date and placement.separation_date <= today):
             return {"status": "NOT_EMPLOYED", "days": 0, "milestone_reached": False}
             
-        today = get_jst_today()
-        
         # 暦月の6か月到達日をドメインロジックから取得する
         days_employed = (today - placement.placement_date).days
         is_milestone_reached = is_retention_eligible(placement.placement_date, placement.separation_date, today)

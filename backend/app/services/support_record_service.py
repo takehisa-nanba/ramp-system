@@ -43,6 +43,9 @@ def create_service_support_record(data, actor_id):
         plan = db.session.get(SupportPlan, plan_id)
         if not plan or plan.user_id != contract.user_id or plan.office_service_configuration_id != config_id:
             raise ValidationError('利用者・サービスと計画が一致していません。')
+        if (plan.plan_status != 'ACTIVE' or not plan.plan_start_date or not plan.plan_end_date
+                or not plan.plan_start_date <= log_date <= plan.plan_end_date):
+            raise ValidationError('支援日を含む有効な個別支援計画を指定してください。')
     record = SupportRecord(user_id=contract.user_id, supporter_id=actor_id,
         office_service_configuration_id=config_id, log_date=log_date,
         support_record_type=record_type, support_content=content,

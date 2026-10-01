@@ -43,7 +43,50 @@ class SupportPlanService:
     def __init__(self, compliance_service=None):
         self.compliance_service = compliance_service
 
-    def create_plan_draft(self, user_id: int, created_by_id: int, based_on_policy_id: int, office_service_configuration_id=None) -> SupportPlan:
+    @staticmethod
+    def validate_retention_plan_period(plan, start_date, end_date):
+        """A retention plan must fit within one confirmed contract."""
+        if plan.office_service_configuration_id is None:
+            return  # Legacy transition flow remains compatible.
+        from backend.app.models import OfficeServiceConfiguration, JobRetentionContract
+        config = db.session.get(OfficeServiceConfiguration, plan.office_service_configuration_id)
+        service_type = db.session.get(ServiceTypeMaster, config.service_type_master_id) if config else None
+        if not service_type:
+            raise ValidationError('計画のサービス構成を確認してください。')
+        if service_type.service_code != 'RETENTION':
+            return
+        if not start_date or not end_date or start_date > end_date:
+            raise ValidationError('定着支援計画の開始日・終了日を確認してください。')
+        contract = JobRetentionContract.query.filter(
+            JobRetentionContract.user_id == plan.user_id,
+            JobRetentionContract.office_service_configuration_id == plan.office_service_configuration_id,
+            JobRetentionContract.status == 'ACTIVE',
+            JobRetentionContract.deleted_at.is_(None),
+            JobRetentionContract.contract_start_date <= start_date,
+            JobRetentionContract.contract_end_date >= end_date).first()
+        if not contract:
+            raise ValidationError('計画期間は開始済みの定着支援契約期間内に設定してください。')
+
+    def set_plan_period(self, plan, start_date=None, end_date=None):
+        """Validate proposed dates before mutating a plan; API and service share this guard."""
+        def parse_date(value, current):
+            if value is None:
+                return current
+            if isinstance(value, date):
+                return value
+            try:
+                return datetime.strptime(value, '%Y-%m-%d').date()
+            except (TypeError, ValueError) as exc:
+                raise ValidationError('計画日付はYYYY-MM-DD形式で指定してください。') from exc
+
+        proposed_start = parse_date(start_date, plan.plan_start_date)
+        proposed_end = parse_date(end_date, plan.plan_end_date)
+        with db.session.no_autoflush:
+            self.validate_retention_plan_period(plan, proposed_start, proposed_end)
+        plan.plan_start_date = proposed_start
+        plan.plan_end_date = proposed_end
+
+    def create_plan_draft(self, user_id: int, created_by_id: int, based_on_policy_id: int, office_service_configuration_id=None, requested_start_date=None, requested_end_date=None) -> SupportPlan:
         """
         原案(DRAFT)を作成する。
         開始日は、初回利用日または前計画の終了日の翌日に設定し、遡及的連続性を担保する。
@@ -112,6 +155,7 @@ class SupportPlanService:
             plan_start_date=plan_start_date,
             plan_end_date=plan_end_date 
         )
+        self.set_plan_period(new_plan, requested_start_date, requested_end_date)
         db.session.add(new_plan)
         logger.info(f"✅ DRAFT Plan {new_plan.id} created. Start: {plan_start_date}")
         return new_plan

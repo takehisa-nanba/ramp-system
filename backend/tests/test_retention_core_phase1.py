@@ -195,3 +195,126 @@ def test_api_lifecycle(retention):
     assert response.status_code==200
     assert response.json['status']=='FINISHED'
     assert client.get('/api/job-retention/users',headers=headers).json['items']==[]
+
+@pytest.mark.parametrize('method', ['POST', 'PUT'])
+@pytest.mark.parametrize('dates,accepted', [
+    ({'plan_start_date': '2026-09-29'}, False),
+    ({'plan_end_date': '2027-09-30'}, False),
+    ({'plan_start_date': '2027-02-01', 'plan_end_date': '2027-01-01'}, False),
+    ({'plan_start_date': '2026-09-30', 'plan_end_date': '2027-09-29'}, True),
+])
+def test_plan_api_contract_period(retention, method, dates, accepted):
+    app, user, staff, config, *_ = retention
+    start(retention)
+    headers = {'Authorization': 'Bearer ' + create_access_token(identity=f'staff:{staff.id}')}
+    payload = {'user_id': user.id, 'office_service_configuration_id': config.id, **dates}
+    if method == 'POST':
+        response = app.test_client().post('/api/plans/', headers=headers, json=payload)
+        assert response.status_code == (201 if accepted else 400)
+        assert SupportPlan.query.count() == (1 if accepted else 0)
+        assert HolisticSupportPolicy.query.count() == (1 if accepted else 0)
+    else:
+        plan = SupportPlan(user_id=user.id, office_service_configuration_id=config.id,
+                           plan_status='DRAFT', plan_start_date=date(2026,9,30), plan_end_date=date(2026,12,29))
+        db.session.add(plan); db.session.commit()
+        plan_id = plan.id
+        response = app.test_client().put(f'/api/plans/{plan_id}', headers=headers, json=payload)
+        assert response.status_code == (200 if accepted else 400)
+        db.session.expire_all()
+        saved = db.session.get(SupportPlan, plan_id)
+        assert saved.plan_start_date == date(2026,9,30)
+        assert saved.plan_end_date == (date(2027,9,29) if accepted else date(2026,12,29))
+    if not accepted:
+        assert response.json['error']['code'] == 'VALIDATION_ERROR'
+
+
+def test_service_plan_period_guard_and_clone(retention):
+    from backend.app.services.support_plan_service import SupportPlanService
+    app, user, staff, config, *_ = retention
+    contract = start(retention)
+    policy = HolisticSupportPolicy(user_id=user.id, effective_date=date(2026,9,30),
+                                   user_intention_content='希望', support_policy_content='方針')
+    db.session.add(policy); db.session.commit()
+    service = SupportPlanService()
+    with pytest.raises(AppError):
+        service.create_plan_draft(user.id, staff.id, policy.id, config.id,
+                                  requested_start_date=date(2026,9,29))
+    assert SupportPlan.query.count() == 0
+    plan = service.create_plan_draft(user.id, staff.id, policy.id, config.id)
+    db.session.commit()
+    original_end = plan.plan_end_date
+    with pytest.raises(AppError):
+        service.set_plan_period(plan, end_date=contract.contract_end_date + timedelta(days=1))
+    assert plan.plan_end_date == original_end
+    plan.plan_end_date = contract.contract_end_date
+    plan.plan_status = 'ACTIVE'
+    db.session.commit()
+    headers = {'Authorization': 'Bearer ' + create_access_token(identity=f'staff:{staff.id}')}
+    response = app.test_client().post(f'/api/plans/{plan.id}/create-next-draft', headers=headers, json={})
+    assert response.status_code == 400
+    assert SupportPlan.query.count() == 1
+
+
+@pytest.mark.parametrize('status,start_date,end_date,log_date,accepted', [
+    ('DRAFT', date(2026,10,1), date(2026,10,31), '2026-10-15', False),
+    ('ARCHIVED', date(2026,10,1), date(2026,10,31), '2026-10-15', False),
+    ('PENDING_CONSENT', date(2026,10,1), date(2026,10,31), '2026-10-15', False),
+    ('ACTIVE', date(2026,10,1), date(2026,10,31), '2026-09-30', False),
+    ('ACTIVE', date(2026,10,1), date(2026,10,31), '2026-11-01', False),
+    ('ACTIVE', None, date(2026,10,31), '2026-10-15', False),
+    ('ACTIVE', date(2026,10,1), None, '2026-10-15', False),
+    ('ACTIVE', date(2026,10,1), date(2026,10,31), '2026-10-01', True),
+    ('ACTIVE', date(2026,10,1), date(2026,10,31), '2026-10-31', True),
+])
+def test_support_record_plan_state_and_period(retention, status, start_date, end_date, log_date, accepted):
+    app, user, staff, config, *_ = retention
+    start(retention)
+    plan = SupportPlan(user_id=user.id, office_service_configuration_id=config.id,
+                       plan_status=status, plan_start_date=start_date, plan_end_date=end_date)
+    db.session.add(plan); db.session.commit()
+    headers = {'Authorization': 'Bearer ' + create_access_token(identity=f'staff:{staff.id}')}
+    response = app.test_client().post('/api/records', headers=headers, json={
+        'user_id': user.id, 'office_service_configuration_id': config.id,
+        'support_plan_id': plan.id, 'log_date': log_date,
+        'support_content': '面談', 'support_duration_seconds': 0})
+    assert response.status_code == (201 if accepted else 400)
+    assert SupportRecord.query.count() == (1 if accepted else 0)
+
+
+def test_plan_history_api_keeps_service_boundary(retention):
+    app, user, staff, config, *_ = retention
+    transition = ServiceTypeMaster(name='移行', service_code='TRANSITION')
+    db.session.add(transition); db.session.flush()
+    other_config = OfficeServiceConfiguration(office_id=config.office_id,
+        service_type_master_id=transition.id, jigyosho_bango='9876543210', capacity=10)
+    db.session.add(other_config); db.session.flush()
+    plans = []
+    for config_id in (None, config.id, other_config.id):
+        for status in ('ACTIVE', 'ARCHIVED', 'DRAFT', 'PENDING_CONSENT', 'PENDING_CONFERENCE'):
+            plan = SupportPlan(user_id=user.id, office_service_configuration_id=config_id, plan_status=status)
+            db.session.add(plan); plans.append(plan)
+    db.session.commit()
+    headers = {'Authorization': 'Bearer ' + create_access_token(identity=f'staff:{staff.id}')}
+    for config_id in (None, config.id, other_config.id):
+        suffix = f'?office_service_configuration_id={config_id}' if config_id else ''
+        result = app.test_client().get(f'/api/users/{user.id}/support-plans{suffix}', headers=headers)
+        assert result.status_code == 200
+        assert result.json['active_plan']['office_service_configuration_id'] == config_id
+        assert {p['id'] for p in result.json['plan_history']} == {
+            p.id for p in plans if p.office_service_configuration_id == config_id and p.plan_status != 'ACTIVE'}
+
+
+@pytest.mark.parametrize('separation,expected', [
+    (None, 'EMPLOYED'), (date(2026,10,2), 'EMPLOYED'),
+    (date(2026,10,1), 'NOT_EMPLOYED'), (date(2026,9,30), 'NOT_EMPLOYED'),
+])
+def test_employment_separation_date_matches_domain(retention, monkeypatch, separation, expected):
+    from backend.app.services.employment_service import EmploymentService
+    _, user, _, _, _, _, placement = retention
+    today = date(2026,10,1)
+    monkeypatch.setattr('backend.app.services.employment_service.get_jst_today', lambda: today)
+    placement.separation_date = separation
+    db.session.commit()
+    result = EmploymentService().check_retention_status(user.id)
+    assert result['status'] == expected
+    assert result['milestone_reached'] == is_retention_eligible(placement.placement_date, separation, today)
