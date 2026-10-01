@@ -18,6 +18,8 @@ class SupportPlan(db.Model):
     法令遵守(原理1)と監査証跡を管理する。
     """
     __tablename__ = 'support_plans'
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
+    service_configuration = db.relationship('OfficeServiceConfiguration')
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     

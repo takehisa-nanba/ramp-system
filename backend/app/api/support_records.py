@@ -20,6 +20,22 @@ def get_records():
         Supporter, SupportRecord.supporter_id == Supporter.id
     )
 
+    config_id = request.args.get('office_service_configuration_id', type=int)
+    if config_id is None:
+        query = query.filter(SupportRecord.office_service_configuration_id.is_(None))
+    else:
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        from backend.app.services.core_service import parse_jwt_identity
+        from backend.app.services.job_retention_service import JobRetentionService
+        from backend.app.utils.errors import PermissionDenied
+        verify_jwt_in_request()
+        identity = get_jwt_identity()
+        role, actor = parse_jwt_identity(identity)
+        if not isinstance(identity, str) or role != 'staff':
+            raise PermissionDenied()
+        JobRetentionService.authorize(actor, 'VIEW', config_id)
+        query = query.filter(SupportRecord.office_service_configuration_id == config_id)
+
     if start_date:
         query = query.filter(SupportRecord.log_date >= start_date)
     if end_date:
@@ -39,6 +55,7 @@ def get_records():
         data.append({
             'id': record.id,
             'user_id': record.user_id,
+            'office_service_configuration_id': record.office_service_configuration_id,
             'user_name': user.display_name,
             'supporter_id': record.supporter_id,
             'supporter_name': f"{supporter.last_name} {supporter.first_name}",
@@ -61,6 +78,19 @@ def create_record():
     data = request.json
     if not data:
         return jsonify({'msg': 'No data provided'}), 400
+
+    if data.get('office_service_configuration_id') is not None:
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+        from backend.app.services.core_service import parse_jwt_identity
+        from backend.app.services.support_record_service import create_service_support_record
+        from backend.app.utils.errors import PermissionDenied
+        verify_jwt_in_request()
+        identity = get_jwt_identity()
+        role, actor = parse_jwt_identity(identity)
+        if not isinstance(identity, str) or role != 'staff':
+            raise PermissionDenied()
+        record = create_service_support_record(data, actor)
+        return jsonify({'msg': 'Success', 'id': record.id}), 201
 
     try:
         new_record = SupportRecord(

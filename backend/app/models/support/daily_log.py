@@ -62,6 +62,8 @@ class SupportRecord(db.Model):
     同じ日付に複数登録可能で、目標紐付けは任意。
     """
     __tablename__ = 'support_records'
+    office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
+    service_configuration = db.relationship('OfficeServiceConfiguration')
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     log_date = Column(Date, nullable=False, index=True)

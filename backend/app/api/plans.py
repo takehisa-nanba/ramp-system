@@ -73,7 +73,8 @@ def create_plan():
         new_plan = support_plan_service.create_plan_draft(
             user_id=user_id,
             created_by_id=supporter_id,
-            based_on_policy_id=policy.id
+            based_on_policy_id=policy.id,
+            office_service_configuration_id=data.get("office_service_configuration_id")
         )
         
         # 明示的な原案作成日を設定
@@ -346,6 +347,7 @@ def create_next_draft(plan_id):
         # 新規 DRAFT 計画の作成
         new_plan = SupportPlan(
             user_id=old_plan.user_id,
+            office_service_configuration_id=old_plan.office_service_configuration_id,
             plan_version=old_plan.plan_version + 1,
             plan_status='DRAFT',
             plan_start_date=start_date,

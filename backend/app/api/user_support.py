@@ -146,7 +146,7 @@ def get_goals():
         return jsonify({"msg": "Unauthorized"}), 403
         
     # 最新の有効な支援計画を取得
-    plan = SupportPlan.query.filter_by(user_id=user_id)\
+    plan = SupportPlan.query.filter_by(user_id=user_id, office_service_configuration_id=None)\
         .order_by(SupportPlan.plan_start_date.desc()).first()
         
     if not plan:

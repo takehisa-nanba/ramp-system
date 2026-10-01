@@ -41,7 +41,7 @@ def get_user_pii(user_id):
         db.session.add(audit_log)
         db.session.commit()
 
-    active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
+    active_plan = user.support_plans.filter_by(plan_status='ACTIVE', office_service_configuration_id=None).first()
     latest_plan = user.support_plans.order_by(SupportPlan.created_at.desc()).first() if user.support_plans.count() > 0 else None
     
     plan_info = None

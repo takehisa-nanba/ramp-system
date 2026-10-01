@@ -48,7 +48,7 @@ def list_users():
     results = query.order_by(User.id.asc()).all()
     user_list = []
     for user, has_cert in results:
-        active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
+        active_plan = user.support_plans.filter_by(plan_status='ACTIVE', office_service_configuration_id=None).first()
         active_plan_end_date = active_plan.plan_end_date.isoformat() if active_plan and active_plan.plan_end_date else None
         
         user_list.append({

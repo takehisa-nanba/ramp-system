@@ -86,7 +86,7 @@ class DailyLogService:
                         daily_log.support_content_notes = notes
                 
             # 該当利用者の最新のアクティブな支援計画・目標を自動取得する（任意）
-            plan = SupportPlan.query.filter_by(user_id=user_id, plan_status='ACTIVE').first()
+            plan = SupportPlan.query.filter_by(user_id=user_id, plan_status='ACTIVE', office_service_configuration_id=None).first()
             plan_id = plan.id if plan else None
             
             goal = None

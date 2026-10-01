@@ -8,6 +8,8 @@ import LoginForm from './components/LoginForm';
 import MainLayout from './components/layout/MainLayout';
 import { useAuth } from './context/AuthContext';
 
+import JobRetentionUsersPage from './pages/JobRetentionUsersPage';
+
 // Pages
 import DashboardPage from './pages/DashboardPage';
 import UserListPage from './pages/UserListPage';
@@ -53,6 +55,7 @@ const App: React.FC = () => {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="daily-schedules" element={<DailyScheduleActualPage />} />
           
+          <Route path="job-retention" element={<JobRetentionUsersPage />} />
           <Route path="users" element={<UserListPage />} />
           <Route path="users/:id/*" element={<UserDetailPage />} />
           

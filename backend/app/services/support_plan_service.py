@@ -43,28 +43,51 @@ class SupportPlanService:
     def __init__(self, compliance_service=None):
         self.compliance_service = compliance_service
 
-    def create_plan_draft(self, user_id: int, created_by_id: int, based_on_policy_id: int) -> SupportPlan:
+    def create_plan_draft(self, user_id: int, created_by_id: int, based_on_policy_id: int, office_service_configuration_id=None) -> SupportPlan:
         """
         原案(DRAFT)を作成する。
         開始日は、初回利用日または前計画の終了日の翌日に設定し、遡及的連続性を担保する。
         作成時点ではサビ管の承認(sabikan_approved_by_id)はまだ行われない。
         """
+        if office_service_configuration_id is not None:
+            from backend.app.services.job_retention_service import JobRetentionService
+            from backend.app.models import ServiceCertificate
+            from backend.app.utils.errors import BusinessRuleError
+            JobRetentionService.authorize(created_by_id, 'CREATE', office_service_configuration_id)
+            if not ServiceCertificate.query.filter_by(user_id=user_id,
+                    office_service_configuration_id=office_service_configuration_id,
+                    status='ACTIVE').filter(ServiceCertificate.voided_at.is_(None)).first():
+                raise BusinessRuleError('サービスに対応する受給者証が確認できません。')
         policy = db.session.get(HolisticSupportPolicy, based_on_policy_id)
         if not policy or policy.user_id != user_id:
             logger.error(f"❌ User {user_id}: Invalid HolisticSupportPolicy ID {based_on_policy_id}.")
             raise Exception("Invalid HolisticSupportPolicy ID.")
 
         user_entity = db.session.get(User, user_id)
+        retention_contract = None
+        if office_service_configuration_id is not None:
+            from backend.app.models import OfficeServiceConfiguration, ServiceTypeMaster, JobRetentionContract
+            config = db.session.get(OfficeServiceConfiguration, office_service_configuration_id)
+            service_type = db.session.get(ServiceTypeMaster, config.service_type_master_id)
+            if service_type.service_code == 'RETENTION':
+                retention_contract = JobRetentionContract.query.filter_by(
+                    user_id=user_id, office_service_configuration_id=office_service_configuration_id,
+                    status='ACTIVE', deleted_at=None).first()
+                if not retention_contract:
+                    raise BusinessRuleError('開始済みの定着支援契約が確認できません。')
         
         # 1. 前の計画とユーザーのサービス開始日を取得
         # SupportPlan.plan_start_date がモデルに存在することを前提
-        last_plan = SupportPlan.query.filter_by(user_id=user_id).order_by(SupportPlan.plan_start_date.desc()).first()
+        last_plan = SupportPlan.query.filter_by(user_id=user_id, office_service_configuration_id=office_service_configuration_id).order_by(SupportPlan.plan_start_date.desc()).first()
         
         # 2. 計画の開始日 (plan_start_date) を決定
         if last_plan and last_plan.plan_end_date:
             # ★ 継続利用の場合: 前計画の翌日 (遡及的連続性の強制)
             plan_start_date = last_plan.plan_end_date + timedelta(days=1)
             logger.info(f"🔍 Plan start date set to next day: {plan_start_date}")
+
+        elif retention_contract:
+            plan_start_date = retention_contract.contract_start_date
             
         elif user_entity and user_entity.service_start_date:
             # ★ 初回利用の場合: Userモデルのサービス開始日 (初回利用日) を使用
@@ -82,6 +105,7 @@ class SupportPlanService:
 
         new_plan = SupportPlan(
             user_id=user_id,
+            office_service_configuration_id=office_service_configuration_id,
             plan_version=1,
             plan_status='DRAFT',
             holistic_support_policy_id=based_on_policy_id,
@@ -197,7 +221,7 @@ class SupportPlanService:
             raise Exception("Plan must be PENDING_CONSENT status for continuity validation.")
         
         # 1. 直前の計画を取得
-        previous_plan = SupportPlan.query.filter_by(user_id=new_plan.user_id).order_by(SupportPlan.plan_end_date.desc()).first()
+        previous_plan = SupportPlan.query.filter_by(user_id=new_plan.user_id, office_service_configuration_id=new_plan.office_service_configuration_id).filter(SupportPlan.id != new_plan.id, SupportPlan.plan_status.in_(["ACTIVE", "ARCHIVED"])).order_by(SupportPlan.plan_end_date.desc()).first()
         
         # 前の計画が存在しない場合、連続性チェックは不要
         if not previous_plan:
@@ -283,7 +307,8 @@ class SupportPlanService:
         # 既存のACTIVE計画があればアーカイブ（連続性を実現）
         old_active_plan = SupportPlan.query.filter_by(
             user_id=plan.user_id,
-            plan_status='ACTIVE'
+            plan_status='ACTIVE',
+            office_service_configuration_id=plan.office_service_configuration_id
         ).first()
         if old_active_plan:
             old_active_plan.plan_status = 'ARCHIVED'

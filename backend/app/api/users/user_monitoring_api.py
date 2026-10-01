@@ -29,7 +29,7 @@ def get_user_monitoring_reports(user_id: int):
             }
         }), 404
 
-    active_plan = user.support_plans.filter_by(plan_status='ACTIVE').first()
+    active_plan = user.support_plans.filter_by(plan_status='ACTIVE', office_service_configuration_id=None).first()
 
     # TODO: replace plan_end_date fallback with formal monitoring schedule field
     # 正式な monitoring_schedule テーブルが実装されたら、そちらを参照する。
