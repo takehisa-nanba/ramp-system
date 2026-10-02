@@ -572,8 +572,7 @@ with app.app_context():
     # 鈴木花子の6/10予定をキャンセル状態に更新
     daily_hanako = UserDailySchedule.query.filter_by(user_id=user2.id, date=date(2026, 6, 10)).first()
     if daily_hanako:
-        daily_hanako.is_scheduled = False
-        daily_hanako.status = 'CANCELLED'
+        daily_hanako.approval_status = 'CANCELLED'
         daily_hanako.start_time = None
         daily_hanako.end_time = None
         
