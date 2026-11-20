@@ -97,6 +97,7 @@ def setup_user_and_supporters(app):
                 employment_type="FULL_TIME", weekly_scheduled_minutes=2400,
                 hire_date=date(2025, 1, 1)
             )
+            supporter1.office_id = osc.office_id
             supporter1.roles.append(admin_role)
             db.session.add(supporter1)
 
@@ -109,6 +110,7 @@ def setup_user_and_supporters(app):
                 employment_type="FULL_TIME", weekly_scheduled_minutes=2400,
                 hire_date=date(2025, 1, 1)
             )
+            supporter2.office_id = osc.office_id
             supporter2.roles.append(admin_role)
             db.session.add(supporter2)
 

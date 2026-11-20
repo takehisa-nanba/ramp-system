@@ -123,7 +123,7 @@ def add_service_certificate(user_id):
     受給者証情報の新規作成。
     """
     current_supporter_id = get_jwt_identity()
-    if not check_permission(current_supporter_id, 'VIEW_PII'):
+    if not check_permission(current_supporter_id, 'EDIT_PII'):
         return jsonify({"msg": "Permission denied"}), 403
 
     user = db.session.get(User, user_id)

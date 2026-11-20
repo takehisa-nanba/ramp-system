@@ -31,7 +31,33 @@ def create_app(config_class=Config): # ★ 引数名を変更し、クラスを�
             app.register_blueprint(bp) 
 
     from backend.app.utils.errors import AppError
-    from flask import jsonify
+    from flask import jsonify, request
+    from flask_jwt_extended import get_jwt_identity, verify_jwt_in_request
+    from backend.app.services.core_service import parse_jwt_identity
+    from backend.app.utils.errors import PermissionDenied
+
+    @app.before_request
+    def restrict_api_to_actor():
+        if not request.blueprint or request.method == "OPTIONS":
+            return
+        if request.endpoint in {"auth.login", "auth.logout"}:
+            return
+        verify_jwt_in_request()
+        actor, actor_id = parse_jwt_identity(get_jwt_identity())
+        if actor not in {"staff", "user"} or not actor_id:
+            raise PermissionDenied()
+        if actor == "user":
+            user = db.session.get(models.User, actor_id)
+            if user is None or user.deleted_at is not None:
+                raise PermissionDenied()
+            if request.blueprint == "user_support" or request.endpoint == "auth.me":
+                return
+            if request.endpoint == "users.create_schedule_request" and request.view_args.get("user_id") == actor_id:
+                return
+            raise PermissionDenied()
+        if request.blueprint == "user_support":
+            raise PermissionDenied()
+
 
     @app.errorhandler(AppError)
     def handle_app_error(e):

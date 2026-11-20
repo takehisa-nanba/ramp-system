@@ -49,7 +49,7 @@ class Config:
     
     # --- JWT-Extended 設定 (NEW) --- ★追加
     import datetime
-    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or 'a-default-jwt-secret-for-testing'
+    JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY') or SECRET_KEY
     # JWTの有効期限を 30分 に短縮（本番運用向け）
     JWT_ACCESS_TOKEN_EXPIRES = datetime.timedelta(minutes=30)
     # JWTをCookieに設定する（HTTP-Only, Secure, CSRF有効）

@@ -8,19 +8,19 @@ export interface MyPageTodayResponse {
     check_out_time: string | null;
   };
   daily_log: {
-    physical_condition_score: number;
-    sleep_quality_score: number;
-    user_self_evaluation: string;
+    physical_condition_score: number | null;
+    sleep_quality_score: number | null;
+    user_self_evaluation: string | null;
   };
 }
 
 export const getMyPageToday = async (): Promise<MyPageTodayResponse> => {
-  const response = await apiClient.get('/mypage/today');
+  const response = await apiClient.get('/user/status');
   return response.data;
 };
 
 export const postMyPageAttendance = async (recordType: 'CHECK_IN' | 'CHECK_OUT'): Promise<void> => {
-  await apiClient.post('/mypage/attendance', { record_type: recordType });
+  await apiClient.post('/user/attendance', { type: recordType });
 };
 
 export const postMyPageDailyLog = async (data: {
@@ -28,5 +28,5 @@ export const postMyPageDailyLog = async (data: {
   sleep_quality_score: number;
   user_self_evaluation: string;
 }): Promise<void> => {
-  await apiClient.post('/mypage/daily-log', data);
+  await apiClient.post('/user/daily-log', data);
 };

@@ -8,6 +8,7 @@ import LoginForm from './components/LoginForm';
 import MainLayout from './components/layout/MainLayout';
 import { useAuth } from './context/AuthContext';
 
+import UserMyPage from './pages/UserMyPage';
 import JobRetentionUsersPage from './pages/JobRetentionUsersPage';
 
 // Pages
@@ -34,6 +35,21 @@ const App: React.FC = () => {
   // 1. ログイン画面の表示 (LoginFormに処理を委譲)
   if (!isAuthenticated || !user) {
     return <LoginForm />;
+  }
+
+  if (user.roleName === 'USER') {
+    return <BrowserRouter><Routes>
+      <Route path="/mypage" element={<main className="min-h-screen bg-slate-50 p-4">
+        <header className="mx-auto mb-4 flex max-w-4xl items-center justify-between">
+          <span>{user.fullName}</span><button onClick={logout}>ログアウト</button>
+        </header>
+        <UserMyPage />
+      </main>} />
+      <Route path="*" element={<Navigate to="/mypage" replace />} />
+    </Routes></BrowserRouter>;
+  }
+  if (user.roleName !== 'STAFF') {
+    return <button onClick={logout}>ログアウト</button>;
   }
 
   // 2. 認証後のダッシュボードレイアウト (MainLayoutによるレスポンシブなサイドバー型)

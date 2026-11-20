@@ -24,8 +24,7 @@ def get_staff_status():
     claims = get_jwt()
     scope = resolve_tenant_scope(staff_id, claims.get('role_scopes', []))
         
-    import pytz
-    tz = pytz.timezone('Asia/Tokyo')
+    tz = ZoneInfo('Asia/Tokyo')
     now = datetime.now(tz)
     today = now.date()
 

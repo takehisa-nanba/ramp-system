@@ -131,7 +131,7 @@ def authenticate_user(login_id, password):
     if not user:
         user = User.query.filter_by(user_code=login_id).first()
         
-    if user and user.pii and user.pii.check_password(password):
+    if user and user.deleted_at is None and user.pii and user.pii.check_password(password):
         logger.info(f"✅ User Auth success: User {user.id}")
         return user
     

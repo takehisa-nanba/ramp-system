@@ -40,7 +40,7 @@ const DashboardPage: React.FC = () => {
       detail: '本日の来所実績（チェックイン）数',
       icon: <Users className="w-8 h-8 text-indigo-600" />,
       colorClass: 'bg-indigo-50 border-indigo-100',
-      path: '/today-users',
+      path: '/daily-schedules',
     },
     {
       id: 'incomplete-daily-logs',
