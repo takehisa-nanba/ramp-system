@@ -8,6 +8,7 @@ import LoginForm from './components/LoginForm';
 import MainLayout from './components/layout/MainLayout';
 import { useAuth } from './context/AuthContext';
 
+import MySupportPlans from './pages/MySupportPlans';
 import UserMyPage from './pages/UserMyPage';
 import JobRetentionUsersPage from './pages/JobRetentionUsersPage';
 
@@ -44,6 +45,7 @@ const App: React.FC = () => {
           <span>{user.fullName}</span><button onClick={logout}>ログアウト</button>
         </header>
         <UserMyPage />
+        <MySupportPlans />
       </main>} />
       <Route path="*" element={<Navigate to="/mypage" replace />} />
     </Routes></BrowserRouter>;

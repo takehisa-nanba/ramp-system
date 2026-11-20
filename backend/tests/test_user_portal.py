@@ -24,3 +24,22 @@ def test_user_day_and_actor_boundaries(app, client, setup_active_user):
     assert status["daily_log"]["physical_condition_score"] == 4
     assert status["daily_log"]["user_self_evaluation"] == "振り返り"
     assert status["attendance"]["checked_out"] is True
+
+
+def test_user_can_only_consent_to_own_approved_revision(app, client, setup_active_user):
+    from backend.app.models import SupportPlan, DocumentConsentLog
+    from backend.app.utils.timezone import get_jst_today
+    user, staff, _ = setup_active_user
+    headers = {"Authorization": "Bearer " + create_access_token(identity=f"user:{user.id}")}
+    plan = SupportPlan(user_id=user.id, plan_status="PENDING_CONSENT",
+                       sabikan_approved_by_id=staff.id, plan_start_date=get_jst_today())
+    db.session.add(plan)
+    db.session.commit()
+    url = f"/api/user/support-plans/{plan.id}/consent"
+    document = next(item for item in client.get("/api/user/support-plans", headers=headers).json["items"] if item["id"] == plan.id)
+    assert client.post(url, json={"confirmed":False, "revision":document["revision"]}, headers=headers).status_code == 400
+    assert client.post(url, json={"confirmed":True, "revision":"0"*64}, headers=headers).status_code == 409
+    for _ in range(2):
+        assert client.post(url, json={"confirmed":True, "revision":document["revision"]}, headers=headers).status_code == 200
+    assert db.session.get(SupportPlan, plan.id).plan_status == "ACTIVE"
+    assert DocumentConsentLog.query.filter_by(user_id=user.id, document_type="SUPPORT_PLAN", document_id=plan.id).count() == 1

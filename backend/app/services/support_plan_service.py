@@ -44,6 +44,20 @@ class SupportPlanService:
         self.compliance_service = compliance_service
 
     @staticmethod
+    def can_approve_plan(supporter, plan):
+        from backend.app.utils.timezone import get_jst_today
+        today = get_jst_today()
+        if not supporter.is_active or supporter.hire_date > today or (supporter.retirement_date and supporter.retirement_date <= today):
+            return False
+        return any(
+            a.job_title and a.job_title.title_name == "サービス管理責任者"
+            and a.start_date <= today and (a.end_date is None or a.end_date >= today)
+            and (not a.is_deemed_assignment or (a.deemed_expiry_date and a.deemed_expiry_date >= today))
+            and (plan.office_service_configuration_id is None or a.office_service_configuration_id == plan.office_service_configuration_id)
+            for a in supporter.job_assignments
+        )
+
+    @staticmethod
     def validate_retention_plan_period(plan, start_date, end_date):
         """A retention plan must fit within one confirmed contract."""
         if plan.office_service_configuration_id is None:
@@ -344,7 +358,8 @@ class SupportPlanService:
             logger.warning(f"❌ Plan {plan_id} must be in PENDING_CONSENT status for final activation.")
             raise ValidationError("Plan is not in 'PENDING_CONSENT' status.")
         
-        if not consent_log or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN':
+        if (not consent_log or consent_log.user_id != plan.user_id
+                or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN'):
             logger.warning(f"❌ Consent log {consent_log_id} mismatch with Plan {plan_id}.")
             raise ValidationError("Consent log mismatch.")
 

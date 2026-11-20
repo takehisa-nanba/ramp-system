@@ -3,7 +3,7 @@
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
-from backend.app.models import SupportPlan, IndividualSupportGoal
+from backend.app.models import SupportPlan, ShortTermGoal, IndividualSupportGoal
 from backend.app.services.support_plan_service import SupportPlanService
 from backend.app.utils.errors import AppError
 from backend.app.services.core_service import check_permission, parse_jwt_identity
@@ -117,6 +117,13 @@ def add_individual_goal(plan_id):
     if not short_term_goal_id or not data.get('concrete_goal'):
         return jsonify({"msg": "Missing required goal data"}), 400
         
+    plan = db.session.get(SupportPlan, plan_id)
+    goal = db.session.get(ShortTermGoal, short_term_goal_id)
+    if not plan or not goal or goal.long_term_goal.plan_id != plan_id:
+        return jsonify({"msg": "計画と目標が一致しません。"}), 400
+    if plan.plan_status != "DRAFT":
+        return jsonify({"msg": "原案のみ編集できます。"}), 409
+
     try:
         # ここでは、簡略化のため、LongTermGoal -> ShortTermGoal の階層構造は
         # フロントエンドが既に持っているものとし、直接 ShortTermGoal ID を使います。
@@ -166,6 +173,9 @@ def record_consent(plan_id):
     plan = SupportPlan.query.get(plan_id)
     if not plan:
         return jsonify({"msg": "SupportPlan not found"}), 404
+
+    if plan.user_id != user_id:
+        return jsonify({"msg": "同意者と計画の利用者が一致しません。"}), 400
 
     if plan.plan_status != 'PENDING_CONSENT':
         return jsonify({"msg": "Plan status is not PENDING_CONSENT"}), 400
@@ -217,11 +227,8 @@ def activate_plan(plan_id):
     if not supporter:
         return jsonify({"msg": "Supporter not found"}), 404
         
-    is_sabi_kan = False
-    for assignment in supporter.job_assignments:
-        if assignment.job_title and (assignment.job_title.title_name == 'サービス管理責任者' or assignment.job_title.is_qualified_role):
-            is_sabi_kan = True
-            break
+    target_plan = db.session.get(SupportPlan, plan_id)
+    is_sabi_kan = target_plan is not None and support_plan_service.can_approve_plan(supporter, target_plan)
             
     if not is_sabi_kan:
         return jsonify({"msg": "Permission denied: サービス管理責任者 (Service Manager) role is required to activate a plan."}), 403
@@ -425,9 +432,9 @@ def get_plan_details(plan_id):
     if not plan:
         return jsonify({"msg": "SupportPlan not found"}), 404
         
-    from backend.app.api.users.user_plans_api import _serialize_active_plan
+    from backend.app.services.plan_presentation import serialize_plan
     try:
-        data = _serialize_active_plan(plan)
+        data = serialize_plan(plan)
         return jsonify(data), 200
     except Exception as e:
         return jsonify({"msg": f"Failed to serialize plan: {e}"}), 500
@@ -504,11 +511,8 @@ def approve_plan(plan_id):
     if not supporter:
         return jsonify({"msg": "Supporter not found"}), 404
         
-    is_sabi_kan = False
-    for assignment in supporter.job_assignments:
-        if assignment.job_title and (assignment.job_title.title_name == 'サービス管理責任者' or assignment.job_title.is_qualified_role):
-            is_sabi_kan = True
-            break
+    target_plan = db.session.get(SupportPlan, plan_id)
+    is_sabi_kan = target_plan is not None and support_plan_service.can_approve_plan(supporter, target_plan)
             
     if not is_sabi_kan:
         return jsonify({"msg": "Permission denied: サービス管理責任者 (Service Manager) role is required to approve a plan."}), 403

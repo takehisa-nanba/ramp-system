@@ -199,3 +199,30 @@ def get_goals():
 
             
     return jsonify({"goals": goals}), 200
+
+
+@user_support_bp.get('/support-plans')
+@jwt_required()
+def list_my_support_plans():
+    from backend.app.services.user_plan_consent import present_user_plan
+    plans = SupportPlan.query.filter(
+        SupportPlan.user_id == get_current_user_id(),
+        db.or_(SupportPlan.plan_status == "ACTIVE",
+               db.and_(SupportPlan.plan_status == "PENDING_CONSENT", SupportPlan.sabikan_approved_by_id.isnot(None))),
+    ).order_by(SupportPlan.plan_start_date.desc(), SupportPlan.id.desc()).all()
+    return jsonify(items=[present_user_plan(plan) for plan in plans])
+
+
+@user_support_bp.post('/support-plans/<int:plan_id>/consent')
+@jwt_required()
+def consent_my_support_plan(plan_id):
+    from backend.app.services.user_plan_consent import confirm_user_plan
+    from backend.app.utils.errors import ValidationError
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or data.get("confirmed") is not True:
+        raise ValidationError("内容を確認してから同意してください。")
+    revision = data.get("revision")
+    if not isinstance(revision, str) or len(revision) != 64:
+        raise ValidationError("確認した計画をもう一度開いてください。")
+    confirm_user_plan(get_current_user_id(), plan_id, revision)
+    return jsonify(status="ACTIVE")
