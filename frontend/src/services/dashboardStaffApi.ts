@@ -53,6 +53,11 @@ export const dashboardStaffApi = {
     return res.data;
   },
   
+  getTodayReport: async (): Promise<{ content: string | null }> => {
+    const res = await apiClient.get(`${API_URL}/daily-report/today`);
+    return res.data;
+  },
+
   generateDailyReport: async (): Promise<DailyReportResponse> => {
     const res = await apiClient.post(`${API_URL}/daily-report/generate`);
     return res.data;

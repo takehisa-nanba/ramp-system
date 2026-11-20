@@ -22,6 +22,7 @@ const ActionLogWidget: React.FC = () => {
 
   useEffect(() => {
     fetchLogs();
+    dashboardStaffApi.getTodayReport().then(r => setDraftContent(r.content)).catch(console.error);
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -48,7 +49,7 @@ const ActionLogWidget: React.FC = () => {
       alert('業務日報の下書きを生成しました！');
       await fetchLogs();
     } catch (err: any) {
-      const msg = err.response?.data?.msg || 'AI生成に失敗しました';
+      const msg = err.response?.data?.msg || '日報下書きを作成できませんでした';
       alert(msg);
     } finally {
       setIsGenerating(false);
@@ -72,7 +73,7 @@ const ActionLogWidget: React.FC = () => {
           ) : (
             <Sparkles className="w-4 h-4 text-indigo-600" />
           )}
-          AI日報下書き作成
+          日報下書きを作成
         </button>
       </div>
 
@@ -105,7 +106,7 @@ const ActionLogWidget: React.FC = () => {
       {draftContent && (
         <div className="mb-4 p-4 bg-indigo-50 border border-indigo-100 rounded-xl relative">
           <button onClick={() => setDraftContent(null)} className="absolute top-2 right-2 text-indigo-400 hover:text-indigo-600">×</button>
-          <div className="text-xs font-bold text-indigo-800 mb-2 flex items-center gap-1"><Sparkles className="w-3 h-3"/> AIが生成した日報下書き</div>
+          <div className="text-xs font-bold text-indigo-800 mb-2 flex items-center gap-1"><Sparkles className="w-3 h-3"/> 本日の業務日報下書き</div>
           <pre className="text-sm text-indigo-900 whitespace-pre-wrap font-sans">{draftContent}</pre>
         </div>
       )}

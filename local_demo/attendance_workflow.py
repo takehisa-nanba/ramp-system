@@ -47,7 +47,7 @@ def check_attendance(browser, after_restart):
         expect(page.get_by_role("dialog")).to_be_hidden()
         expect(button("退勤する")).to_be_disabled()
         button("新規修正申請を作成する").click()
-        day = page.get_by_label("対象日").input_value()
+        day = page.get_by_label("対象日", exact=True).input_value()
         card, = records(day)
         start = datetime.fromisoformat(card["check_in"])
         earlier = max(start - timedelta(minutes=5), datetime.combine(start.date(), time.min, start.tzinfo))
@@ -58,7 +58,7 @@ def check_attendance(browser, after_restart):
 
         next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
         button("新規修正申請を作成する").click()
-        page.get_by_label("対象日").fill(next_day)
+        page.get_by_label("対象日", exact=True).fill(next_day)
         page.get_by_label("申請種別").select_option("PAID_LEAVE")
         page.get_by_label("申請理由").fill(leave_reason)
         button("申請を送信").click()
