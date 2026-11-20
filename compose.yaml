@@ -1,0 +1,36 @@
+name: ramp-system-local
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ramp_demo
+      POSTGRES_PASSWORD: local_demo_only
+      POSTGRES_DB: ramp_demo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ramp_demo -d ramp_demo"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+  web:
+    build:
+      context: .
+      dockerfile: local_demo/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://ramp_demo:local_demo_only@db/ramp_demo
+    ports:
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - app_keys:/var/lib/ramp
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/')"]
+      interval: 5s
+      timeout: 3s
+      retries: 36
+volumes:
+  postgres_data:
+  app_keys:

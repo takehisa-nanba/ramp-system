@@ -1,0 +1,15 @@
+**
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+!local_demo/
+!local_demo/**
+**/.env*
+**/__pycache__/
+**/*.pyc
+**/*.db
+**/node_modules/
+**/dist/
+**/.venv/
+**/venv/

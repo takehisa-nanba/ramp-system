@@ -2,7 +2,7 @@
 GET /api/users/<user_id>/monitoring-reports
 利用者のモニタリング情報（次回期限、対象計画、過去の記録）を返す。
 """
-from flask import jsonify
+from flask import jsonify, request
 from flask_jwt_extended import jwt_required
 from datetime import date
 from backend.app import db
@@ -29,7 +29,8 @@ def get_user_monitoring_reports(user_id: int):
             }
         }), 404
 
-    active_plan = user.support_plans.filter_by(plan_status='ACTIVE', office_service_configuration_id=None).first()
+    plans = user.support_plans.filter_by(office_service_configuration_id=request.args.get('office_service_configuration_id', type=int))
+    active_plan = plans.filter_by(plan_status='ACTIVE').first()
 
     # TODO: replace plan_end_date fallback with formal monitoring schedule field
     # 正式な monitoring_schedule テーブルが実装されたら、そちらを参照する。
@@ -49,7 +50,7 @@ def get_user_monitoring_reports(user_id: int):
 
     # 過去のモニタリングレポートを取得（有効計画に紐づくものを含む）
     # 利用者の全計画IDを取得してから、それに紐づくMonitoringReportを取得する
-    all_plan_ids = [p.id for p in user.support_plans.all()]
+    all_plan_ids = [p.id for p in plans.all()]
     history = []
     if all_plan_ids:
         reports = MonitoringReport.query\

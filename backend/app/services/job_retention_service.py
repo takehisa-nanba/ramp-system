@@ -70,6 +70,24 @@ class JobRetentionService:
             JobRetentionContract.deleted_at.is_(None))
 
     @classmethod
+    def available_grants(cls, actor_id, user_id):
+        actor = cls.authorize(actor_id, 'VIEW')
+        if not check_permission(actor.id, 'CREATE'):
+            return []
+        grants = (GrantedService.query.join(ServiceCertificate).join(
+            OfficeServiceConfiguration, OfficeServiceConfiguration.id == ServiceCertificate.office_service_configuration_id
+        ).join(ServiceTypeMaster, ServiceTypeMaster.id == GrantedService.service_type_master_id)
+            .filter(ServiceCertificate.user_id == user_id, ServiceCertificate.voided_at.is_(None),
+                    ServiceCertificate.status == 'ACTIVE', GrantedService.is_tentative.is_(False),
+                    OfficeServiceConfiguration.office_id == actor.office_id,
+                    OfficeServiceConfiguration.service_type_master_id == GrantedService.service_type_master_id,
+                    ServiceTypeMaster.service_code == 'RETENTION')
+            .order_by(GrantedService.granted_end_date.desc()).all())
+        return [dict(id=g.id, config_id=g.certificate.office_service_configuration_id,
+                     start_date=g.granted_start_date.isoformat(), end_date=g.granted_end_date.isoformat(),
+                     office_name=g.certificate.managing_service.office.office_name) for g in grants]
+
+    @classmethod
     def list_users(cls, actor_id):
         today = get_jst_today()
         contracts = cls.contracts_query(actor_id).join(User).filter(

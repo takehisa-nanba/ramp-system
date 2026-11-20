@@ -23,6 +23,7 @@ export default function JobRetentionUsersPage() {
   return <section className="p-6 space-y-4">
     <h1 className="text-2xl font-bold">定着支援利用者一覧</h1>
     <p className="text-slate-600">契約期間内の利用者を表示しています。利用者を選んで支援を確認できます。</p>
+    <Link className="inline-block text-blue-700 underline" to="/users">利用者を選んで定着支援を開始する</Link>
     {loading ? <p role="status">読み込み中です…</p> : error ? <div role="alert">
       <p>一覧を取得できませんでした。閲覧権限や接続状況を確認してください。</p>
       <button className="text-blue-700 underline" onClick={() => { setLoading(true); setAttempt(v => v + 1); }}>再読み込み</button>
@@ -31,7 +32,7 @@ export default function JobRetentionUsersPage() {
         <caption className="sr-only">定着支援の利用者と契約期間</caption>
         <thead><tr>{['利用者', '事業所', '開始日', '終了予定日', '利用状況'].map(label => <th scope="col" key={label} className="p-3">{label}</th>)}</tr></thead>
         <tbody>{items.map(item => <tr key={item.id} className="border-t">
-          <td className="p-3"><Link className="text-blue-700 underline" to={`/users/${item.user_id}`}>{item.display_name}</Link></td>
+          <td className="p-3"><Link className="text-blue-700 underline" to={`/users/${item.user_id}/retention`}>{item.display_name}</Link></td>
           <td className="p-3">{item.office_name}</td><td className="p-3">{item.contract_start_date}</td>
           <td className="p-3">{item.contract_end_date}</td><td className="p-3 text-green-700">利用中</td>
         </tr>)}</tbody>

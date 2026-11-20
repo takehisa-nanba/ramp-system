@@ -56,6 +56,7 @@ const mapCertificateToServiceType = (certType: string | null | undefined): strin
 
 export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => {
   const [searchParams, setSearchParams] = useSearchParams();
+  const configId = Number(searchParams.get('office_service_configuration_id')) || undefined;
   const sectionParam = searchParams.get('section');
 
   // データ状態
@@ -120,8 +121,8 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       setError(null);
 
       const [plansRes, monitoringRes, confRes, piiRes] = await Promise.all([
-        fetchUserSupportPlans(userId),
-        fetchUserMonitoringReports(userId),
+        fetchUserSupportPlans(userId, configId),
+        fetchUserMonitoringReports(userId, configId),
         fetchUserCaseConferences(userId),
         fetchUserPii(userId)
       ]);
@@ -140,7 +141,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
   useEffect(() => {
     loadAllData();
-  }, [userId]);
+  }, [userId, configId]);
 
   // サポーター一覧ロード用
   useEffect(() => {
@@ -421,6 +422,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       } else {
         // 新規作成モード
         const newPlanRes = await createSupportPlanDraft({
+          configId,
           userId,
           planStartDate: formPlanStartDate || undefined,
           planEndDate: formPlanEndDate || undefined,
@@ -431,7 +433,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       }
 
       // 送信前に受給者証のサービス種別を自動適用
-      const serviceTypeKey = mapCertificateToServiceType(userPii?.certificates?.[0]?.certificate_type);
+      const serviceTypeKey = configId ? 'RETENTION' : mapCertificateToServiceType(userPii?.certificates?.[0]?.certificate_type);
       const mappedGoals = formLongTermGoals.map(ltg => ({
         description: ltg.description,
         challenges: ltg.challenges || '',

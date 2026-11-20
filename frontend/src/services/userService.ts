@@ -404,8 +404,8 @@ export interface UserSupportPlansResponse {
   plan_history: SupportPlanSummary[];
 }
 
-export const fetchUserSupportPlans = async (userId: number): Promise<UserSupportPlansResponse> => {
-  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`);
+export const fetchUserSupportPlans = async (userId: number, configId?: number): Promise<UserSupportPlansResponse> => {
+  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`, { params: { office_service_configuration_id: configId } });
   return response.data;
 };
 
@@ -444,6 +444,7 @@ export interface CreateSupportPlanResponse {
 }
 
 export interface CreateSupportPlanParams {
+  configId?: number;
   userId: number;
   holisticSupportPolicyId?: number;
   planStartDate?: string;
@@ -454,6 +455,7 @@ export interface CreateSupportPlanParams {
 
 export const createSupportPlanDraft = async (params: CreateSupportPlanParams): Promise<CreateSupportPlanResponse> => {
   const response = await apiClient.post<CreateSupportPlanResponse>('/plans', {
+    office_service_configuration_id: params.configId,
     user_id: params.userId,
     holistic_support_policy_id: params.holisticSupportPolicyId,
     plan_start_date: params.planStartDate,
@@ -602,8 +604,8 @@ export interface UserMonitoringResponse {
   history: MonitoringHistoryItem[];
 }
 
-export const fetchUserMonitoringReports = async (userId: number): Promise<UserMonitoringResponse> => {
-  const response = await apiClient.get<UserMonitoringResponse>(`/users/${userId}/monitoring-reports`);
+export const fetchUserMonitoringReports = async (userId: number, configId?: number): Promise<UserMonitoringResponse> => {
+  const response = await apiClient.get<UserMonitoringResponse>(`/users/${userId}/monitoring-reports`, { params: { office_service_configuration_id: configId } });
   return response.data;
 };
 

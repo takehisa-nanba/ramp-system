@@ -52,3 +52,22 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+  local-demo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: docker compose up --build --detach --wait --wait-timeout 180
+      - run: python -m pip install playwright && python -m playwright install --with-deps chromium
+      - name: Check staff and service user in Chromium
+        run: python local_demo/smoke.py
+      - name: Verify data after containers are recreated
+        run: |
+          docker compose down
+          docker compose up --detach --wait --wait-timeout 180
+          python local_demo/smoke.py --after-restart
+      - if: failure()
+        run: docker compose logs --tail=120
