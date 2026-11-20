@@ -4,7 +4,7 @@
 
 ## Windowsでローカル動作を確認する
 
-Docker Desktop（Linuxコンテナ）を起動し、このリポジトリのフォルダーで PowerShell から実行します。
+Docker Desktop（Linuxコンテナ）を起動し、展開したフォルダーの `start-local.cmd` をダブルクリックします。起動が完了するとブラウザーが開きます。PowerShell を使う場合は同じフォルダーで次を実行します。
 
 ```powershell
 docker compose up --build -d --wait

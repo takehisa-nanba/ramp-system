@@ -34,6 +34,7 @@ def check(browser, after_restart):
     expect(page.get_by_role("button", name="退所する")).to_be_enabled()
     expect(page.get_by_text("第1版　有効")).to_be_visible()
     page.get_by_role("button", name="ログアウト").click()
+    expect(page.get_by_role("button", name="職員ログイン")).to_be_visible()
     login("demo-staff")
     expect(page.get_by_role("heading", name="ホーム", exact=True)).to_be_visible()
     page.goto("/job-retention")
@@ -46,7 +47,7 @@ def check(browser, after_restart):
         page.get_by_role("button", name="記録を保存").click()
     expect(page.get_by_text("就労先での状況を本人と確認した")).to_be_visible()
     page.get_by_role("link", name="定着支援の個別支援計画").click()
-    expect(page.get_by_text("計画サイクルデータの取得に失敗しました。")).to_have_count(0)
+    expect(page.get_by_role("heading", name="個別支援計画ステータス")).to_be_visible()
     assert not errors, errors
     page.close()
 

@@ -21,12 +21,11 @@ apiClient.interceptors.response.use(
   (response) => response,
   (error) => {
     if (axios.isAxiosError(error) && error.response) {
-      if (error.response.status === 401) {
+      const isLoginCheck = ['/auth/me', '/auth/login'].includes(error.config?.url ?? '');
+      if (error.response.status === 401 && !isLoginCheck) {
         const currentPath = window.location.pathname;
         // 無限リダイレクトループを回避
         if (currentPath !== '/login') {
-          // 安全な状態の破棄: 機密情報の全消去
-          localStorage.clear();
           Cookies.remove('csrf_access_token');
 
           // タイムアウトフィードバック付きでログイン画面へリダイレクト
