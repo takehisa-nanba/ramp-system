@@ -53,10 +53,12 @@ def check(browser, after_restart):
 
 
 if __name__ == "__main__":
+    from attendance_workflow import check_attendance
     from plan_workflow import check_plan_cycle
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
         check(browser, "--after-restart" in sys.argv)
         check_plan_cycle(browser, "--after-restart" in sys.argv)
+        check_attendance(browser, "--after-restart" in sys.argv)
         browser.close()

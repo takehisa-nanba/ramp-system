@@ -44,6 +44,47 @@ class SupportPlanService:
         self.compliance_service = compliance_service
 
     @staticmethod
+    def replace_draft_goals(plan, long_term_goals_data):
+        if plan.plan_status != "DRAFT" or not isinstance(long_term_goals_data, list):
+            raise ValidationError("原案と目標の入力内容を確認してください。")
+        for ltg in plan.long_term_goals:
+            db.session.delete(ltg)
+        db.session.flush()
+
+        for ltg_item in long_term_goals_data:
+            new_ltg = LongTermGoal(
+                plan_id=plan.id,
+                description=ltg_item.get('description', ''),
+                challenges=ltg_item.get('challenges'),
+                target_period_start=plan.plan_start_date,
+                target_period_end=plan.plan_end_date
+            )
+            db.session.add(new_ltg)
+            db.session.flush()
+
+            for stg_item in ltg_item.get('short_term_goals', []):
+                new_stg = ShortTermGoal(
+                    long_term_goal_id=new_ltg.id,
+                    description=stg_item.get('description', ''),
+                    target_period_start=plan.plan_start_date,
+                    target_period_end=plan.plan_end_date
+                )
+                db.session.add(new_stg)
+                db.session.flush()
+
+                for ig_item in stg_item.get('individual_goals', []):
+                    new_ig = IndividualSupportGoal(
+                        short_term_goal_id=new_stg.id,
+                        concrete_goal=ig_item.get('concrete_goal', ''),
+                        user_commitment=ig_item.get('user_commitment', '未記入'),
+                        support_actions=ig_item.get('support_actions', '未記入'),
+                        service_type=ig_item.get('service_type', 'TRAINING'),
+                        is_facility_in_deemed=ig_item.get('is_facility_in_deemed', False),
+                        is_work_preparation_positioning=ig_item.get('is_work_preparation_positioning', False)
+                    )
+                    db.session.add(new_ig)
+
+    @staticmethod
     def can_approve_plan(supporter, plan):
         from backend.app.utils.timezone import get_jst_today
         today = get_jst_today()

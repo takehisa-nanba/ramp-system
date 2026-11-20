@@ -271,6 +271,7 @@ export const StaffAttendancePage: React.FC = () => {
                             return (
                               <div className="flex flex-col items-center gap-0.5">
                                 {shift.timecards.map((tc, idx) => {
+                                  if (tc.absence_type) return <span key={tc.id}>{tc.absence_type === 'PAID_LEAVE' ? '有給休暇' : '休暇'}（みなし {tc.deemed_work_minutes ?? 0} 分）</span>;
                                   const start = tc.check_in ? dayjs(tc.check_in).format('HH:mm') : '-';
                                   const end = tc.check_out ? dayjs(tc.check_out).format('HH:mm') : '勤務中';
                                   return (

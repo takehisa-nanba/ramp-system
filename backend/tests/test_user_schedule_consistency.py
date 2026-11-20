@@ -125,6 +125,7 @@ def test_action_items_consistency_detection(app, setup_active_user, client):
     """Action Itemsの不整合検知の検証"""
     user, staff, manager = setup_active_user
     
+    user.primary_supporter_id = staff.id
     # テストデータをクリア
     from backend.app.utils.timezone import get_jst_today
     today = get_jst_today() - timedelta(days=1)

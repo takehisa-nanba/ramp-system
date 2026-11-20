@@ -447,6 +447,7 @@ export interface CreateSupportPlanResponse {
 }
 
 export interface CreateSupportPlanParams {
+  goals?: SaveGoalsData['long_term_goals'];
   assessmentId?: number;
   configId?: number;
   userId: number;
@@ -467,6 +468,7 @@ export const createSupportPlanDraft = async (params: CreateSupportPlanParams): P
     plan_end_date: params.planEndDate,
     user_intention_content: params.userIntentionContent,
     support_policy_content: params.supportPolicyContent,
+    long_term_goals: params.goals,
   });
   return response.data;
 };
@@ -549,6 +551,7 @@ export const updateSupportPlanDraft = async (
     planEndDate?: string;
     userIntentionContent?: string;
     supportPolicyContent?: string;
+    goals?: SaveGoalsData['long_term_goals'];
   }
 ): Promise<{ msg: string }> => {
   const response = await apiClient.put<{ msg: string }>(`/plans/${planId}`, {
@@ -556,6 +559,7 @@ export const updateSupportPlanDraft = async (
     plan_end_date: params.planEndDate,
     user_intention_content: params.userIntentionContent,
     support_policy_content: params.supportPolicyContent,
+    long_term_goals: params.goals,
   });
   return response.data;
 };

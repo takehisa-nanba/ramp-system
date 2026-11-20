@@ -88,6 +88,9 @@ def create_plan():
             db.session.flush()
             attach_assessment(new_plan, data["assessment_id"], supporter_id)
 
+        if "long_term_goals" in data:
+            db.session.flush()
+            support_plan_service.replace_draft_goals(new_plan, data["long_term_goals"])
         db.session.commit()
         return jsonify({
             "msg": "Plan draft created successfully",
@@ -275,7 +278,7 @@ def record_goals(plan_id):
     計画の目標ツリー（長期・短期・個別）を一括で保存・更新する。
     DRAFT 状態の計画のみ編集可能（ガードレール）。
     """
-    plan = db.session.get(SupportPlan, plan_id)
+    plan = SupportPlan.query.filter_by(id=plan_id).with_for_update().first()
     if not plan:
         return jsonify({"msg": "SupportPlan not found"}), 404
         
@@ -286,46 +289,7 @@ def record_goals(plan_id):
     long_term_goals_data = data.get('long_term_goals', [])
 
     try:
-        from backend.app.models import LongTermGoal, ShortTermGoal, IndividualSupportGoal
-        # MVP方針: 既存の目標ツリーを一旦クリアして再構築する
-        # 将来的には差分更新や変更履歴（監査ログ）に対応することを想定したプレイスホルダー
-        for ltg in plan.long_term_goals:
-            db.session.delete(ltg)
-        db.session.flush()
-
-        for ltg_item in long_term_goals_data:
-            new_ltg = LongTermGoal(
-                plan_id=plan_id,
-                description=ltg_item.get('description', ''),
-                challenges=ltg_item.get('challenges'),
-                target_period_start=plan.plan_start_date,
-                target_period_end=plan.plan_end_date
-            )
-            db.session.add(new_ltg)
-            db.session.flush()
-
-            for stg_item in ltg_item.get('short_term_goals', []):
-                new_stg = ShortTermGoal(
-                    long_term_goal_id=new_ltg.id,
-                    description=stg_item.get('description', ''),
-                    target_period_start=plan.plan_start_date,
-                    target_period_end=plan.plan_end_date
-                )
-                db.session.add(new_stg)
-                db.session.flush()
-
-                for ig_item in stg_item.get('individual_goals', []):
-                    new_ig = IndividualSupportGoal(
-                        short_term_goal_id=new_stg.id,
-                        concrete_goal=ig_item.get('concrete_goal', ''),
-                        user_commitment=ig_item.get('user_commitment', '未記入'),
-                        support_actions=ig_item.get('support_actions', '未記入'),
-                        service_type=ig_item.get('service_type', 'TRAINING'),
-                        is_facility_in_deemed=ig_item.get('is_facility_in_deemed', False),
-                        is_work_preparation_positioning=ig_item.get('is_work_preparation_positioning', False)
-                    )
-                    db.session.add(new_ig)
-        
+        support_plan_service.replace_draft_goals(plan, long_term_goals_data)
         db.session.commit()
         return jsonify({"msg": "Goals updated successfully"}), 200
 
@@ -464,7 +428,7 @@ def update_plan(plan_id):
     計画の基本情報（期間・方針）を更新する。
     DRAFT 状態の計画のみ編集可能（ガードレール）。
     """
-    plan = db.session.get(SupportPlan, plan_id)
+    plan = SupportPlan.query.filter_by(id=plan_id).with_for_update().first()
     if not plan:
         return jsonify({"msg": "SupportPlan not found"}), 404
         
@@ -492,6 +456,8 @@ def update_plan(plan_id):
                     user_intention_content=intention, support_policy_content=policy_text,
                     support_considerations=previous.support_considerations if previous else None)
 
+        if "long_term_goals" in data:
+            support_plan_service.replace_draft_goals(plan, data["long_term_goals"])
         db.session.commit()
         return jsonify({"msg": "Plan updated successfully"}), 200
 
@@ -518,16 +484,12 @@ def approve_plan(plan_id):
     if not supporter:
         return jsonify({"msg": "Supporter not found"}), 404
         
-    target_plan = db.session.get(SupportPlan, plan_id)
-    is_sabi_kan = target_plan is not None and support_plan_service.can_approve_plan(supporter, target_plan)
-            
-    if not is_sabi_kan:
-        return jsonify({"msg": "Permission denied: サービス管理責任者 (Service Manager) role is required to approve a plan."}), 403
-
-    plan = db.session.get(SupportPlan, plan_id)
+    plan = SupportPlan.query.filter_by(id=plan_id).with_for_update().first()
     if not plan:
         return jsonify({"msg": "SupportPlan not found"}), 404
-        
+    if not support_plan_service.can_approve_plan(supporter, plan):
+        return jsonify({"msg": "計画の承認にはサービス管理責任者の権限が必要です。"}), 403
+
     if plan.plan_status != 'DRAFT':
         return jsonify({"msg": "Only DRAFT plans can be approved"}), 400
 

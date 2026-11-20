@@ -1,5 +1,6 @@
 """Use distinct staff, manager and participant sessions on the local demo."""
-from datetime import timedelta
+from datetime import date, timedelta
+from urllib.parse import parse_qs, urlparse
 from playwright.sync_api import expect
 
 
@@ -42,7 +43,6 @@ def check_plan_cycle(browser, after_restart=False):
     interview("午後の疲れに合わせて休憩を相談したい")
     button("新規計画作成").click()
     # End within a month so the same workflow also verifies the review alert.
-    from datetime import date
     dates = page.locator('form input[type=date]')
     start = date.fromisoformat(dates.first.input_value())
     dates.nth(1).fill((start + timedelta(days=20)).isoformat())
@@ -68,7 +68,10 @@ def check_plan_cycle(browser, after_restart=False):
     button("同意を記録する").click()
     expect(page.get_by_text("第1版　有効", exact=True)).to_be_visible()
     login("demo-worker")
-    open_plan()
+    page.goto("/action-items")
+    page.get_by_role("heading", name="個別支援計画の見直し時期です", exact=False).click()
+    expect(page.get_by_role("heading", name="個別支援計画ステータス")).to_be_visible()
+    assert parse_qs(urlparse(page.url).query).get("office_service_configuration_id")
     button("新規実施").click()
     page.get_by_placeholder("例：第2期計画", exact=False).fill("就労先での休憩方法を振り返った")
     button("モニタリングを登録").click()

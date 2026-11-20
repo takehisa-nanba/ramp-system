@@ -186,7 +186,7 @@ class DailyLogService:
         if not tag_id:
             raise AttendanceValidationError("staff_activity_master_id is required")
 
-        timecard = db.session.get(SupporterTimecard, timecard_id)
+        timecard = db.session.query(SupporterTimecard).filter_by(id=timecard_id).with_for_update().first()
         if not timecard or timecard.supporter_id != supporter_id:
             raise AttendanceNotFoundError("Timecard not found or unauthorized")
 

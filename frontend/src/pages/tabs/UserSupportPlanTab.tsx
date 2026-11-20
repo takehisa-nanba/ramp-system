@@ -13,7 +13,6 @@ import {
   activateSupportPlan,
   createSupportPlanDraft,
   createNextSupportPlanDraft,
-  saveSupportPlanGoals,
   getSupportPlanDetails,
   updateSupportPlanDraft,
   fetchUserPii,
@@ -419,31 +418,6 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       setCreateSubmitting(true);
       setCreateError(null);
 
-      let planId = editingPlanId;
-
-      if (planId) {
-        // 編集モード: 計画本体（日付・方針）の更新
-        await updateSupportPlanDraft(planId, {
-          planStartDate: formPlanStartDate || undefined,
-          planEndDate: formPlanEndDate || undefined,
-          userIntentionContent: formUserIntentionContent || undefined,
-          supportPolicyContent: formSupportPolicyContent || undefined
-        });
-      } else {
-        // 新規作成モード
-        const newPlanRes = await createSupportPlanDraft({
-          configId,
-          assessmentId: assessment?.id,
-          userId,
-          planStartDate: formPlanStartDate || undefined,
-          planEndDate: formPlanEndDate || undefined,
-          userIntentionContent: formUserIntentionContent || undefined,
-          supportPolicyContent: formSupportPolicyContent || undefined
-        });
-        planId = newPlanRes.plan_id;
-        setEditingPlanId(planId);
-      }
-
       // 送信前に受給者証のサービス種別を自動適用
       const serviceTypeKey = configId ? 'RETENTION' : mapCertificateToServiceType(userPii?.certificates?.[0]?.certificate_type);
       const mappedGoals = formLongTermGoals.map(ltg => ({
@@ -458,10 +432,18 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
         }))
       }));
 
-      // 目標ツリーの一括保存（新規作成・編集共通）
-      await saveSupportPlanGoals(planId!, {
-        long_term_goals: mappedGoals
-      });
+      const draft = {
+        planStartDate: formPlanStartDate || undefined,
+        planEndDate: formPlanEndDate || undefined,
+        userIntentionContent: formUserIntentionContent || undefined,
+        supportPolicyContent: formSupportPolicyContent || undefined,
+        goals: mappedGoals,
+      };
+      if (editingPlanId) {
+        await updateSupportPlanDraft(editingPlanId, draft);
+      } else {
+        await createSupportPlanDraft({ ...draft, configId, assessmentId: assessment?.id, userId });
+      }
 
       setShowCreateModal(false);
       setEditingPlanId(null);

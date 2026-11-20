@@ -106,7 +106,7 @@ def get_shifts():
         emp_type = supporter.employment_type
         emp_type_ja = '常勤' if emp_type == 'FULL_TIME' else ('非常勤' if emp_type == 'PART_TIME' else emp_type)
 
-        ongoing_tcs = [tc for tc in tcs_list if tc.check_out is None]
+        ongoing_tcs = [tc for tc in tcs_list if tc.check_in and tc.check_out is None]
         rep_tc = None
         if len(ongoing_tcs) > 0:
             rep_tc = ongoing_tcs[-1]
@@ -137,7 +137,7 @@ def get_shifts():
             if not actual_check_in or (tc.check_in and tc.check_in < actual_check_in):
                 actual_check_in = tc.check_in
 
-            if tc.check_out is None:
+            if tc.check_in and tc.check_out is None:
                 has_ongoing = True
             elif not has_ongoing:
                 if not actual_check_out or tc.check_out > actual_check_out:
@@ -155,6 +155,8 @@ def get_shifts():
                 "location_type": tc.location_type,
                 "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
                 "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+                "absence_type": tc.absence_type,
+                "deemed_work_minutes": tc.deemed_work_minutes or 0,
                 "total_break_minutes": tc.total_break_minutes or 0
             })
 
@@ -424,6 +426,8 @@ def get_timecards():
             "location_type": tc.location_type,
             "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
             "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+            "absence_type": tc.absence_type,
+            "deemed_work_minutes": tc.deemed_work_minutes or 0,
             "total_break_minutes": tc.total_break_minutes or 0
         })
         

@@ -354,6 +354,9 @@ class AttendanceService:
         now = datetime.now(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
         today = now.date()
 
+        if self.db.query(SupporterTimecard).filter_by(supporter_id=supporter_id, work_date=today, is_absent=True).first():
+            raise AttendanceConflictError("対象日は休暇として記録されています。")
+
         ongoing = self.get_ongoing_timecard(supporter_id)
         if ongoing:
             raise AttendanceConflictError("Already clocked in")
@@ -421,7 +424,7 @@ class AttendanceService:
                 raise AttendanceNotFoundError("Timecard not found")
             timecard_id = timecard.id
             
-        timecard = self.db.get(SupporterTimecard, timecard_id)
+        timecard = self.db.query(SupporterTimecard).filter_by(id=timecard_id).with_for_update().populate_existing().first()
         if not timecard or timecard.supporter_id != supporter_id:
             raise AttendanceNotFoundError("Timecard not found")
 
@@ -495,8 +498,10 @@ class AttendanceService:
         from backend.app.utils.tenant import resolve_tenant_scope, validate_target_supporter_tenant
         from backend.app.utils.timezone import get_jst_now
         approver = self.db.get(Supporter, approver_id)
+        if not approver or not approver.is_active:
+            raise AttendanceForbiddenError("有効な管理者で確認してください。")
         scope = resolve_tenant_scope(approver_id, [r.role_scope for r in approver.roles if r.is_admin])
-        if scope['level'] != 'CORPORATE' or not approver.is_active:
+        if scope['level'] != 'CORPORATE':
             raise AttendanceForbiddenError("法人管理者の承認が必要です。")
         req = self.db.query(AttendanceCorrectionRequest).filter_by(id=request_id).with_for_update().first()
         if not req:
@@ -530,6 +535,13 @@ class AttendanceService:
                     raise AttendanceValidationError("出退勤の順序と休憩時間を確認してください。")
                 if self.check_overlap(req.supporter_id, start, end, card.id):
                     raise AttendanceConflictError("別の勤務区間と重なっています。")
+                from backend.app.models import StaffActivityAllocationLog
+                allocations = self.db.query(StaffActivityAllocationLog).filter_by(supporter_timecard_id=card.id).all()
+                if any((a.allocation_start_time and a.allocation_start_time < start)
+                       or (end and a.allocation_end_time and a.allocation_end_time > end) for a in allocations):
+                    raise AttendanceConflictError("記録済みの活動が修正後の勤務区間から外れます。")
+                if end and sum(a.allocated_duration_seconds for a in allocations) > (end-start).total_seconds() - card.total_break_minutes * 60:
+                    raise AttendanceConflictError("記録済みの活動時間が実働時間を超えます。")
                 changes = {req.record_type.lower(): req.requested_timestamp}
                 if end:
                     card.scheduled_work_minutes = int((end-start).total_seconds() // 60) - card.total_break_minutes
