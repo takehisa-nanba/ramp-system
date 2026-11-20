@@ -30,6 +30,7 @@ export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => 
   }, [items, userId]);
 
   const getActionItemTargetPath = (item: ActionItem) => {
+    const serviceQuery = item.office_service_configuration_id ? `&office_service_configuration_id=${item.office_service_configuration_id}` : '';
     switch (item.type) {
       case 'daily_log':
         const params = new URLSearchParams();
@@ -40,9 +41,9 @@ export const UserActionItemsTab: React.FC<{ userId: number }> = ({ userId }) => 
         const query = params.toString();
         return `/users/${item.user_id}/attendance${query ? `?${query}` : ''}`;
       case 'monitoring':
-        return `/users/${item.user_id}/support-plans?section=monitoring`;
+        return `/users/${item.user_id}/support-plans?section=assessment${serviceQuery}`;
       case 'approval':
-        return `/users/${item.user_id}/support-plans?section=consent`;
+        return `/users/${item.user_id}/support-plans?section=consent${serviceQuery}`;
       case 'case_conference':
         return `/users/${item.user_id}/support-plans?section=case_conference`;
       default:

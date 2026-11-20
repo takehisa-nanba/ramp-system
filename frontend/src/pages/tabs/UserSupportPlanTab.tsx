@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   FileText, Target, CheckCircle, Plus, 
-  AlertCircle, MessageSquare, Clock, Compass, HelpCircle, 
+  AlertCircle, MessageSquare, Clock, Compass,
   ArrowRight, AlertTriangle, Copy, Trash2
 } from 'lucide-react';
 import {
@@ -29,6 +29,9 @@ import {
 } from '../../services/userService';
 import { X } from 'lucide-react';
 import { UXField, TextAreaWithCounter } from '../../components/common/UXFields';
+
+import { PlanAssessmentSection } from './PlanAssessmentSection';
+import { fetchPlanAssessments, type PlanAssessment } from '../../services/planAssessments';
 
 const statusLabel: Record<string, { label: string; color: string }> = {
   ACTIVE: { label: '有効 (ACTIVE)', color: 'bg-emerald-100 text-emerald-700' },
@@ -58,6 +61,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   const [searchParams, setSearchParams] = useSearchParams();
   const configId = Number(searchParams.get('office_service_configuration_id')) || undefined;
   const sectionParam = searchParams.get('section');
+
+  const [assessments, setAssessments] = useState<PlanAssessment[]>([]);
+  const [chosenAssessmentId, setChosenAssessmentId] = useState<number>();
+  const available = assessments.filter(item => item.plan_id === null);
+  const assessment = available.find(item => item.id === chosenAssessmentId) ?? available[0];
 
   // データ状態
   const [plansData, setPlansData] = useState<UserSupportPlansResponse | null>(null);
@@ -120,13 +128,15 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       setLoading(true);
       setError(null);
 
-      const [plansRes, monitoringRes, confRes, piiRes] = await Promise.all([
+      const [plansRes, monitoringRes, confRes, piiRes, interviews] = await Promise.all([
         fetchUserSupportPlans(userId, configId),
         fetchUserMonitoringReports(userId, configId),
         fetchUserCaseConferences(userId),
-        fetchUserPii(userId)
+        fetchUserPii(userId),
+        fetchPlanAssessments(userId, configId)
       ]);
 
+      setAssessments(interviews);
       setPlansData(plansRes);
       setMonitoringData(monitoringRes);
       setConferences(confRes.items);
@@ -208,7 +218,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
         concern_summary,
         agreed_action,
         participant_ids: formParticipantIds,
-        conference_datetime: formConfDatetime ? new Date(formConfDatetime).toISOString() : undefined,
+        conference_datetime: formConfDatetime ? formConfDatetime : undefined,
         support_plan_id: draftPlan?.id || null,
         user_participated: confType !== 'PERSON_CENTERED_MEETING_EXCEPTION',
         reason_for_user_absence: confType === 'PERSON_CENTERED_MEETING_EXCEPTION' ? formReasonForAbsence : undefined,
@@ -225,7 +235,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setConfError(err.response?.data?.msg || '会議の記録登録に失敗しました。');
+      setConfError(err.response?.data?.error?.message || err.response?.data?.msg || '会議の記録登録に失敗しました。');
     } finally {
       setConfSubmitting(false);
     }
@@ -266,7 +276,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setMonError(err.response?.data?.msg || 'モニタリングの登録に失敗しました。');
+      setMonError(err.response?.data?.error?.message || err.response?.data?.msg || 'モニタリングの登録に失敗しました。');
     } finally {
       setMonSubmitting(false);
     }
@@ -285,7 +295,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setApproveError(err.response?.data?.msg || '計画の承認に失敗しました。');
+      setApproveError(err.response?.data?.error?.message || err.response?.data?.msg || '計画の承認に失敗しました。');
     } finally {
       setApproveSubmitting(false);
     }
@@ -310,7 +320,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setDeviationError(err.response?.data?.msg || '理由の保存に失敗しました。');
+      setDeviationError(err.response?.data?.error?.message || err.response?.data?.msg || '理由の保存に失敗しました。');
     } finally {
       setDeviationSubmitting(false);
     }
@@ -347,7 +357,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      const errMsg = err.response?.data?.msg || '同意手続きまたは計画の有効化に失敗しました。';
+      const errMsg = err.response?.data?.error?.message || err.response?.data?.msg || '同意手続きまたは計画の有効化に失敗しました。';
       setConsentError(errMsg);
     } finally {
       setConsentSubmitting(false);
@@ -371,9 +381,9 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   // 定期的な日付の自動入力用（本日＋3ヶ月後など）
   const initDefaultDates = () => {
     const today = new Date();
-    const formattedToday = today.toISOString().split('T')[0];
+    const formattedToday = today.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
     const threeMonthsLater = new Date(today.getFullYear(), today.getMonth() + 3, today.getDate());
-    const formattedEndDate = threeMonthsLater.toISOString().split('T')[0];
+    const formattedEndDate = threeMonthsLater.toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' });
     
     setFormPlanStartDate(formattedToday);
     setFormPlanEndDate(formattedEndDate);
@@ -423,6 +433,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
         // 新規作成モード
         const newPlanRes = await createSupportPlanDraft({
           configId,
+          assessmentId: assessment?.id,
           userId,
           planStartDate: formPlanStartDate || undefined,
           planEndDate: formPlanEndDate || undefined,
@@ -430,6 +441,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
           supportPolicyContent: formSupportPolicyContent || undefined
         });
         planId = newPlanRes.plan_id;
+        setEditingPlanId(planId);
       }
 
       // 送信前に受給者証のサービス種別を自動適用
@@ -461,7 +473,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      setCreateError(err.response?.data?.msg || '計画の保存または目標の登録に失敗しました。');
+      setCreateError(err.response?.data?.error?.message || err.response?.data?.msg || '計画の保存または目標の登録に失敗しました。');
     } finally {
       setCreateSubmitting(false);
     }
@@ -509,15 +521,15 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
   // 次期計画クローンハンドラー
   const handleCreateNextPlan = async () => {
-    if (!activePlan) return;
+    if (!activePlan || !assessment) return;
     try {
       setCloningSubmitting(true);
-      await createNextSupportPlanDraft(activePlan.id);
+      await createNextSupportPlanDraft(activePlan.id, assessment.id);
       setShowCloneConfirmModal(false);
       await loadAllData();
     } catch (err: any) {
       console.error(err);
-      alert(err.response?.data?.msg || '次期原案の作成に失敗しました。');
+      alert(err.response?.data?.error?.message || err.response?.data?.msg || '次期原案の作成に失敗しました。');
     } finally {
       setCloningSubmitting(false);
     }
@@ -603,6 +615,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
     : null;
 
   // 会議実施状況の検出
+  const workingPlan = plansData?.plan_history.find(p => ['DRAFT', 'PENDING_CONSENT'].includes(p.plan_status));
   const hasPersonCenteredMeeting = conferences.some(
     c => c.support_plan_id === latestPlan?.id && c.conference_type === 'PERSON_CENTERED_MEETING' && c.user_participated === true
   );
@@ -625,9 +638,11 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   // 1: アセスメント ➔ 2: 計画原案 ➔ 3: ケース会議 ➔ 4: 計画成案 ➔ 5: 説明・同意 ➔ 6: モニタリング
   let currentStepIndex = 1;
   if (latestPlanStatus === 'DRAFT') {
-    currentStepIndex = hasPersonCenteredMeeting ? 4 : 3;
+    currentStepIndex = assessments.some(item => item.plan_id === latestPlan?.id) ? (hasPersonCenteredMeeting ? 4 : 3) : 1;
   } else if (latestPlanStatus === 'PENDING_CONSENT') {
     currentStepIndex = 5;
+  } else if (assessment) {
+    currentStepIndex = 2;
   } else if (activePlan) {
     currentStepIndex = 6;
   }
@@ -657,20 +672,20 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
           }`}>
             {activePlan ? '計画 ACTIVE' : '計画 未作成'}
           </span>
-          {activePlan && (
-            <button 
+          {activePlan && !workingPlan && (
+            <button disabled={!assessment} title={!assessment ? "先に今回の面談を記録してください" : undefined}
               onClick={() => setShowCloneConfirmModal(true)}
               className="flex items-center gap-1.5 bg-indigo-600 text-white px-4 py-2.5 rounded-xl font-bold text-xs hover:bg-indigo-700 transition-colors shadow-sm"
             >
               <Copy className="w-4 h-4" /> 次期原案を作成
             </button>
           )}
-          <button 
+          {!activePlan && !workingPlan && <button disabled={!assessment} title={!assessment ? "先に面談を記録してください" : undefined}
             onClick={() => {
               setEditingPlanId(null);
               setFormLongTermGoals([DEFAULT_LONG_TERM_GOAL()]);
               initDefaultDates();
-              setFormUserIntentionContent('');
+              setFormUserIntentionContent(assessment?.summary || '');
               setFormSupportPolicyContent('');
               setCreateError(null);
               setShowCreateModal(true);
@@ -682,7 +697,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
             }`}
           >
             <Plus className="w-4 h-4" /> 新規計画作成
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -829,20 +844,14 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
       <div className="space-y-6">
 
         {/* 3. アセスメント */}
-        <div id="section-assessment" className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm transition-all duration-300">
-          <div className="flex items-start justify-between mb-4">
-            <h3 className="text-lg font-black text-slate-800 flex items-center gap-2">
-              <span className="w-7 h-7 rounded-xl bg-slate-100 flex items-center justify-center text-slate-500 font-bold text-sm">1</span>
-              アセスメント
-            </h3>
-            <span className="text-xs font-bold text-slate-400 bg-slate-50 px-2.5 py-1 rounded-lg">工程 1/7</span>
-          </div>
-          <div className="border border-dashed border-slate-200 p-6 rounded-2xl text-center">
-            <HelpCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-            <p className="text-sm font-bold text-slate-500">直近のアセスメント・面談記録</p>
-            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">アセスメント機能は次期フェーズで提供予定です。現在は紙媒体や外部ツールで実施したアセスメントをもとに個別支援計画を作成してください。</p>
-          </div>
-        </div>
+        <PlanAssessmentSection key={`${userId}-${configId}`} userId={userId} configId={configId}
+          draftId={workingPlan?.plan_status === 'DRAFT' ? workingPlan.id : undefined}
+          items={assessments} onSaved={loadAllData} />
+        {available.length > 1 && !workingPlan && <label>次の原案に使用する面談
+          <select value={assessment?.id} onChange={event => setChosenAssessmentId(Number(event.target.value))}>
+            {available.map(item => <option key={item.id} value={item.id}>{item.interview_date}　{item.summary.slice(0, 40)}</option>)}
+          </select>
+        </label>}
 
         {/* 4. 計画原案 */}
         <div id="section-draft" className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm transition-all duration-300">
@@ -930,7 +939,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                     setConfType('PERSON_CENTERED_MEETING');
                     setConfError(null);
                     setFormTopics([{ concern: '', action: '' }]);
-                    setFormConfDatetime(new Date().toISOString().slice(0, 16));
+                    setFormConfDatetime(new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T').slice(0, 16));
                     setShowConfModal(true);
                   }}
                   className="w-full mt-3 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold py-2 rounded-xl transition-colors shadow-xs"
@@ -957,7 +966,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                     setConfType('PERSON_CENTERED_MEETING_EXCEPTION');
                     setConfError(null);
                     setFormTopics([{ concern: '期限内実施困難に伴う本人不在会議', action: '不在対応および代替状況モニタリングの決定' }]);
-                    setFormConfDatetime(new Date().toISOString().slice(0, 16));
+                    setFormConfDatetime(new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T').slice(0, 16));
                     setFormReasonForAbsence('');
                     setFormAbsenceMonitoringSummary('');
                     setFormIsDigitalDeclaration(false);
@@ -987,7 +996,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                     setConfType('STAFF_REVIEW_MEETING');
                     setConfError(null);
                     setFormTopics([{ concern: '', action: '' }]);
-                    setFormConfDatetime(new Date().toISOString().slice(0, 16));
+                    setFormConfDatetime(new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Tokyo' }).replace(' ', 'T').slice(0, 16));
                     setShowConfModal(true);
                   }}
                   className="w-full mt-3 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold py-2 rounded-xl transition-colors"
@@ -1089,7 +1098,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                   )}
                 </div>
                 
-                {hasPersonCenteredMeeting && (
+                {hasPersonCenteredMeeting && latestPlan?.can_approve && (
                   <button
                     onClick={() => {
                       if (latestPlan) {
@@ -1272,7 +1281,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <button 
                   onClick={() => {
                     setMonError(null);
-                    setFormMonDate(new Date().toISOString().split('T')[0]);
+                    setFormMonDate(new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Tokyo' }));
                     setFormMonSummary('');
                     setFormMonGoalNotes('');
                     setFormMonContext('');
@@ -1299,7 +1308,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 </p>
                 <ul className="text-[10px] text-rose-700 mt-1.5 list-disc list-inside space-y-1 font-medium">
                   {latestPlanStatus === 'NONE' && (
-                    <li>個別支援計画が作成されていません。右上の<strong>「新規計画作成」</strong>ボタンから原案を作成してください。</li>
+                    <li>面談を記録してから「新規計画作成」で原案を作成してください。</li>
                   )}
                   {latestPlanStatus === 'DRAFT' && (
                     <li>個別支援計画が下書き（DRAFT）のままです。本人同席の会議記録を登録した上で、サービス管理責任者アカウントで計画を<strong>承認（成案化）</strong>してください。</li>
@@ -1849,7 +1858,7 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
                 <h3 className="font-black text-slate-800 text-base flex items-center gap-2">
                   <FileText className="w-5 h-5 text-indigo-600" /> {editingPlanId ? '個別支援計画（原案）の編集' : '個別支援計画（原案）の新規作成'}
                 </h3>
-                <p className="text-[10px] text-slate-400 font-bold mt-0.5">※ 未入力の方針項目は暫定アセスメント / 暫定支援方針として自動生成されます。</p>
+                <p className="text-[10px] text-slate-400 font-bold mt-0.5">面談で確認した本人の希望をもとに、支援方針と目標を入力してください。</p>
               </div>
               <button 
                 onClick={() => setShowCreateModal(false)}

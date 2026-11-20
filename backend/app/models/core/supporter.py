@@ -329,6 +329,7 @@ class StaffActivityAllocationLog(db.Model):
 class AttendanceCorrectionRequest(db.Model):
     """職員による勤怠修正申請ログ。"""
     __tablename__ = 'supporter_attendance_correction_requests'
+    target_timecard_id = Column(Integer, ForeignKey('supporter_timecards.id'))
     
     id = Column(Integer, primary_key=True)
     supporter_id = Column(Integer, ForeignKey('supporters.id'), nullable=False, index=True)

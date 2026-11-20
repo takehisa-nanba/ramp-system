@@ -2,12 +2,13 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { Heading } from '../components/common/Typography';
-import { Calendar, Play, FileEdit } from 'lucide-react';
+import { Calendar, Play } from 'lucide-react';
 import { attendanceApi, type ShiftRecord } from '../services/attendanceApi';
 import dayjs from 'dayjs';
 import { AiShiftGenerationModal } from '../components/attendance/AiShiftGenerationModal';
 import { useAuth } from '../context/AuthContext';
 import { ManualShiftEditModal } from '../components/attendance/ManualShiftEditModal';
+import AttendanceRequests from '../components/attendance/AttendanceRequests';
 import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
 
 export const StaffAttendancePage: React.FC = () => {
@@ -191,23 +192,7 @@ export const StaffAttendancePage: React.FC = () => {
           </div>
         </div>
 
-        {/* 申請アクション */}
-        <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-200">
-          <Heading variant="h3" className="mb-4 flex items-center gap-2">
-            <FileEdit className="w-5 h-5 text-indigo-600" />
-            打刻修正・休暇の申請
-          </Heading>
-          <p className="text-sm text-slate-500 mb-4">
-            一般スタッフは、自身の打刻実績や予定を勝手に書き換えることはできません。
-            修正や休暇の取得を希望する場合は、こちらから申請（Decision要求）を行ってください。
-          </p>
-          <button
-            onClick={() => alert('申請フォームモーダル（未実装）')}
-            className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700"
-          >
-            新規修正申請を作成する
-          </button>
-        </div>
+        <AttendanceRequests onChange={loadShifts} />
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">

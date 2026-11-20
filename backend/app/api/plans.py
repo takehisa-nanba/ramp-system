@@ -5,7 +5,9 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import SupportPlan, ShortTermGoal, IndividualSupportGoal
 from backend.app.services.support_plan_service import SupportPlanService
-from backend.app.utils.errors import AppError
+from backend.app.utils.errors import AppError, ValidationError
+from backend.app.services.plan_assessment_service import attach_assessment
+from backend.app.utils.timezone import get_jst_today
 from backend.app.services.core_service import check_permission, parse_jwt_identity
 
 plans_bp = Blueprint('plans', __name__, url_prefix='/api/plans')
@@ -81,7 +83,10 @@ def create_plan():
         )
         
         # 明示的な原案作成日を設定
-        new_plan.draft_created_at = date.today()
+        new_plan.draft_created_at = get_jst_today()
+        if data.get("assessment_id") is not None:
+            db.session.flush()
+            attach_assessment(new_plan, data["assessment_id"], supporter_id)
 
         db.session.commit()
         return jsonify({
@@ -345,9 +350,13 @@ def create_next_draft(plan_id):
     if not old_plan:
         return jsonify({"msg": "Plan not found"}), 404
 
+    if old_plan.plan_status != 'ACTIVE':
+        return jsonify(msg="有効な計画から次期原案を作成してください。"), 400
+    data = request.get_json(silent=True) or {}
+    _, actor_id = parse_jwt_identity(get_jwt_identity())
     try:
         from backend.app.models import LongTermGoal, ShortTermGoal, IndividualSupportGoal
-        
+
         # 次期計画の期間設定
         start_date = date.today()
         if old_plan.plan_end_date:
@@ -368,6 +377,10 @@ def create_next_draft(plan_id):
         support_plan_service.set_plan_period(new_plan)
         db.session.add(new_plan)
         db.session.flush()
+
+        new_plan.draft_created_at = get_jst_today()
+        if data.get("assessment_id") is not None:
+            attach_assessment(new_plan, data["assessment_id"], actor_id)
 
         # 目標の複製
         for old_ltg in old_plan.long_term_goals:
@@ -471,20 +484,14 @@ def update_plan(plan_id):
         support_plan_service.set_plan_period(plan, plan_start_date, plan_end_date)
             
         if user_intention_content or support_policy_content:
-            if plan.holistic_policy:
-                plan.holistic_policy.user_intention_content = user_intention_content or plan.holistic_policy.user_intention_content
-                plan.holistic_policy.support_policy_content = support_policy_content or plan.holistic_policy.support_policy_content
-            else:
-                policy = HolisticSupportPolicy(
-                    user_id=plan.user_id,
-                    effective_date=date.today(),
-                    user_intention_content=user_intention_content or "本人の意向未記入",
-                    support_policy_content=support_policy_content or "支援の方針未記入"
-                )
-                db.session.add(policy)
-                db.session.flush()
-                plan.holistic_support_policy_id = policy.id
-                
+            previous = plan.holistic_policy
+            intention = user_intention_content or (previous.user_intention_content if previous else "本人の意向未記入")
+            policy_text = support_policy_content or (previous.support_policy_content if previous else "支援の方針未記入")
+            if not previous or (intention, policy_text) != (previous.user_intention_content, previous.support_policy_content):
+                plan.holistic_policy = HolisticSupportPolicy(user_id=plan.user_id, effective_date=get_jst_today(),
+                    user_intention_content=intention, support_policy_content=policy_text,
+                    support_considerations=previous.support_considerations if previous else None)
+
         db.session.commit()
         return jsonify({"msg": "Plan updated successfully"}), 200
 
@@ -539,8 +546,8 @@ def approve_plan(plan_id):
         meeting = CaseConferenceLog.query.filter_by(
             support_plan_id=plan_id,
             conference_type='PERSON_CENTERED_MEETING',
-            user_participated=True
-        ).first()
+            user_id=plan.user_id, deleted_at=None, user_participated=True
+        ).order_by(CaseConferenceLog.conference_datetime.desc()).first()
         
         if not meeting:
             return jsonify({"msg": "本人同席会議（PERSON_CENTERED_MEETING）が実施されていません。計画の承認には本人同席の会議が必須条件です。"}), 400

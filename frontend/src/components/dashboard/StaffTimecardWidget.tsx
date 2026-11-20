@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { dashboardStaffApi } from '../../services/dashboardStaffApi';
-import type { StaffStatus } from '../../services/dashboardStaffApi';
+import type { StaffStatus, ClockInService } from '../../services/dashboardStaffApi';
 import { Heading } from '../common/Typography';
 import { Clock, LogIn, LogOut, FileEdit } from 'lucide-react';
 import { Modal, message, InputNumber } from 'antd';
 
 const StaffTimecardWidget: React.FC = () => {
+  const [services, setServices] = useState<ClockInService[]>([]);
+  const [serviceId, setServiceId] = useState<number>();
   const [staffList, setStaffList] = useState<StaffStatus[]>([]);
   const [currentStaffId, setCurrentStaffId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
@@ -14,12 +16,13 @@ const StaffTimecardWidget: React.FC = () => {
   const [confirmVisible, setConfirmVisible] = useState(false);
   const [confirmType, setConfirmType] = useState<'CLOCK_IN' | 'CLOCK_OUT' | null>(null);
   const [confirmMessage, setConfirmMessage] = useState('');
-  const [breakMinutes, setBreakMinutes] = useState<number>(60);
+  const [breakMinutes, setBreakMinutes] = useState<number>(0);
 
   const fetchStatus = async () => {
     try {
       const data = await dashboardStaffApi.getStaffStatus();
       setStaffList(data.staff_list);
+      setServices(data.clock_in_services);
       setCurrentStaffId(data.current_staff_id);
     } catch (err) {
       console.error('Failed to fetch staff status', err);
@@ -40,7 +43,7 @@ const StaffTimecardWidget: React.FC = () => {
 
   const currentStaff = staffList.find(s => s.supporter_id === currentStaffId);
   const isClockedIn = currentStaff?.status === 'WORKING';
-  const isClockedOut = currentStaff?.status === 'FINISHED';
+  const selected = services.length === 1 ? services[0] : services.find(service => service.id === serviceId);
 
   const checkTimeDiff = (scheduledTimeStr?: string, type: 'CLOCK_IN' | 'CLOCK_OUT' = 'CLOCK_IN') => {
     if (!scheduledTimeStr) return null;
@@ -96,7 +99,8 @@ const StaffTimecardWidget: React.FC = () => {
 
   const executeClockIn = async () => {
     try { 
-      await dashboardStaffApi.clockIn(); 
+      if (!selected) return;
+      await dashboardStaffApi.clockIn(selected);
       message.success('出勤しました');
       setConfirmVisible(false);
       fetchStatus(); 
@@ -134,11 +138,16 @@ const StaffTimecardWidget: React.FC = () => {
       </div>
       
       <div className="flex flex-col md:flex-row gap-4 p-6 bg-slate-50 rounded-2xl border border-slate-200 items-center justify-between shadow-sm">
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap gap-4 items-center">
+          {!isClockedIn && services.length > 1 && <label>勤務するサービス
+            <select className="ml-2 rounded border p-2" value={serviceId ?? ''} onChange={e => setServiceId(Number(e.target.value))}>
+              <option value="">選択してください</option>{services.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select></label>}
+          {!isClockedIn && services.length === 0 && <p>本日の勤務先の職務割り当てを確認してください。</p>}
           <button 
-            disabled={isClockedIn || isClockedOut}
+            disabled={isClockedIn || !selected}
             onClick={handleClockInClick}
-            className={`px-8 py-4 font-black text-xl rounded-2xl flex items-center gap-2 transition-all ${!isClockedIn && !isClockedOut ? 'bg-emerald-500 text-white hover:bg-emerald-600 hover:scale-105 shadow-md' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
+            className={`px-8 py-4 font-black text-xl rounded-2xl flex items-center gap-2 transition-all ${!isClockedIn && selected ? 'bg-emerald-500 text-white hover:bg-emerald-600 hover:scale-105 shadow-md' : 'bg-slate-200 text-slate-400 cursor-not-allowed'}`}
           >
             <LogIn className="w-6 h-6"/> 出勤する
           </button>

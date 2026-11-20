@@ -306,17 +306,38 @@ def create_request():
     supporter_id = extract_staff_id(identity)
 
     data = request.get_json() or {}
-    req = AttendanceCorrectionRequest(
-        supporter_id=supporter_id,
-        target_date=date.fromisoformat(data['target_date']),
-        record_type=data.get('record_type', 'TIMECARD'),
-        requested_timestamp=datetime.now(),
-        request_reason=data.get('reason', ''),
-        request_status='PENDING'
-    )
-    db.session.add(req)
-    db.session.commit()
-    return jsonify({"msg": "Request created", "id": req.id}), 201
+    req = AttendanceService(db.session).request_attendance_change(supporter_id, data)
+    return jsonify(id=req.id, msg="申請を受け付けました。"), 201
+
+
+@attendance_bp.get('/requests')
+@jwt_required()
+@handle_attendance_errors
+def list_requests():
+    actor_id = extract_staff_id(get_jwt_identity())
+    scope = resolve_tenant_scope(actor_id, get_jwt().get('role_scopes', []))
+    query = AttendanceCorrectionRequest.query.join(Supporter, Supporter.id == AttendanceCorrectionRequest.supporter_id)
+    if scope['level'] == 'CORPORATE':
+        query = query.join(OfficeSetting, OfficeSetting.id == Supporter.office_id).filter(OfficeSetting.corporation_id == scope['corp_id'])
+    else:
+        query = query.filter(AttendanceCorrectionRequest.supporter_id == actor_id)
+    return jsonify([dict(id=r.id, supporter_id=r.supporter_id, name=r.supporter.last_name + ' ' + r.supporter.first_name,
+        target_date=r.target_date.isoformat(), record_type=r.record_type, request_reason=r.request_reason,
+        requested_time=r.requested_timestamp.strftime('%H:%M') if r.target_timecard_id else None,
+        request_status=r.request_status) for r in query.order_by(AttendanceCorrectionRequest.id.desc())])
+
+
+@attendance_bp.post('/requests/<int:request_id>/review')
+@jwt_required()
+@handle_attendance_errors
+def review_request(request_id):
+    decision = (request.get_json() or {}).get('decision')
+    if decision not in ('approve', 'reject'):
+        return jsonify(msg="承認または差戻しを選んでください。"), 400
+    result = AttendanceService(db.session).process_attendance_correction(request_id,
+        extract_staff_id(get_jwt_identity()), decision == 'approve')
+    return jsonify(request_status=result.request_status)
+
 
 @attendance_bp.route('/clock-in', methods=['POST'])
 @jwt_required()
@@ -337,7 +358,7 @@ def clock_in():
     location_detail = data.get('location_detail', '')
 
     svc = AttendanceService(db.session)
-    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail, data.get('office_service_configuration_id'))
     db.session.commit()
     return jsonify({
         "msg": "Clocked in successfully",
@@ -389,6 +410,9 @@ def get_timecards():
     query = SupporterTimecard.query.filter(SupporterTimecard.work_date == target_date)
     query, _, _ = filter_query_by_tenant_scope(scope, query_tcs=query, requester_id=staff_id)
 
+    selected_supporter = request.args.get('supporter_id', type=int)
+    if selected_supporter is not None:
+        query = query.filter(SupporterTimecard.supporter_id == selected_supporter)
     timecards = query.order_by(SupporterTimecard.sequence_no).all()
 
     result = []

@@ -234,6 +234,12 @@ class SupportPlanService:
                 logger.error(f"❌ Plan {plan_id}: No AbsenceResponseLog linked to this plan found. Cannot approve.")
                 raise ValidationError("Missing mandatory AbsenceResponseLog evidence for absent user.")
             
+        from backend.app.models import PlanAssessment
+        assessment = PlanAssessment.query.filter_by(plan_id=plan.id).first()
+        meeting_day = conference_date.date() if isinstance(conference_date, datetime) else conference_date
+        if not assessment or assessment.interview_date > meeting_day:
+            raise ValidationError("この計画の会議日までに実施したアセスメントを登録してください。")
+
         # --- ログの作成（Step 3 会議の記録）---
         conference_log = SupportConferenceLog(
             plan_id=plan_id,
@@ -362,6 +368,9 @@ class SupportPlanService:
                 or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN'):
             logger.warning(f"❌ Consent log {consent_log_id} mismatch with Plan {plan_id}.")
             raise ValidationError("Consent log mismatch.")
+
+        if not plan.sabikan_approved_by_id:
+            raise ValidationError("サービス管理責任者による承認が必要です。")
 
         # Serialize activation with contract finish using the same contract lock.
         self.validate_retention_plan_period(plan, plan.plan_start_date, plan.plan_end_date)

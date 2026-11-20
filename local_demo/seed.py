@@ -12,10 +12,34 @@ from backend.app.services.job_retention_service import JobRetentionService
 from backend.app.utils.timezone import get_jst_today, get_jst_now
 
 
+def seed_workflow_accounts(corp):
+    office = OfficeSetting.query.filter_by(corporation_id=corp.id).one()
+    for order, name in enumerate(("問い合わせ", "利用中", "利用終了（定着支援中）", "利用終了（定着完了）", "利用終了（退所）"), 1):
+        if not StatusMaster.query.filter_by(name=name).first():
+            db.session.add(StatusMaster(name=name, sort_order=order))
+    if not Supporter.query.filter_by(staff_code="demo-worker").first():
+        permissions = PermissionMaster.query.filter(PermissionMaster.name.in_(("VIEW", "CREATE"))).all()
+        title = JobTitleMaster.query.filter_by(title_name="生活支援員").first() or JobTitleMaster(title_name="生活支援員")
+        role = RoleMaster(name="ローカル一般支援員", role_scope="JOB", is_admin=False, permissions=permissions)
+        worker = Supporter(staff_code="demo-worker", last_name="サンプル", first_name="支援員",
+            last_name_kana="サンプル", first_name_kana="シエンイン", office_id=office.id,
+            employment_type="FULL_TIME", weekly_scheduled_minutes=2400, hire_date=get_jst_today(), roles=[role])
+        worker.pii = SupporterPII(email="worker@example.invalid")
+        worker.pii.set_password("RampDemo-Local1")
+        db.session.add_all([worker, title])
+        db.session.flush()
+        for config in OfficeServiceConfiguration.query.filter_by(office_id=office.id):
+            db.session.add(SupporterJobAssignment(supporter_id=worker.id, job_title_id=title.id,
+                office_service_configuration_id=config.id, start_date=worker.hire_date, assigned_minutes=1200))
+    db.session.commit()
+
+
 def seed_demo():
     if db.engine.url.database != "ramp_demo":
         raise RuntimeError("The local demo requires the dedicated ramp_demo database.")
-    if Corporation.query.filter_by(tenant_id="ramp-local-demo").first():
+    existing = Corporation.query.filter_by(tenant_id="ramp-local-demo").first()
+    if existing:
+        seed_workflow_accounts(existing)
         return
     if Corporation.query.first() or User.query.first() or Supporter.query.first():
         raise RuntimeError("Local demo initialization requires an empty database.")
@@ -80,3 +104,4 @@ def seed_demo():
             db.session.add(LongTermGoal(plan_id=plan.id, description="週3日の通所を続ける",
                 challenges="本人が無理なく続けられる通所ペースを確かめたい",
                 target_period_start=plan.plan_start_date, target_period_end=plan.plan_end_date))
+    seed_workflow_accounts(corp)

@@ -152,3 +152,4 @@ from backend.app.models.compliance.audit_tracking import (
 from backend.app.models.employment.job_placement import (
     EmployerMaster, JobPlacementLog, JobDevelopmentLog
 )
+from backend.app.models.support.plan_assessment import PlanAssessment

@@ -1,3 +1,4 @@
+from backend.tests.test_support_plan_service import add_test_assessment
 import pytest
 from datetime import datetime, timezone, date
 from backend.app.services.support_plan_service import SupportPlanService
@@ -44,6 +45,7 @@ def test_support_plan_state_transitions(app):
             service.finalize_and_activate_plan(plan_id, consent_log_id)
             
         # 3. DRAFT -> PENDING_CONSENT への遷移 (サビ管承認)
+        add_test_assessment(plan_id, sabikan_id)
         service.log_support_conference_and_approve(
             plan_id=plan_id,
             sabikan_id=sabikan_id,
@@ -147,6 +149,7 @@ def test_consent_api_flow(client, app):
         db.session.commit()
         plan_id = draft_plan.id
         
+        add_test_assessment(plan_id, sabikan_id)
         service.log_support_conference_and_approve(
             plan_id=plan_id,
             sabikan_id=sabikan_id,
@@ -305,6 +308,7 @@ def test_put_goals_only_in_draft_guard(client, app):
     # 2. 計画を PENDING_CONSENT に進める
     with app.app_context():
         service = SupportPlanService()
+        add_test_assessment(plan_id, sabikan_id)
         service.log_support_conference_and_approve(
             plan_id=plan_id,
             sabikan_id=sabikan_id,
@@ -372,6 +376,7 @@ def test_create_next_draft_cloning(client, app):
     with app.app_context():
         # 2. ACTIVE に進める
         service = SupportPlanService()
+        add_test_assessment(plan_id, sabikan_id)
         service.log_support_conference_and_approve(
             plan_id=plan_id,
             sabikan_id=sabikan_id,
@@ -609,6 +614,13 @@ def test_challenges_validation_and_cloning(client, app):
     response = client.put(f"/api/plans/{plan_id}/goals", json=goals_with_challenges, headers=headers)
     assert response.status_code == 200
 
+    response = client.post(f"/api/plans/{plan_id}/approve", headers=headers)
+    assert response.status_code == 400
+    assert "アセスメント" in response.get_json()["msg"]
+    with app.app_context():
+        add_test_assessment(plan_id, sabikan_id)
+        db.session.commit()
+
     # 4. 再度承認（今度は成功するはず）
     response = client.post(f"/api/plans/{plan_id}/approve", headers=headers)
     assert response.status_code == 200
@@ -673,6 +685,7 @@ def test_monitoring_report_flow(client, app):
         plan_id = draft_plan.id
         
         # 原案承認
+        add_test_assessment(plan_id, sabikan_id)
         service.log_support_conference_and_approve(
             plan_id=plan_id,
             sabikan_id=sabikan_id,

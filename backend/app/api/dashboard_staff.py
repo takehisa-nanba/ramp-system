@@ -101,7 +101,18 @@ def get_staff_status():
             } if rep_timecard or completed_list else None
         })
         
+    from backend.app.models import OfficeServiceConfiguration, SupporterJobAssignment, ServiceTypeMaster
+    configs = (db.session.query(OfficeServiceConfiguration.id, OfficeSetting.id.label("office_id"),
+        OfficeSetting.office_name, ServiceTypeMaster.name)
+        .select_from(OfficeServiceConfiguration)
+        .join(OfficeSetting, OfficeSetting.id == OfficeServiceConfiguration.office_id)
+        .join(ServiceTypeMaster, ServiceTypeMaster.id == OfficeServiceConfiguration.service_type_master_id)
+        .join(SupporterJobAssignment, SupporterJobAssignment.office_service_configuration_id == OfficeServiceConfiguration.id)
+        .filter(SupporterJobAssignment.supporter_id == staff_id, SupporterJobAssignment.start_date <= today,
+            db.or_(SupporterJobAssignment.end_date.is_(None), SupporterJobAssignment.end_date >= today))
+        .distinct().order_by(OfficeServiceConfiguration.id).all())
     return jsonify({
+        "clock_in_services": [dict(id=c.id, office_id=c.office_id, label=f"{c.office_name}・{c.name}") for c in configs],
         "current_staff_id": int(identity.split(':')[1]),
         "staff_list": staff_data
     }), 200
@@ -240,7 +251,7 @@ def clock_in():
     svc = AttendanceService(db.session)
 
     try:
-        timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+        timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail, data.get('office_service_configuration_id'))
         db.session.commit()
         return jsonify({
             "msg": "Clocked in successfully",

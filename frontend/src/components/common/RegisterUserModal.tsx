@@ -35,6 +35,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
     }
   });
 
+  const [initialPassword, setInitialPassword] = useState('');
   const [zipCode, setZipCode] = useState('');
   const [zipLoading, setZipLoading] = useState(false);
   const [zipError, setZipError] = useState<string | null>(null);
@@ -226,6 +227,7 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
     try {
       const payload: CreateUserData = {
         display_name: form.display_name,
+        initial_password: initialPassword || undefined,
         pii: {
           last_name: form.last_name || undefined,
           first_name: form.first_name || undefined,
@@ -341,10 +343,13 @@ export const RegisterUserModal: React.FC<RegisterUserModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-5 overflow-y-auto flex-1">
           
           {/* ==========================================
+
               タブ1: 基本情報 & PII
              ========================================== */}
           {activeTab === 'basic' && (
             <div className="space-y-5 animate-in fade-in duration-200">
+            <UXField type="password" autoComplete="new-password" label="本人ログイン用の初期パスワード（任意・8文字以上）" minLength={8}
+              value={initialPassword} onChange={e => setInitialPassword(e.target.value)} />
               {/* 1. 基本情報 */}
               <div className="space-y-4">
                 <div className="flex items-center gap-2 pb-1 border-b border-slate-50">

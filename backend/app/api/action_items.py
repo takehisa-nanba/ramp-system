@@ -9,6 +9,7 @@ from backend.app.models import (
 )
 from backend.app.utils.timezone import get_jst_today
 from sqlalchemy import func
+from dateutil.relativedelta import relativedelta
 
 action_items_bp = Blueprint('action_items', __name__, url_prefix='/api/action-items')
 
@@ -101,6 +102,7 @@ def get_action_items():
             "type": "approval",
             "category_label": "承認待ち",
             "severity": "high",
+            "office_service_configuration_id": plan.office_service_configuration_id,
             "user_id": plan.user_id,
             "user_name": user_name,
             "title": f"{user_name}さんの個別支援計画が同意待ちです",
@@ -138,6 +140,7 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【期限超過】{user_name}さんの個別支援計画期限が超過しています",
@@ -149,6 +152,7 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【残り7日以内】{user_name}さんの個別支援計画の期限が迫っています",
@@ -160,21 +164,23 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "medium",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【残り14日以内】{user_name}さんの個別支援計画の更新時期です",
                     "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。ケース会議および説明・同意の準備を始めてください。",
                     "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
-            elif days_left <= 30:
+            elif today >= plan.plan_end_date - relativedelta(months=1):
                 items.append({
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "low",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
-                    "title": f"【残り30日以内】{user_name}さんの個別支援計画のモニタリング時期です",
-                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。モニタリングの評価を実施してください。",
+                    "title": f"【残り1か月以内】{user_name}さんの個別支援計画の見直し時期です",
+                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。モニタリングと次の計画に向けた本人との面談を進めてください。",
                     "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
                 
@@ -221,6 +227,7 @@ def get_action_items():
                     "type": "support_plan_timeline",
                     "category_label": "日付整合性",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【日付警告】{user_name}さんの個別支援計画の日付整合性に確認が必要です",

@@ -28,7 +28,7 @@ def load_keys(directory):
 def main():
     from subprocess import run
     import sys
-    load_keys(Path("/var/lib/ramp"))
+    load_keys(Path(os.environ.get("RAMP_KEY_DIRECTORY", "/var/lib/ramp")))
     from backend.app import create_app
     from flask import jsonify, send_from_directory
     from waitress import serve
@@ -38,7 +38,7 @@ def main():
     app = create_app()
     with app.app_context():
         seed_demo()
-    public = Path("/app/public")
+    public = Path(os.environ.get("RAMP_PUBLIC_DIRECTORY", "/app/public")).resolve()
 
     @app.get("/")
     @app.get("/<path:path>")

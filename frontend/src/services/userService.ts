@@ -3,6 +3,7 @@
 import apiClient from './apiClient';
 
 export interface UserListItem {
+  user_code?: string;
   id: number;
   display_name: string;
   status_id?: number;
@@ -191,6 +192,7 @@ export const updateUserDetails = async (userId: number, data: UpdateUserData): P
 };
 
 export interface CreateUserData {
+  initial_password?: string;
   display_name: string;
   pii?: {
     last_name?: string;
@@ -378,6 +380,7 @@ export interface ActiveSupportPlan {
   timeline_deviation_reason?: string | null;
 }
 export interface SupportPlanSummary {
+  can_approve?: boolean;
   id: number;
   plan_version: number;
   plan_status: string;
@@ -444,6 +447,7 @@ export interface CreateSupportPlanResponse {
 }
 
 export interface CreateSupportPlanParams {
+  assessmentId?: number;
   configId?: number;
   userId: number;
   holisticSupportPolicyId?: number;
@@ -458,6 +462,7 @@ export const createSupportPlanDraft = async (params: CreateSupportPlanParams): P
     office_service_configuration_id: params.configId,
     user_id: params.userId,
     holistic_support_policy_id: params.holisticSupportPolicyId,
+    assessment_id: params.assessmentId,
     plan_start_date: params.planStartDate,
     plan_end_date: params.planEndDate,
     user_intention_content: params.userIntentionContent,
@@ -472,8 +477,8 @@ export interface CloneNextDraftResponse {
   status: string;
 }
 
-export const createNextSupportPlanDraft = async (planId: number): Promise<CloneNextDraftResponse> => {
-  const response = await apiClient.post<CloneNextDraftResponse>(`/plans/${planId}/create-next-draft`);
+export const createNextSupportPlanDraft = async (planId: number, assessmentId: number): Promise<CloneNextDraftResponse> => {
+  const response = await apiClient.post<CloneNextDraftResponse>(`/plans/${planId}/create-next-draft`, { assessment_id: assessmentId });
   return response.data;
 };
 
@@ -693,6 +698,7 @@ export const updateTimelineDeviationReason = async (planId: number, reason: stri
 
 // --- 管理確認事項 (Action Items) ---
 export interface ActionItem {
+  office_service_configuration_id?: number | null;
   type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference' | 'support_plan_timeline' | 'unexcused_absence' | 'unscheduled_attendance' | 'support_record_missing' | 'schedule_request_pending';
   category_label: string;
   severity: 'high' | 'medium' | 'low';
