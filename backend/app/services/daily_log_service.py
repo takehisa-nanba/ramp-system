@@ -19,12 +19,23 @@ class DailyLogService:
         user_id: int = None,
         notes: str = "",
         log_status: str = 'DRAFT',
-        attendance_record_id: int = None
+        attendance_record_id: int = None,
+        activity_request_id: str = None
     ):
         """
         日報（活動）を記録する。
         直接支援ならSupportRecordへ、間接業務ならStaffActivityAllocationLogへ保存する。
         """
+        if activity_request_id:
+            from uuid import UUID
+            from backend.app.models import Supporter
+            try:
+                activity_request_id = str(UUID(activity_request_id))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise ValidationError("活動の受付番号を確認してください。") from exc
+            db.session.query(Supporter).filter_by(id=supporter_id).with_for_update().one()
+            if AuditActionLog.query.filter_by(actor_supporter_id=supporter_id, activity_request_id=activity_request_id).first():
+                return True
         if duration_seconds < 0 or duration_seconds > 86400:
             raise ValidationError("活動時間は0秒以上24時間（86400秒）以下で指定してください。")
 
@@ -137,6 +148,7 @@ class DailyLogService:
                 supporter_id=supporter_id,
                 activity_date=log_date,
                 staff_activity_master_id=tag_id,
+                supporter_timecard_id=timecard_id,
                 allocation_recording_mode='MINUTES_ONLY'
             ).first()
             
@@ -158,7 +170,7 @@ class DailyLogService:
             entity_id = allocation.id
                 
         audit_log = AuditActionLog(
-            action="CREATE_DAILY_LOG",
+            action="CREATE_DAILY_LOG", activity_request_id=activity_request_id,
             user_id=user_id,
             actor_supporter_id=supporter_id,
             entity_type="SupportRecord" if tag.is_direct_support else "StaffActivityAllocationLog",

@@ -5,7 +5,7 @@ from backend.app.extensions import db
 from backend.app.models import (
     Corporation, EmployerMaster, GrantedService, JobPlacementLog,
     JobTitleMaster, LongTermGoal, MunicipalityMaster, OfficeServiceConfiguration, OfficeSetting,
-    PermissionMaster, RoleMaster, ServiceCertificate, ServiceTypeMaster, StatusMaster,
+    StaffActivityMaster, PermissionMaster, RoleMaster, ServiceCertificate, ServiceTypeMaster, StatusMaster,
     SupportPlan, Supporter, SupporterJobAssignment, SupporterPII, User, UserPII,
 )
 from backend.app.services.job_retention_service import JobRetentionService
@@ -14,6 +14,9 @@ from backend.app.utils.timezone import get_jst_today, get_jst_now
 
 def seed_workflow_accounts(corp):
     office = OfficeSetting.query.filter_by(corporation_id=corp.id).one()
+    for name, direct in (("個別支援・面談", True), ("企業実習同行", True), ("事務作業（記録・書類作成）", False), ("会議・打ち合わせ", False)):
+        if not StaffActivityMaster.query.filter_by(activity_name=name).first():
+            db.session.add(StaffActivityMaster(activity_name=name, is_direct_support=direct))
     for order, name in enumerate(("問い合わせ", "利用中", "利用終了（定着支援中）", "利用終了（定着完了）", "利用終了（退所）"), 1):
         if not StatusMaster.query.filter_by(name=name).first():
             db.session.add(StatusMaster(name=name, sort_order=order))

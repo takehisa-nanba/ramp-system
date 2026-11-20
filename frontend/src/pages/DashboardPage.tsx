@@ -5,6 +5,7 @@ import apiClient from '../services/apiClient';
 import { Heading, Text } from '../components/common/Typography';
 import StaffStatusMonitor from '../components/dashboard/StaffStatusMonitor';
 import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
+import ActivityTracker from '../components/dashboard/ActivityTracker';
 import ActionLogWidget from '../components/dashboard/ActionLogWidget';
 import { useAuth } from '../context/AuthContext';
 
@@ -97,6 +98,7 @@ const DashboardPage: React.FC = () => {
       </div>
 
       <StaffTimecardWidget />
+      {user && <ActivityTracker key={user.id} staffId={user.id} />}
 
       {loading ? (
         <div className="flex justify-center p-16">

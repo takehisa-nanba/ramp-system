@@ -7,8 +7,6 @@ import {
 } from 'lucide-react';
 import { SupportRecordModal } from '../records/SupportRecordModal';
 
-// import ActivityTracker from '../ActivityTracker';
-
 interface MainLayoutProps {
   supporterName: string | null;
   role: string | null;
