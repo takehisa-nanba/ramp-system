@@ -207,6 +207,7 @@ const MainLayout: React.FC<MainLayoutProps> = ({ supporterName, role, onLogout }
             </div>
           </div>
           <button 
+            aria-label="支援記録を書く"
             onClick={() => setIsRecordModalOpen(true)}
             className="w-16 h-16 bg-gradient-to-br from-indigo-500 to-purple-600 text-white rounded-2xl flex items-center justify-center shadow-[0_8px_30px_rgb(79,70,229,0.4)] hover:shadow-[0_8px_40px_rgb(79,70,229,0.6)] hover:-translate-y-1 active:translate-y-0 active:scale-95 transition-all duration-300 border border-white/20"
           >

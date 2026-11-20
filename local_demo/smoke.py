@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright, expect
 
 
 def check(browser, after_restart):
-    page = browser.new_page(base_url="http://127.0.0.1:8080")
+    page = browser.new_page(base_url="http://127.0.0.1:8080", timezone_id="Asia/Tokyo")
     page.set_default_timeout(15000)
     errors = []
     page.on("pageerror", lambda exc: errors.append(str(exc)))
@@ -48,6 +48,38 @@ def check(browser, after_restart):
     expect(page.get_by_text("就労先での状況を本人と確認した")).to_be_visible()
     page.get_by_role("link", name="定着支援の個別支援計画").click()
     expect(page.get_by_role("heading", name="個別支援計画ステータス")).to_be_visible()
+    page.goto("/users")
+    example = "確認用 初回"
+    record = "初回面談で本人の希望を確認した"
+    row = page.get_by_role("row").filter(has_text=example)
+    if not after_restart:
+        page.get_by_role("button", name="利用者を登録").click()
+        page.get_by_placeholder("例: 佐藤", exact=True).fill("確認用")
+        page.get_by_placeholder("例: 健太", exact=True).fill("初回")
+        page.get_by_label("本人ログイン用の初期パスワード", exact=False).fill("RampDemo-Local1")
+        page.locator("form").get_by_role("button", name="利用者を登録").click()
+        expect(row).to_contain_text("問い合わせ")
+        row.get_by_role("button", name="利用開始").click()
+        today = page.evaluate("new Date().toLocaleDateString('sv-SE')")
+        page.locator('form input[type=date]').fill(today)
+        page.get_by_role("button", name="更新する").click()
+    expect(row).to_contain_text("利用中")
+    code = row.locator("td").first.locator("span").inner_text()
+    row.get_by_role("button", name=example + " の詳細").click()
+    history = page.get_by_role("link", name="履歴", exact=True).get_attribute("href")
+    page.goto("/records")
+    if not after_restart:
+        page.get_by_role("button", name="支援記録を書く").click()
+        page.locator('select').filter(has=page.get_by_role("option", name="利用者を選択", exact=True)).select_option(label=example)
+        page.get_by_label("支援時間（分）").fill("25")
+        page.get_by_placeholder("どのような支援を", exact=False).fill(record)
+        page.get_by_role("button", name="保存する").click()
+    expect(page.get_by_text(record, exact=True)).to_be_visible()
+    page.goto(history)
+    expect(page.get_by_text("支援記録を登録", exact=True)).to_be_visible()
+    page.context.clear_cookies()
+    login(code, user=True)
+    expect(page.get_by_role("heading", name="マイページ", exact=True)).to_be_visible()
     assert not errors, errors
     page.close()
 

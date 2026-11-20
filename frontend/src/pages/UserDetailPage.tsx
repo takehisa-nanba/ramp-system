@@ -164,7 +164,7 @@ const UserDetailPage: React.FC = () => {
           <Route path="retention" element={<RetentionContracts key={id} userId={Number(id)} />} />
           <Route path="support-plans" element={<UserSupportPlanTab userId={Number(id)} />} />
           <Route path="action-items" element={<UserActionItemsTab userId={Number(id)} />} />
-          <Route path="history" element={<UserHistoryTab />} />
+          <Route path="history" element={<UserHistoryTab key={id} userId={Number(id)} />} />
           <Route path="schedule-templates" element={<UserScheduleTemplatesTab userId={Number(id)} />} />
           <Route path="schedule-requests" element={<UserScheduleRequestsTab userId={Number(id)} />} />
           

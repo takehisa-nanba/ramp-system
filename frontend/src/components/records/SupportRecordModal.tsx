@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { X, Mic, Send, FileEdit, MapPin, Clock, Calendar } from 'lucide-react';
-import { useAuth } from '../../context/AuthContext';
+import { X, Send, FileEdit, MapPin, Clock, Calendar } from 'lucide-react';
 import { recordsApi } from '../../services/recordsApi';
 import { dailyLogApi } from '../../services/dailyLogApi';
 import type { UserSummary } from '../../services/dailyLogApi';
@@ -12,7 +11,6 @@ interface Props {
 }
 
 export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
-  const { user } = useAuth();
   const [targetUserId, setTargetUserId] = useState('');
   const [locationType, setLocationType] = useState('ON_SITE');
   const [locationDetail, setLocationDetail] = useState('');
@@ -20,7 +18,7 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
   const [startTime, setStartTime] = useState(dayjs().format('HH:mm'));
   const [supportContent, setSupportContent] = useState('');
   const [observationNote, setObservationNote] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
+  const [minutes, setMinutes] = useState(15);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [users, setUsers] = useState<UserSummary[]>([]);
 
@@ -59,12 +57,16 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
       return;
     }
 
+    if (!Number.isInteger(minutes) || minutes < 0 || minutes > 1440) {
+      alert('支援時間を0〜1440分の整数で入力してください。');
+      return;
+    }
     setIsSubmitting(true);
     try {
       await recordsApi.createRecord({
         user_id: parseInt(targetUserId),
         log_date: logDate,
-        supporter_id: user?.id || 1, // fallback for safety
+        support_duration_seconds: minutes * 60,
         support_start_time: dayjs(`${logDate}T${startTime}`).toISOString(),
         support_record_type: 'DIRECT_SUPPORT',
         location_type: locationType,
@@ -172,6 +174,7 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
           )}
 
           <div className="flex flex-col gap-4">
+            <label>支援時間（分）<input type="number" min={0} max={1440} value={Number.isNaN(minutes) ? '' : minutes} onChange={e => setMinutes(e.target.valueAsNumber)} className="ml-2 w-20 rounded border p-1" /></label>
             <div className="relative">
               <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">本人の様子 (観察事項)</label>
               <textarea
@@ -186,30 +189,15 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
               <label className="block text-xs font-bold text-slate-500 mb-1 ml-1">支援内容 (提供したサポート)</label>
               <textarea
                 className="w-full border border-slate-200 rounded-2xl p-4 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-all resize-none min-h-[120px]"
-                placeholder="どのような支援を行ったか入力してください...（音声入力も可能です）"
+                placeholder="どのような支援を行ったか入力してください..."
                 value={supportContent}
                 onChange={(e) => setSupportContent(e.target.value)}
               />
               
-              {/* Voice Input Button (Phase 2 preview) */}
-              <button 
-                onClick={() => setIsRecording(!isRecording)}
-                className={`absolute bottom-4 right-4 p-3 rounded-full shadow-lg transition-all flex items-center justify-center ${
-                  isRecording 
-                    ? 'bg-rose-500 text-white animate-pulse' 
-                    : 'bg-indigo-100 text-indigo-600 hover:bg-indigo-200'
-                }`}
-              >
-                <Mic className="w-5 h-5" />
-              </button>
             </div>
           </div>
           
-          {isRecording && (
-            <p className="text-xs text-rose-500 font-bold mt-2 ml-1 animate-pulse flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-rose-500"></span> 音声認識中...話してください
-            </p>
-          )}
+
         </div>
 
         {/* Footer */}

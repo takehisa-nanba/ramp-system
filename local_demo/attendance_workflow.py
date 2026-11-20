@@ -30,6 +30,7 @@ def check_attendance(browser, after_restart):
         button("出勤する").click()
         button("退勤する").click()
         page.get_by_role("dialog").get_by_role("button", name="退勤する").click()
+        expect(page.get_by_role("dialog")).to_be_hidden()
         expect(button("退勤する")).to_be_disabled()
         button("新規修正申請を作成する").click()
         day = page.get_by_label("対象日").input_value()
