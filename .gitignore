@@ -105,3 +105,4 @@ test_*.py
 
 # Scratch scripts
 scripts/patches/
+/instance/app.db

@@ -43,3 +43,7 @@ git checkout <commit_hash> -- <file_path>
 ```bash
 git checkout HEAD~1 -- frontend/src/components/Timecard.tsx
 ```
+
+## 定着支援 Phase 1 の記録
+
+旧 slice2 のデータ救済を終了した経緯と当時の検証資料は、[Phase 1 引き継ぎ書](https://github.com/takehisa-nanba/ramp-system/blob/01184de219eedf21728c95bb85a360df2ab99bc9/backend/docs/PHASE1_BASELINE_HANDOVER.md) に保存しています。現行のローカル起動手順はルートの README.md にあります。

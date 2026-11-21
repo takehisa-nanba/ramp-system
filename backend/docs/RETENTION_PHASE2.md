@@ -125,7 +125,6 @@ SupportPlanのライフサイクル、契約状態、同意モデル、支援記
 ```powershell
 python -B -m pytest backend/tests/test_retention_plan_phase2.py backend/tests/test_retention_core_phase1.py backend/tests/test_support_plan_service.py backend/tests/test_support_plan_transitions.py -q -o log_cli=false
 python -B backend/tests/validate_retention_plan_postgres.py --env-file .env
-python -B backend/tests/validate_retention_postgres.py --env-file .env
 cd frontend
 npm ci --no-audit --no-fund
 npm run build
