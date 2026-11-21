@@ -1,6 +1,8 @@
 import apiClient from './apiClient';
 
 export interface MyPageTodayResponse {
+  pending_plan: boolean;
+  activities: {id: number; content: string}[];
   attendance: {
     checked_in: boolean;
     check_in_time: string | null;
@@ -8,6 +10,7 @@ export interface MyPageTodayResponse {
     check_out_time: string | null;
   };
   daily_log: {
+    morning_plan: string;
     physical_condition_score: number | null;
     sleep_quality_score: number | null;
     user_self_evaluation: string | null;

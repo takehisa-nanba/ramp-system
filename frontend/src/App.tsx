@@ -40,13 +40,13 @@ const App: React.FC = () => {
 
   if (user.roleName === 'USER') {
     return <BrowserRouter><Routes>
-      <Route path="/mypage" element={<main className="min-h-screen bg-slate-50 p-4">
+      <Route path="/mypage" element={<div className="min-h-screen bg-slate-50 p-4">
         <header className="mx-auto mb-4 flex max-w-4xl items-center justify-between">
           <span>{user.fullName}</span><button onClick={logout}>ログアウト</button>
         </header>
         <UserMyPage />
-        <MySupportPlans />
-      </main>} />
+      </div>} />
+      <Route path="/mypage/plan" element={<main className="min-h-screen bg-slate-50 p-4"><MySupportPlans /></main>} />
       <Route path="*" element={<Navigate to="/mypage" replace />} />
     </Routes></BrowserRouter>;
   }

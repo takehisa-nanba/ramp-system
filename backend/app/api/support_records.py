@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from backend.app.extensions import db
-from backend.app.models.support.daily_log import SupportRecord
+from backend.app.models.support.daily_log import SupportRecord, ParticipantActivity
 from backend.app.models.core.user import User
 from backend.app.models.core.supporter import Supporter
 from datetime import datetime, date
@@ -53,12 +53,22 @@ def get_records():
     results = query.all()
 
     data = []
+    from backend.app.api.job_retention import actor_id
+    from backend.app.utils.errors import PermissionDenied, NotFoundError
     for record, user, supporter in results:
+        linked_content = None
+        if record.participant_activity_id:
+            try:
+                assessment_scope(user.id, config_id, actor_id(), 'VIEW')
+            except (PermissionDenied, NotFoundError):
+                continue
+            linked_content = record.participant_activity.content
         data.append({
             'id': record.id,
             'user_id': record.user_id,
             'office_service_configuration_id': record.office_service_configuration_id,
             'user_name': user.display_name,
+            'participant_activity': linked_content,
             'supporter_id': record.supporter_id,
             'supporter_name': f"{supporter.last_name} {supporter.first_name}",
             'log_date': record.log_date.isoformat() if record.log_date else None,
@@ -74,6 +84,21 @@ def get_records():
         })
 
     return jsonify({'items': data})
+
+@bp.get('/participant-activities')
+def participant_activities():
+    from backend.app.api.job_retention import actor_id
+    from flask_jwt_extended import verify_jwt_in_request
+    verify_jwt_in_request()
+    user_id = request.args.get('user_id', type=int)
+    assessment_scope(user_id, None, actor_id(), 'VIEW')
+    try:
+        day = date.fromisoformat(request.args.get('date', ''))
+    except ValueError:
+        return jsonify(msg="日付を確認してください。"), 400
+    rows = ParticipantActivity.query.filter_by(user_id=user_id, log_date=day).order_by(ParticipantActivity.id)
+    return jsonify(items=[dict(id=a.id, content=a.content) for a in rows])
+
 
 @bp.route('', methods=['POST'])
 def create_record():
@@ -106,7 +131,12 @@ def create_record():
     except (ValueError, TypeError, KeyError) as exc:
         raise ValidationError('支援日時を確認してください。') from exc
     try:
+        activity_id = data.get('participant_activity_id')
+        if activity_id is not None and (type(activity_id) is not int or not ParticipantActivity.query.filter_by(
+                id=activity_id, user_id=data['user_id'], log_date=day).first()):
+            return jsonify(msg="本人と支援日の活動を選んでください。"), 400
         new_record = SupportRecord(
+            participant_activity_id=activity_id,
             user_id=data.get('user_id'), log_date=day, supporter_id=actor,
             support_start_time=start, support_end_time=end, support_duration_seconds=duration,
             support_record_type=data.get('support_record_type', 'DIRECT_SUPPORT'),

@@ -56,12 +56,24 @@ class UserDailyLog(db.Model):
 # ====================================================================
 # 2. SupportRecord (支援記録)
 # ====================================================================
+class ParticipantActivity(db.Model):
+    __tablename__ = 'participant_activities'
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
+    log_date = Column(Date, nullable=False)
+    request_id = Column(String(36), nullable=False)
+    content = Column(Text, nullable=False)
+    __table_args__ = (db.UniqueConstraint('user_id', 'request_id'),)
+
+
 class SupportRecord(db.Model):
     """
     利用者に対する具体的な支援記録。
     同じ日付に複数登録可能で、目標紐付けは任意。
     """
     __tablename__ = 'support_records'
+    participant_activity_id = Column(Integer, ForeignKey('participant_activities.id'))
+    participant_activity = db.relationship('ParticipantActivity')
     office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
     service_configuration = db.relationship('OfficeServiceConfiguration')
     id = Column(Integer, primary_key=True)

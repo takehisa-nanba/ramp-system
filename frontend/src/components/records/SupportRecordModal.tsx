@@ -2,6 +2,7 @@ import { CalendarDateInput } from '../common/CalendarDateInput';
 import { ClockTimeInput } from '../common/ClockTimeInput';
 import React, { useState } from 'react';
 import { X, Send, FileEdit, MapPin, Clock, Calendar } from 'lucide-react';
+import api from '../../services/apiClient';
 import { recordsApi } from '../../services/recordsApi';
 import { dailyLogApi } from '../../services/dailyLogApi';
 import type { UserSummary } from '../../services/dailyLogApi';
@@ -32,6 +33,19 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
     }
   }, [open]);
 
+  const [activities, setActivities] = useState<{id:number; content:string}[]>([]);
+  const [activityId, setActivityId] = useState('');
+  const [activityError, setActivityError] = useState(false);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    setActivityId(''); setActivities([]); setActivityError(false);
+    if (targetUserId && logDate && open) {
+      api.get('/records/participant-activities', {params:{user_id:targetUserId,date:logDate},signal:controller.signal})
+        .then(({data})=>{if (!controller.signal.aborted) setActivities(data.items);})
+        .catch(()=>{if (!controller.signal.aborted) setActivityError(true);});
+    }
+    return ()=>controller.abort();
+  }, [targetUserId, logDate, open]);
   if (!open) return null;
 
   const handleClose = () => {
@@ -68,6 +82,7 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
       await recordsApi.createRecord({
         user_id: parseInt(targetUserId),
         log_date: logDate,
+        participant_activity_id: activityId ? Number(activityId) : undefined,
         support_duration_seconds: minutes * 60,
         support_start_time: dayjs(`${logDate}T${startTime}`).toISOString(),
         support_record_type: 'DIRECT_SUPPORT',
@@ -96,7 +111,14 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col transform transition-all animate-in zoom-in-95 duration-200">
         
-        {/* Header */}
+        {targetUserId && <label className="block px-6 py-3">関連する本人の活動（任意）
+          <select className="block w-full rounded border p-2" value={activityId} onChange={e=>setActivityId(e.target.value)}>
+            <option value="">活動を指定しない</option>
+            {activities.map(a=><option key={a.id} value={a.id}>{a.content}</option>)}
+          </select>
+          {activityError && <span role="alert">本人の活動を取得できませんでした。</span>}
+        </label>}
+      {/* Header */}
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
           <h2 className="text-lg font-black flex items-center gap-2">
             <FileEdit className="w-5 h-5" />
