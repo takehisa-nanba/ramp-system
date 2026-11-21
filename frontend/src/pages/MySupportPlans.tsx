@@ -9,6 +9,8 @@ type LongGoal = Goal & { challenges: string | null; short_term_goals: ShortGoal[
 type Plan = {
   id: number; plan_version: number; revision: string; plan_status: 'ACTIVE' | 'PENDING_CONSENT';
   start_date: string | null; end_date: string | null; long_term_goals: LongGoal[];
+  retention?: { user_needs: string; job_description: string;
+    items: { content: string; frequency: string; start_date: string; end_date: string }[] };
   holistic_policy: { user_intention_content: string; support_policy_content: string } | null;
 };
 function period(start: string | null, end: string | null) {
@@ -38,6 +40,14 @@ function PlanDocument({ plan, onConsent }: { plan: Plan; onConsent: () => void }
       <dt className="font-semibold">本人の意向</dt><dd>{plan.holistic_policy.user_intention_content}</dd>
       <dt className="font-semibold">支援方針</dt><dd>{plan.holistic_policy.support_policy_content}</dd>
     </dl>}
+    {plan.retention && <section className="space-y-2">
+      <h4 className="font-semibold">就労定着支援の内容</h4>
+      <dl><dt>本人の希望</dt><dd>{plan.retention.user_needs}</dd>
+        <dt>業務内容</dt><dd>{plan.retention.job_description}</dd></dl>
+      <ul>{plan.retention.items.map((item, index) => <li key={index}>
+        <p>{item.content}</p><p>{period(item.start_date, item.end_date)}　{item.frequency}</p>
+      </li>)}</ul>
+    </section>}
     {plan.long_term_goals.map(long => <section key={long.id} className="space-y-2 border-t pt-3">
       <h4 className="font-semibold">長期目標　{long.description}</h4>
       {long.challenges && <p>課題・相談内容　{long.challenges}</p>}

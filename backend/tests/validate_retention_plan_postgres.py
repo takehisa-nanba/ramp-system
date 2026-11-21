@@ -149,6 +149,10 @@ def exercise(app,engine,ids):
         from backend.app.models import SupportPlan,JobTitleMaster,SupporterJobAssignment
         plan=db.session.get(SupportPlan,plan_id)
         user_id=plan.user_id;config_id=plan.office_service_configuration_id
+        from backend.app.models import PlanAssessment
+        db.session.add(PlanAssessment(user_id=user_id, plan_id=plan_id, supporter_id=staff_id,
+            office_service_configuration_id=config_id, interview_date=date(2026,9,30),
+            method="IN_PERSON", summary="test"))
         title=JobTitleMaster(title_name='サービス管理責任者',is_qualified_role=True)
         db.session.add(title);db.session.flush()
         db.session.add(SupporterJobAssignment(supporter_id=staff_id,job_title_id=title.id,
@@ -216,7 +220,7 @@ def run(env_file):
                         ids=seed()
                         before=snapshot(db.engine)
                     upgrade(directory=str(ROOT/'backend/migrations'),revision='head')
-                    assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='d842retentionplan'
+                    assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='e927merge'
                     if mode=='existing':
                         after=snapshot(db.engine)
                         for table,rows in before.items():

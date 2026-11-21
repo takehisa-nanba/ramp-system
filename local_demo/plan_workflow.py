@@ -83,6 +83,7 @@ def check_plan_cycle(browser, after_restart=False):
     expect(page.get_by_text("説明・同意待ち", exact=True).first).to_be_visible()
     login("demo-retention", participant=True)
     expect(page.get_by_text("休憩の時間を確認する", exact=True)).to_be_visible()
+    expect(page.get_by_text("本人と休憩方法を相談", exact=True)).to_be_visible()
     page.get_by_role("checkbox").check()
     button("同意を記録する").click()
     expect(page.get_by_text("第1版　有効", exact=True)).to_be_visible()

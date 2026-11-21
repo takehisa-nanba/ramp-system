@@ -12,6 +12,16 @@ from backend.app.services.plan_presentation import serialize_plan
 
 def present_user_plan(plan):
     document = serialize_plan(plan)
+    detail = plan.retention_detail
+    if detail:
+        document["retention"] = {
+            "user_needs": detail.user_needs,
+            "job_description": detail.job_description,
+            "items": [{"content": item.support_policy_content, "frequency": item.frequency,
+                       "start_date": item.start_date.isoformat(), "end_date": item.end_date.isoformat()}
+                      for item in sorted(detail.support_items, key=lambda item: item.sequence_no)
+                      if not item.deleted_at],
+        }
     encoded = json.dumps(document, ensure_ascii=False, sort_keys=True).encode()
     return {**document, "revision": hashlib.sha256(encoded).hexdigest()}
 

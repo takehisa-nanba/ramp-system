@@ -115,7 +115,7 @@ SupportPlanのライフサイクル、契約状態、同意モデル、支援記
 
 ## Migrationと検証方法
 
-通常chain: `c731retentioncore → d842retentionplan`。
+定着支援の改訂 `d842retentionplan` と職員・支援業務の改訂 `c620activitykey` を `e927merge` で統合する。
 既存計画への一括詳細作成・状態変換・FK値変更なし。slice2_compatは変更しない。
 データを失うdowngradeは自動実行せず停止する。
 
@@ -138,18 +138,7 @@ FK／unique／期間・区分check、監査失敗rollback、実ロック待ち�
 finallyで専用DBを削除し、pg_databaseに残っていないことを確認。
 DB URL・パスワード・レコード本文・SQL例外パラメータを出力しない。
 
-画面の独立した操作テスト（合成API応答。バックエンド疎通の代替ではない）:
-
-```powershell
-# 別ターミナルで frontend の Vite を localhost:5177 に起動
-npm run dev -- --host 127.0.0.1 --port 5177 --strictPort
-# Playwrightが利用可能な環境で、リポジトリrootから
-node frontend/tests/retention-plan-ui.cjs
-```
-
-既定はインストール済みEdgeをheadlessで使用。BROWSER_CHANNELで変更可能。
-Playwrightは検証環境のruntimeから使用し、製品の依存へ追加しない。
-検証用HTML/TSXはViteの本番エントリには含まれない。
+統合後の画面操作試験は `local_demo/smoke.py` で実施する。起動方法はルートの README.md を参照。
 
 ## 検証結果（2026-10-03）
 
