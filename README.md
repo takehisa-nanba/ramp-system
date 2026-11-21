@@ -7,7 +7,7 @@
 Docker Desktop（Linuxコンテナ）を起動し、展開したフォルダーの `start-local.cmd` をダブルクリックします。起動が完了するとブラウザーが開きます。PowerShell を使う場合は同じフォルダーで次を実行します。
 
 ```powershell
-docker compose up --build -d --wait
+.\start-local.cmd
 ```
 
 ブラウザーで [http://localhost:8080](http://localhost:8080) を開きます。初回はイメージと依存パッケージを取得します。サンプルデータは専用のPostgreSQLに保存されます。
