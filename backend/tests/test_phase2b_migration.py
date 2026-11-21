@@ -155,3 +155,22 @@ def test_downgrade_removes_only_phase2b_constraints():
             WHERE table_name='supporter_timecards' AND column_name='check_in'
         """))
         assert res.fetchone() is not None
+
+
+@pytest.mark.parametrize("previous_head", ["c620activitykey", "d842retentionplan"])
+def test_unified_upgrade_preserves_existing_database(previous_head):
+    previous = run_alembic("upgrade", previous_head)
+    assert previous.returncode == 0, previous.stderr
+    engine = create_engine(PG_MIGRATION_DB_URL)
+    try:
+        with engine.begin() as conn:
+            conn.execute(text("INSERT INTO status_master (name, description) VALUES ('保持確認', '統合前の設定')"))
+        result = run_alembic("upgrade", "head")
+        assert result.returncode == 0, result.stderr
+        with engine.connect() as conn:
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalars().all() == ["e927merge"]
+            assert conn.execute(text("SELECT description FROM status_master WHERE name='保持確認'")).scalar_one() == "統合前の設定"
+            for table in ("plan_assessments", "job_retention_plan_details", "supporter_timecards"):
+                assert conn.execute(text("SELECT to_regclass(:name)"), {"name": table}).scalar_one() == table
+    finally:
+        engine.dispose()
