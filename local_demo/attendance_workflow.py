@@ -1,4 +1,5 @@
 """Exercise the worker's timecard and the manager's approval in separate sessions."""
+from calendar_input import set_calendar_date
 from datetime import date, datetime, time, timedelta
 from playwright.sync_api import expect
 
@@ -51,14 +52,19 @@ def check_attendance(browser, after_restart):
         card, = records(day)
         start = datetime.fromisoformat(card["check_in"])
         earlier = max(start - timedelta(minutes=5), datetime.combine(start.date(), time.min, start.tzinfo))
-        page.get_by_label("修正後の時刻").fill(earlier.strftime("%H:%M"))
+        page.get_by_label("修正後の時刻").click()
+        dialog = page.get_by_role("dialog").last
+        dialog.get_by_role("button", name="直接入力に切り替え").click()
+        dialog.get_by_label("時（0〜23）").fill(earlier.strftime("%H"))
+        dialog.get_by_label("分（0〜59）").fill(earlier.strftime("%M"))
+        dialog.get_by_role("button", name="確定", exact=True).click()
         page.get_by_label("申請理由").fill(stamp_reason)
         button("申請を送信").click()
         expect(row(stamp_reason)).to_contain_text("確認待ち")
 
         next_day = (date.fromisoformat(day) + timedelta(days=1)).isoformat()
         button("新規修正申請を作成する").click()
-        page.get_by_label("対象日", exact=True).fill(next_day)
+        set_calendar_date(page, page.get_by_label("対象日", exact=True), next_day)
         page.get_by_label("申請種別").select_option("PAID_LEAVE")
         page.get_by_label("申請理由").fill(leave_reason)
         button("申請を送信").click()
