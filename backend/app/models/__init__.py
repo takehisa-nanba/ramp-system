@@ -153,3 +153,4 @@ from backend.app.models.employment.job_placement import (
     EmployerMaster, JobPlacementLog, JobDevelopmentLog
 )
 from backend.app.models.support.plan_assessment import PlanAssessment
+from backend.app.models.support.job_retention_plan import JobRetentionPlanDetail, JobRetentionPlanSupportItem

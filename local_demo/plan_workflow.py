@@ -1,6 +1,7 @@
 """Use distinct staff, manager and participant sessions on the local demo."""
 from datetime import date, timedelta
 from urllib.parse import parse_qs, urlparse
+from calendar_input import set_calendar_date
 from playwright.sync_api import expect
 
 
@@ -43,14 +44,32 @@ def check_plan_cycle(browser, after_restart=False):
     interview("午後の疲れに合わせて休憩を相談したい")
     button("新規計画作成").click()
     # End within a month so the same workflow also verifies the review alert.
-    dates = page.locator('form input[type=date]')
+    dates = page.locator('form input[aria-haspopup="dialog"]')
     start = date.fromisoformat(dates.first.input_value())
-    dates.nth(1).fill((start + timedelta(days=20)).isoformat())
+    set_calendar_date(page, dates.nth(1), (start + timedelta(days=20)).isoformat())
     page.get_by_placeholder("例：就労に向けた意欲", exact=False).fill("午後の集中を維持したい")
     page.get_by_placeholder("例：毎日休まず", exact=False).fill("休憩を相談しながら働く")
     page.get_by_placeholder("例：作業開始時", exact=False).fill("疲れたときに声をかける")
     page.get_by_placeholder("例：手順書を", exact=False).fill("休憩の時間を確認する")
     button("原案を作成して目標保存").click()
+    editor = page.locator("section").filter(has=page.get_by_role("heading", name="就労定着支援計画の詳細")).last
+    editor.get_by_label("就職記録（承認前に必須）").select_option(index=1)
+    def save_details():
+        with page.expect_response(lambda r: r.request.method == "PUT" and r.url.endswith("/retention-detail")) as response:
+            button("計画詳細を保存").click()
+        assert response.value.ok
+    save_details()
+    button("職場・労働条件").click()
+    editor.get_by_label("業務内容（承認前に必須）").fill("書類整理")
+    save_details()
+    button("本人・生活情報").click()
+    editor.get_by_label("利用目標・本人ニーズ（承認前に必須）").fill("働き続けたい")
+    save_details()
+    button("支援内容").click()
+    editor.get_by_label("支援方針・内容", exact=False).fill("本人と休憩方法を相談")
+    editor.get_by_label("頻度", exact=False).fill("月1回")
+    button("支援項目を追加").click()
+    expect(button("この支援項目を保存")).to_be_visible()
     button("本人同席会議を記録").click()
     page.get_by_placeholder("例：就労に向けた体調管理", exact=False).fill("休憩のとり方")
     page.get_by_placeholder("例：就寝・起床時間", exact=False).fill("本人と相談して休憩を決める")

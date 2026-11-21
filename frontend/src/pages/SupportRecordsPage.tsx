@@ -1,3 +1,4 @@
+import { CalendarDateInput } from '../components/common/CalendarDateInput';
 import React, { useState, useEffect } from 'react';
 import { Heading } from '../components/common/Typography';
 import { Search, FileEdit, Calendar as CalendarIcon, User, Users } from 'lucide-react';
@@ -94,14 +95,14 @@ export const SupportRecordsPage: React.FC = () => {
           </div>
           
           <div className="flex items-center gap-2">
-            <input 
+            <CalendarDateInput
               type="date" 
               value={startDate}
               onChange={(e) => setStartDate(e.target.value)}
               className="flex-1 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none text-slate-700 font-bold text-sm"
             />
             <span className="text-slate-400 font-bold">〜</span>
-            <input 
+            <CalendarDateInput
               type="date" 
               value={isSingleDay ? startDate : endDate}
               onChange={(e) => setEndDate(e.target.value)}

@@ -1,5 +1,6 @@
 """Exercise the published SPA and authenticated API through localhost."""
 import sys
+from calendar_input import set_calendar_date
 from playwright.sync_api import sync_playwright, expect
 
 
@@ -61,7 +62,7 @@ def check(browser, after_restart):
         expect(row).to_contain_text("問い合わせ")
         row.get_by_role("button", name="利用開始").click()
         today = page.evaluate("new Date().toLocaleDateString('sv-SE')")
-        page.locator('form input[type=date]').fill(today)
+        set_calendar_date(page, page.locator('form input[aria-haspopup="dialog"]').first, today)
         page.get_by_role("button", name="更新する").click()
     expect(row).to_contain_text("利用中")
     code = row.locator("td").first.locator("span").inner_text()

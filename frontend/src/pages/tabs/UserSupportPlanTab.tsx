@@ -1,3 +1,6 @@
+import RetentionPlanEditor from '../../components/RetentionPlanEditor';
+import { UXSelect } from '../../components/common/UXSelect';
+import apiClient from '../../services/apiClient';
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -65,6 +68,17 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
   const [chosenAssessmentId, setChosenAssessmentId] = useState<number>();
   const available = assessments.filter(item => item.plan_id === null);
   const assessment = available.find(item => item.id === chosenAssessmentId) ?? available[0];
+
+  const [retentionConfigs,setRetentionConfigs] = useState<number[]>([]);
+  const [detailPlanId,setDetailPlanId] = useState('');
+  const [retentionDirty,setRetentionDirty] = useState(false);
+  useEffect(()=>{
+    let alive=true;
+    apiClient.get<{items:{office_service_configuration_id:number|null}[]}>(`/job-retention/users/${userId}`)
+      .then(({data})=>{if(alive) setRetentionConfigs([...new Set(data.items.map(i=>i.office_service_configuration_id).filter((id):id is number=>id!==null))]);})
+      .catch(()=>{if(alive) setRetentionConfigs([]);});
+    return ()=>{alive=false;};
+  },[userId]);
 
   // データ状態
   const [plansData, setPlansData] = useState<UserSupportPlansResponse | null>(null);
@@ -631,6 +645,19 @@ export const UserSupportPlanTab: React.FC<{ userId: number }> = ({ userId }) => 
 
   return (
     <div className="space-y-10 animate-in fade-in duration-500 max-w-4xl mx-auto pb-12">
+      <UXSelect label="計画のサービス" value={configId ? String(configId) : ''}
+        options={[{value:'',label:'従来の個別支援計画'},...retentionConfigs.map((id,index)=>({value:String(id),label:`就労定着支援${retentionConfigs.length>1?`（契約${index+1}）`:''}`}))]}
+        onChange={e=>{if(retentionDirty && !window.confirm('未保存の変更があります。破棄してサービスを切り替えますか？')) return;const next=new URLSearchParams(searchParams);if(e.target.value) next.set('office_service_configuration_id',e.target.value);else next.delete('office_service_configuration_id');setDetailPlanId('');setSearchParams(next);}} />
+      {configId && (()=>{
+        const plans=[...(activePlan?[activePlan]:[]),...(plansData?.plan_history || [])];
+        const chosen=plans.find(p=>p.id===Number(detailPlanId)) || plans.find(p=>p.plan_status==='DRAFT') || plans[0];
+        return plans.length ? <div className="space-y-3">
+          <UXSelect label="定着支援詳細を確認する計画" value={chosen ? String(chosen.id) : ''}
+            options={plans.map(p=>({value:String(p.id),label:`第${p.plan_version}期 ${statusLabel[p.plan_status]?.label || p.plan_status} ${p.start_date || ''}～${p.end_date || ''}`}))}
+            onChange={e=>{if(!retentionDirty || window.confirm('未保存の変更があります。破棄して計画を切り替えますか？')) setDetailPlanId(e.target.value);}} />
+          {chosen && <RetentionPlanEditor key={`${chosen.id}:${chosen.plan_status}`} planId={chosen.id} onDirtyChange={setRetentionDirty} />}
+        </div> : null;
+      })()}
       
       {/* 1. 現在の計画ステータス */}
       <div className="bg-white border border-slate-200 p-6 rounded-3xl shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6">

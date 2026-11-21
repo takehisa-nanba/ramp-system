@@ -34,6 +34,10 @@ def seed_workflow_accounts(corp):
         for config in OfficeServiceConfiguration.query.filter_by(office_id=office.id):
             db.session.add(SupporterJobAssignment(supporter_id=worker.id, job_title_id=title.id,
                 office_service_configuration_id=config.id, start_date=worker.hire_date, assigned_minutes=1200))
+    worker_role = RoleMaster.query.filter_by(name="ローカル一般支援員").one()
+    edit = PermissionMaster.query.filter_by(name="EDIT").one()
+    if edit not in worker_role.permissions:
+        worker_role.permissions.append(edit)
     db.session.commit()
 
 

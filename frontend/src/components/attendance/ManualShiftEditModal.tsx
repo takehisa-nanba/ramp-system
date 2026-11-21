@@ -1,3 +1,4 @@
+import { ClockTimeInput } from '../common/ClockTimeInput';
 import React, { useState, useEffect } from 'react';
 import { X, Clock, Trash2 } from 'lucide-react';
 import dayjs from 'dayjs';
@@ -106,7 +107,7 @@ export const ManualShiftEditModal: React.FC<Props> = ({
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">開始時間</label>
-              <input
+              <ClockTimeInput
                 type="time"
                 value={startTime}
                 onChange={e => setStartTime(e.target.value)}
@@ -116,7 +117,7 @@ export const ManualShiftEditModal: React.FC<Props> = ({
             </div>
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-1">終了時間</label>
-              <input
+              <ClockTimeInput
                 type="time"
                 value={endTime}
                 onChange={e => setEndTime(e.target.value)}

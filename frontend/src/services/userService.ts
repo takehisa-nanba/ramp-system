@@ -149,6 +149,11 @@ export const updateUserStatus = async (userId: number, data: UpdateUserStatusDat
  */
 export const fetchUserPii = async (userId: number): Promise<UserPiiResponse> => {
   const response = await apiClient.get<UserPiiResponse>(`/users/${userId}/pii`);
+  // The API omits pii when the user has no personal-information record.
+  // Do not pass this partial response to screens expecting a complete profile.
+  if (!response.data.pii) {
+    throw new Error('この利用者の個人情報は未登録です。');
+  }
   return response.data;
 };
 

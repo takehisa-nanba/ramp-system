@@ -18,6 +18,84 @@ def get_legacy_schedule_status(schedule) -> str:
     return "CANCELLED" if schedule.approval_status == "CANCELLED" else schedule.schedule_kind
 
 class UserScheduleService:
+    def bulk_create_month(self, user_id, actor_id, payload, preview=True):
+        """Add selected weekdays only; existing schedules/facts are never overwritten."""
+        import calendar
+        import re
+        from backend.app.models import AuditActionLog, AttendanceRecord
+        from backend.app.services.core_service import check_permission
+        from backend.app.utils.errors import PermissionDenied, ConflictError
+        from sqlalchemy.exc import IntegrityError
+        from sqlalchemy import func
+        try:
+            actor = db.session.get(Supporter, actor_id)
+            if not actor or not actor.is_active or not check_permission(actor_id, 'CREATE'):
+                raise PermissionDenied('予定を作成する権限が必要です。')
+            user = User.query.filter_by(id=user_id).with_for_update().first() if not preview else db.session.get(User, user_id)
+            if not user or user.deleted_at:
+                raise ValidationError('利用者が見つかりません。')
+            if not isinstance(payload, dict):
+                raise ValidationError('対象月と曜日を指定してください。')
+            month = payload.get('month', '')
+            if not isinstance(month, str) or not re.fullmatch(r'\d{4}-\d{2}', month):
+                raise ValidationError('対象月を指定してください。')
+            try:
+                first = date.fromisoformat(month + '-01')
+            except ValueError:
+                raise ValidationError('対象月を確認してください。')
+            rows = payload.get('templates')
+            names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+            if not isinstance(rows, list) or len(rows) > 7:
+                raise ValidationError('曜日設定を確認してください。')
+            selected = {}; seen = set()
+            for row in rows:
+                if not isinstance(row, dict) or row.get('day_of_week') not in names or row['day_of_week'] in seen or type(row.get('is_scheduled')) is not bool:
+                    raise ValidationError('曜日設定が不正または重複しています。')
+                seen.add(row['day_of_week'])
+                if not row['is_scheduled']:
+                    continue
+                start, end = row.get('start_time'), row.get('end_time')
+                if any(not isinstance(t, str) or not re.fullmatch(r'(?:[01]\d|2[0-3]):[0-5]\d', t) for t in (start, end)) or end <= start:
+                    raise ValidationError('開始・終了時刻を入力し、終了を開始より後にしてください。')
+                location = row.get('location_type') or 'ON_SITE'
+                if location not in ('ON_SITE','OFF_SITE_SUPPORT','TRANSITION_PREP','OFF_SITE_WORK','AT_HOME'):
+                    raise ValidationError('支援区分を確認してください。')
+                selected[row['day_of_week']] = (start, end, location)
+            if not selected:
+                raise ValidationError('作成する曜日を1つ以上選択してください。')
+            last = first.replace(day=calendar.monthrange(first.year, first.month)[1])
+            existing = {r.date for r in UserDailySchedule.query.filter_by(user_id=user_id).filter(UserDailySchedule.date.between(first,last)).all()}
+            protected = {r.target_date for r in UserScheduleRequest.query.filter_by(user_id=user_id).filter(
+                UserScheduleRequest.target_date.between(first,last), UserScheduleRequest.request_status.in_(['APPROVED','PENDING'])).all()}
+            # Existing attendance dates follow the shared attendance storage convention.
+            protected.update(r.timestamp.date() for r in AttendanceRecord.query.filter_by(user_id=user_id).filter(
+                func.date(AttendanceRecord.timestamp).between(first,last)).all())
+            items = []
+            for day in range(1, last.day + 1):
+                target = first.replace(day=day)
+                settings = selected.get(names[target.weekday()])
+                if not settings:
+                    continue
+                status = 'EXISTING' if target in existing else 'PROTECTED' if target in protected else 'CREATE'
+                items.append(dict(date=target.isoformat(), start_time=settings[0], end_time=settings[1], action=status))
+                if status == 'CREATE' and not preview:
+                    db.session.add(UserDailySchedule(user_id=user_id,date=target,start_time=settings[0],end_time=settings[1],
+                        location_type=settings[2],schedule_kind='NORMAL',approval_status='APPROVED'))
+            count = sum(i['action'] == 'CREATE' for i in items)
+            if not preview:
+                import json
+                db.session.add(AuditActionLog(actor_supporter_id=actor_id,user_id=user_id,action='BULK_CREATE_SCHEDULES',
+                    entity_type='UserDailySchedule',entity_id=user_id,after_value=json.dumps(dict(month=month,created_count=count)),
+                    reason='曜日別設定による月間予定作成（既存予定を保持）'))
+                db.session.commit()
+            return dict(items=items, created_count=count, skipped_count=len(items)-count, preview=preview)
+        except IntegrityError as exc:
+            db.session.rollback()
+            raise ConflictError('予定が同時に更新されました。作成内容を再確認してください。') from exc
+        except Exception:
+            db.session.rollback()
+            raise
+
     def generate_daily_schedules_for_month(self, user_id: int, target_month: date, force_overwrite: bool = False) -> int:
         """
         指定された利用者の、指定月に対応する日別予定をテンプレートから自動生成する。

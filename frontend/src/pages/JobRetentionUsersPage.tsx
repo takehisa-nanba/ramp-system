@@ -5,6 +5,7 @@ import apiClient from '../services/apiClient';
 type RetentionUser = {
   id: number; user_id: number; display_name: string; office_name: string;
   contract_start_date: string; contract_end_date: string;
+  office_service_configuration_id: number;
 };
 
 export default function JobRetentionUsersPage() {

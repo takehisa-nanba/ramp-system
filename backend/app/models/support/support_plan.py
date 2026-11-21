@@ -20,6 +20,7 @@ class SupportPlan(db.Model):
     __tablename__ = 'support_plans'
     office_service_configuration_id = Column(Integer, ForeignKey('office_service_configurations.id'), nullable=True, index=True)
     service_configuration = db.relationship('OfficeServiceConfiguration')
+    retention_detail = db.relationship('JobRetentionPlanDetail', back_populates='plan', uselist=False)
     id = Column(Integer, primary_key=True)
     user_id = Column(Integer, ForeignKey('users.id'), nullable=False, index=True)
     
@@ -230,6 +231,8 @@ class GoalAssessment(db.Model):
     assessment_date = Column(Date, nullable=False)
     # 評価結果（定性的評価を重視）
     comment = Column(Text) 
+    achievement_status = Column(String(20), nullable=True)
+    __table_args__ = (db.CheckConstraint("achievement_status IN ('ACHIEVED','PARTIAL','NOT_ACHIEVED')", name='ck_goal_assessment_achievement'),)
     
     assessor_type = db.relationship('AssessorType', back_populates='goal_assessments')
     supporter = db.relationship('Supporter', foreign_keys=[supporter_id])
