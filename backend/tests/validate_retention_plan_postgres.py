@@ -220,7 +220,7 @@ def run(env_file):
                         ids=seed()
                         before=snapshot(db.engine)
                     upgrade(directory=str(ROOT/'backend/migrations'),revision='head')
-                    assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='e927merge'
+                    assert db.session.execute(text('SELECT version_num FROM alembic_version')).scalar()=='f217activities'
                     if mode=='existing':
                         after=snapshot(db.engine)
                         for table,rows in before.items():

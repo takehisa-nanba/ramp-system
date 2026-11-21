@@ -43,3 +43,25 @@ def test_user_can_only_consent_to_own_approved_revision(app, client, setup_activ
         assert client.post(url, json={"confirmed":True, "revision":document["revision"]}, headers=headers).status_code == 200
     assert db.session.get(SupportPlan, plan.id).plan_status == "ACTIVE"
     assert DocumentConsentLog.query.filter_by(user_id=user.id, document_type="SUPPORT_PLAN", document_id=plan.id).count() == 1
+
+
+def test_participant_activity_is_retryable_only_for_same_content(client, setup_active_user):
+    from uuid import uuid4
+    user, _, _ = setup_active_user
+    headers = {"Authorization": "Bearer " + create_access_token(identity=f"user:{user.id}")}
+    AttendanceRecord.query.filter_by(user_id=user.id).delete()
+    db.session.commit()
+    payload = {"request_id": str(uuid4()), "content": "求人比較"}
+    assert client.post("/api/user/activities", headers=headers, json=payload).status_code == 409
+    assert client.post("/api/user/attendance", headers=headers, json={
+        "type": "CHECK_IN", "journal": {"morning_plan": "応募書類"}}).status_code == 201
+    first = client.post("/api/user/activities", headers=headers, json=payload)
+    assert first.status_code == 201
+    assert client.post("/api/user/activities", headers=headers, json=payload).json == first.json
+    assert client.post("/api/user/activities", headers=headers, json={**payload, "content": "別の活動"}).status_code == 409
+    assert client.post("/api/user/attendance", headers=headers, json={
+        "type": "CHECK_OUT", "journal": {"user_self_evaluation": "比較できた"}}).status_code == 201
+    day = client.get("/api/user/status", headers=headers).json
+    assert day["daily_log"]["morning_plan"] == "応募書類"
+    assert day["daily_log"]["user_self_evaluation"] == "比較できた"
+    assert {"id": first.json["id"], "content": "求人比較"} in day["activities"]

@@ -168,7 +168,7 @@ def test_unified_upgrade_preserves_existing_database(previous_head):
         result = run_alembic("upgrade", "head")
         assert result.returncode == 0, result.stderr
         with engine.connect() as conn:
-            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalars().all() == ["e927merge"]
+            assert conn.execute(text("SELECT version_num FROM alembic_version")).scalars().all() == ["f217activities"]
             assert conn.execute(text("SELECT description FROM status_master WHERE name='保持確認'")).scalar_one() == "統合前の設定"
             for table in ("plan_assessments", "job_retention_plan_details", "supporter_timecards"):
                 assert conn.execute(text("SELECT to_regclass(:name)"), {"name": table}).scalar_one() == table

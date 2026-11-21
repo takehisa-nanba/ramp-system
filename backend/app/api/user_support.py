@@ -3,6 +3,8 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import User, AttendanceRecord, UserDailyLog, IndividualSupportGoal, SupportPlan, UserDailyLogSetting
 
+from backend.app.models.support.daily_log import ParticipantActivity
+from uuid import UUID
 from datetime import datetime, time, timedelta
 from backend.app.utils.timezone import JST
 
@@ -54,6 +56,10 @@ def get_user_status():
     }
     
     return jsonify({
+        "activities": [dict(id=a.id, content=a.content) for a in ParticipantActivity.query.filter_by(
+            user_id=user_id, log_date=today).order_by(ParticipantActivity.id)],
+        "pending_plan": SupportPlan.query.filter(SupportPlan.user_id == user_id,
+            SupportPlan.plan_status == "PENDING_CONSENT", SupportPlan.sabikan_approved_by_id.isnot(None)).first() is not None,
         "attendance_status": status,
         "attendance": {
             "checked_in": "CHECK_IN" in stamps,
@@ -62,6 +68,7 @@ def get_user_status():
             "check_out_time": stamps["CHECK_OUT"].replace(tzinfo=JST).isoformat() if "CHECK_OUT" in stamps else None,
         },
         "daily_log": {
+            "morning_plan": (daily_log.custom_data or {}).get("morning_plan", "") if daily_log else "",
             "physical_condition_score": daily_log.physical_condition_score if daily_log else None,
             "sleep_quality_score": daily_log.sleep_quality_score if daily_log else None,
             "user_self_evaluation": daily_log.user_self_evaluation if daily_log else None,
@@ -101,6 +108,30 @@ def record_attendance():
         return jsonify({"msg": "Already recorded", "time": existing.timestamp.isoformat()}), 200
     if (record_type == "CHECK_OUT" and not records) or (record_type == "CHECK_IN" and records):
         return jsonify({"msg": "本日の打刻順序を確認してください。"}), 409
+    journal = data.get("journal")
+    if journal is not None:
+        if not isinstance(journal, dict):
+            return jsonify(msg="日報の入力を確認してください。"), 400
+        field = "morning_plan" if record_type == "CHECK_IN" else "user_self_evaluation"
+        value = journal.get(field)
+        if not isinstance(value, str) or len(value) > 5000:
+            return jsonify(msg="日報は5000字以内で入力してください。"), 400
+        log = UserDailyLog.query.filter_by(user_id=user_id, log_date=now.date()).first()
+        if not log:
+            log = UserDailyLog(user_id=user_id, log_date=now.date(), location_type="ON_SITE", support_content_notes="")
+            db.session.add(log)
+        if record_type == "CHECK_IN":
+            for key in ("physical_condition_score", "sleep_quality_score"):
+                score = journal.get(key)
+                if score is not None:
+                    if type(score) is not int or not 1 <= score <= 5:
+                        return jsonify(msg="体調・睡眠は1から5で選んでください。"), 400
+                    setattr(log, key, score)
+            log.custom_data = {**(log.custom_data or {}), field: value.strip()}
+            log.morning_completed = True
+        else:
+            log.user_self_evaluation = value.strip()
+            log.evening_completed = True
     new_record = AttendanceRecord(
         user_id=user_id,
         record_type=record_type,
@@ -226,3 +257,37 @@ def consent_my_support_plan(plan_id):
         raise ValidationError("確認した計画をもう一度開いてください。")
     confirm_user_plan(get_current_user_id(), plan_id, revision)
     return jsonify(status="ACTIVE")
+
+@user_support_bp.post('/activities')
+@jwt_required()
+def add_participant_activity():
+    user_id = get_current_user_id()
+    if not user_id:
+        return jsonify(msg="本人のログインが必要です。"), 403
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(msg="活動を入力してください。"), 400
+    content = data.get("content")
+    try:
+        request_id = str(UUID(str(data.get("request_id"))))
+    except ValueError:
+        return jsonify(msg="活動の送信番号を確認してください。"), 400
+    if not isinstance(content, str) or not 0 < len(content.strip()) <= 2000:
+        return jsonify(msg="活動を2000字以内で入力してください。"), 400
+    User.query.filter_by(id=user_id).with_for_update().one()
+    duplicate = ParticipantActivity.query.filter_by(user_id=user_id, request_id=request_id).first()
+    if duplicate:
+        if duplicate.content != content.strip():
+            return jsonify(msg="別の活動として再送してください。"), 409
+        return jsonify(id=duplicate.id)
+    today = datetime.now(JST).date()
+    start = datetime.combine(today, time.min)
+    latest = AttendanceRecord.query.filter(AttendanceRecord.user_id == user_id,
+        AttendanceRecord.timestamp >= start, AttendanceRecord.timestamp < start + timedelta(days=1)
+    ).order_by(AttendanceRecord.timestamp.desc(), AttendanceRecord.id.desc()).first()
+    if not latest or latest.record_type != "CHECK_IN":
+        return jsonify(msg="通所中に活動を追加できます。"), 409
+    activity = ParticipantActivity(user_id=user_id, request_id=request_id, log_date=today, content=content.strip())
+    db.session.add(activity)
+    db.session.commit()
+    return jsonify(id=activity.id), 201

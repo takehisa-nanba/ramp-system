@@ -1,6 +1,7 @@
 import api from './apiClient';
 
 export interface SupportRecord {
+  participant_activity?: string | null;
   id: number;
   user_id: number;
   user_name: string;
@@ -26,6 +27,7 @@ export interface GetRecordsParams {
 }
 
 export interface CreateRecordPayload {
+  participant_activity_id?: number;
   user_id: number;
   log_date: string;
   support_start_time?: string;

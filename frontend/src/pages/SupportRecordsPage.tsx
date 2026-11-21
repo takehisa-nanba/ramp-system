@@ -181,6 +181,10 @@ export const SupportRecordsPage: React.FC = () => {
                 )}
               </div>
               
+              {record.participant_activity && <div className="rounded-xl bg-indigo-50 p-3">
+                <h3 className="text-xs font-bold">本人が記録した活動</h3>
+                <p className="whitespace-pre-wrap">{record.participant_activity}</p>
+              </div>}
               {record.observation_note && (
                 <div className="text-sm bg-amber-50 text-amber-900 p-3 rounded-xl border border-amber-100">
                   <div className="text-xs font-bold text-amber-700 mb-1">本人の様子</div>
