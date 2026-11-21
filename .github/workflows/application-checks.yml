@@ -60,7 +60,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: docker compose up --build --detach --wait --wait-timeout 180
+      - name: Build from the same archived inputs as the Windows launcher
+        run: |
+          tar -cf "$RUNNER_TEMP/ramp-build.tar" --exclude "__pycache__" --exclude "*.pyc" --exclude ".env*" --exclude "*.db" -T local_demo/build-inputs.txt
+          docker build -f local_demo/Dockerfile -t ramp-system-local-web:latest - < "$RUNNER_TEMP/ramp-build.tar"
+          docker compose up --no-build --detach --wait --wait-timeout 180
       - run: python -m pip install playwright && python -m playwright install --with-deps chromium
       - name: Check staff and service user in Chromium
         run: python local_demo/smoke.py
