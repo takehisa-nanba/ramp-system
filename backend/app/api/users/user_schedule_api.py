@@ -11,6 +11,19 @@ from backend.app.utils.errors import ValidationError
 from backend.app.utils.timezone import get_jst_today
 from . import users_bp
 
+@users_bp.route('/<int:user_id>/schedule-templates/bulk-preview', methods=['POST'])
+@users_bp.route('/<int:user_id>/schedule-templates/bulk-create', methods=['POST'])
+@jwt_required()
+def bulk_create_schedule_templates(user_id):
+    from backend.app.services.core_service import parse_jwt_identity
+    from backend.app.utils.errors import PermissionDenied
+    kind, actor_id = parse_jwt_identity(get_jwt_identity())
+    if kind != 'staff':
+        raise PermissionDenied('職員としてログインしてください。')
+    result = UserScheduleService().bulk_create_month(user_id, actor_id, request.get_json(),
+        preview=request.path.endswith('/bulk-preview'))
+    return jsonify(result), 200
+
 @users_bp.route('/<int:user_id>/schedule-templates', methods=['GET'])
 @jwt_required()
 def get_schedule_templates(user_id):

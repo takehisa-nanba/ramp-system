@@ -1,5 +1,7 @@
+import { CalendarDateInput } from '../../components/common/CalendarDateInput';
+import { ClockTimeInput } from '../../components/common/ClockTimeInput';
 import React, { useEffect, useState } from 'react';
-import { Table, Button, Tag, Space, DatePicker, Select, Modal, Form, Input, message } from 'antd';
+import { Table, Button, Tag, Space, Select, Modal, Form, Input, message } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { fetchUserDailySchedules, updateUserDailySchedule, updateUserAttendanceActuals, fetchUserDailyLogs, createDailyLog, fetchActivityTags } from '../../services/userService';
 import type { UserDailyScheduleItem, DailyLogItem, ActivityTag } from '../../services/userService';
@@ -239,7 +241,7 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
       <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50 rounded-t-xl">
         <h2 className="text-lg font-bold text-slate-800">月間予定・実績・記録</h2>
         <div className="flex items-center gap-4">
-          <DatePicker picker="month" value={currentMonth} onChange={(d) => setCurrentMonth(d || dayjs())} allowClear={false} />
+          <CalendarDateInput type="month" required value={currentMonth.format("YYYY-MM")} onChange={e => setCurrentMonth(dayjs(e.target.value))} />
           <Button onClick={loadAll} loading={loading}>更新</Button>
         </div>
       </div>
@@ -349,8 +351,8 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
         <Form form={form} layout="vertical">
           <Form.Item name="is_scheduled" label="予定あり" valuePropName="checked"><Input type="checkbox" /></Form.Item>
           <Space style={{ display: 'flex' }}>
-            <Form.Item name="start_time" label="開始時間"><Input type="time" /></Form.Item>
-            <Form.Item name="end_time" label="終了時間"><Input type="time" /></Form.Item>
+            <Form.Item name="start_time" label="開始時間"><ClockTimeInput type="time" /></Form.Item>
+            <Form.Item name="end_time" label="終了時間"><ClockTimeInput type="time" /></Form.Item>
           </Space>
           <Form.Item name="location_type" label="支援区分">
             <Select>
@@ -364,8 +366,8 @@ export const UserAttendanceTab: React.FC<{ userId: number }> = ({ userId }) => {
       <Modal title={`実績の編集: ${editingActualDate}`} open={editActualModalVisible} onOk={handleEditActualSave} onCancel={() => setEditActualModalVisible(false)} okText="保存" cancelText="キャンセル">
         <Form form={actualForm} layout="vertical">
           <Space style={{ display: 'flex' }}>
-            <Form.Item name="actual_check_in" label="来所時間"><Input type="time" /></Form.Item>
-            <Form.Item name="actual_check_out" label="退所時間"><Input type="time" /></Form.Item>
+            <Form.Item name="actual_check_in" label="来所時間"><ClockTimeInput type="time" /></Form.Item>
+            <Form.Item name="actual_check_out" label="退所時間"><ClockTimeInput type="time" /></Form.Item>
           </Space>
         </Form>
       </Modal>

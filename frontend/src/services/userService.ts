@@ -148,6 +148,11 @@ export const updateUserStatus = async (userId: number, data: UpdateUserStatusDat
  */
 export const fetchUserPii = async (userId: number): Promise<UserPiiResponse> => {
   const response = await apiClient.get<UserPiiResponse>(`/users/${userId}/pii`);
+  // The API omits pii when the user has no personal-information record.
+  // Do not pass this partial response to screens expecting a complete profile.
+  if (!response.data.pii) {
+    throw new Error('この利用者の個人情報は未登録です。');
+  }
   return response.data;
 };
 
@@ -404,8 +409,8 @@ export interface UserSupportPlansResponse {
   plan_history: SupportPlanSummary[];
 }
 
-export const fetchUserSupportPlans = async (userId: number): Promise<UserSupportPlansResponse> => {
-  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`);
+export const fetchUserSupportPlans = async (userId: number, configId?: number): Promise<UserSupportPlansResponse> => {
+  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`, {params: {office_service_configuration_id: configId}});
   return response.data;
 };
 
@@ -445,6 +450,7 @@ export interface CreateSupportPlanResponse {
 
 export interface CreateSupportPlanParams {
   userId: number;
+  officeServiceConfigurationId?: number;
   holisticSupportPolicyId?: number;
   planStartDate?: string;
   planEndDate?: string;
@@ -453,8 +459,9 @@ export interface CreateSupportPlanParams {
 }
 
 export const createSupportPlanDraft = async (params: CreateSupportPlanParams): Promise<CreateSupportPlanResponse> => {
-  const response = await apiClient.post<CreateSupportPlanResponse>('/plans', {
+  const response = await apiClient.post<CreateSupportPlanResponse>('/plans/', {
     user_id: params.userId,
+    office_service_configuration_id: params.officeServiceConfigurationId,
     holistic_support_policy_id: params.holisticSupportPolicyId,
     plan_start_date: params.planStartDate,
     plan_end_date: params.planEndDate,

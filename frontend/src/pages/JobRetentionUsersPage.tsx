@@ -5,6 +5,7 @@ import apiClient from '../services/apiClient';
 type RetentionUser = {
   id: number; user_id: number; display_name: string; office_name: string;
   contract_start_date: string; contract_end_date: string;
+  office_service_configuration_id: number;
 };
 
 export default function JobRetentionUsersPage() {
@@ -31,7 +32,7 @@ export default function JobRetentionUsersPage() {
         <caption className="sr-only">定着支援の利用者と契約期間</caption>
         <thead><tr>{['利用者', '事業所', '開始日', '終了予定日', '利用状況'].map(label => <th scope="col" key={label} className="p-3">{label}</th>)}</tr></thead>
         <tbody>{items.map(item => <tr key={item.id} className="border-t">
-          <td className="p-3"><Link className="text-blue-700 underline" to={`/users/${item.user_id}`}>{item.display_name}</Link></td>
+          <td className="p-3"><Link className="text-blue-700 underline" to={`/users/${item.user_id}/support-plans?service_config=${item.office_service_configuration_id}`}>{item.display_name}</Link></td>
           <td className="p-3">{item.office_name}</td><td className="p-3">{item.contract_start_date}</td>
           <td className="p-3">{item.contract_end_date}</td><td className="p-3 text-green-700">利用中</td>
         </tr>)}</tbody>

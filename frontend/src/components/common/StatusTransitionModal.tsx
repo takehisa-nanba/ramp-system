@@ -1,3 +1,4 @@
+import { CalendarDateInput } from './CalendarDateInput';
 import React, { useState } from 'react';
 import { X, Loader2, Calendar, CheckCircle2 } from 'lucide-react';
 import { updateUserStatus, type StatusMaster } from '../../services/userService';
@@ -114,7 +115,7 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                   <Calendar size={12} />
                   利用開始日
                 </label>
-                <input
+                <CalendarDateInput
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
@@ -130,7 +131,7 @@ export const StatusTransitionModal: React.FC<StatusTransitionModalProps> = ({
                   <Calendar size={12} />
                   利用終了日
                 </label>
-                <input
+                <CalendarDateInput
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}

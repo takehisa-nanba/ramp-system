@@ -1,6 +1,7 @@
+import { CalendarDateInput } from '../components/common/CalendarDateInput';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { DatePicker, Table } from 'antd';
+import { Table } from 'antd';
 import dayjs, { Dayjs } from 'dayjs';
 import { 
   Users, 
@@ -294,12 +295,12 @@ export const DailyScheduleActualPage: React.FC = () => {
           </Text>
         </div>
         <div className="shrink-0 flex items-center bg-slate-50 p-2 rounded-xl border border-slate-200">
-          <DatePicker 
-            value={targetDate} 
-            onChange={(d) => d && setTargetDate(d)} 
-            allowClear={false} 
+          <CalendarDateInput
+            value={targetDate.format("YYYY-MM-DD")}
+            onChange={e => setTargetDate(dayjs(e.target.value))}
+            required
             className="w-40 border-none bg-transparent font-bold text-slate-700"
-            size="large"
+
           />
         </div>
       </div>

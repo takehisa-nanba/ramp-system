@@ -5,11 +5,40 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from backend.app import db
 from backend.app.models import SupportPlan, IndividualSupportGoal
 from backend.app.services.support_plan_service import SupportPlanService
-from backend.app.utils.errors import AppError
+from backend.app.utils.errors import AppError, ValidationError
 from backend.app.services.core_service import check_permission, parse_jwt_identity
 
 plans_bp = Blueprint('plans', __name__, url_prefix='/api/plans')
 support_plan_service = SupportPlanService()
+
+
+@plans_bp.before_request
+def guard_retention_plan_access():
+    """Apply service boundaries also through legacy URLs used by the shared editor."""
+    plan_id = (request.view_args or {}).get('plan_id')
+    if not plan_id:
+        return
+    from flask_jwt_extended import verify_jwt_in_request
+    from backend.app.api.job_retention import actor_id
+    from backend.app.services.job_retention_plan_service import JobRetentionPlanService as Retention
+    plan = db.session.get(SupportPlan, plan_id)
+    if not plan or not Retention.is_retention(plan):
+        return
+    verify_jwt_in_request()
+    action = request.endpoint.rsplit('.',1)[-1]
+    editing = action in ('update_plan','record_goals','add_individual_goal','update_deviation_reason')
+    permission = 'EDIT' if editing else {
+        'create_next_draft':'CREATE', 'record_consent':'CREATE',
+        'approve_plan':'APPROVE',
+    }.get(action,'VIEW')
+    Retention.get_plan(plan_id,actor_id(),permission,edit=editing)
+    if action == 'add_individual_goal':
+        from backend.app.models import ShortTermGoal
+        from backend.app.utils.errors import ValidationError
+        goal_id = (request.get_json(silent=True) or {}).get('short_term_goal_id')
+        goal = db.session.get(ShortTermGoal,goal_id) if type(goal_id) is int else None
+        if not goal or goal.long_term_goal.plan_id != plan_id:
+            raise ValidationError('計画に属する短期目標を選択してください。')
 
 # -------------------------------------------------------------------
 # 1. 計画作成 (DRAFT)
@@ -186,6 +215,17 @@ def record_consent(plan_id):
             generated_document_url=generated_document_url
         )
         db.session.add(consent_log)
+        from backend.app.services.job_retention_plan_service import JobRetentionPlanService
+        if JobRetentionPlanService.is_retention(plan):
+            if plan.user_id != user_id:
+                raise ValidationError('計画の利用者と同意者が一致しません。')
+            from backend.app.models import AuditActionLog
+            import json
+            db.session.flush()
+            db.session.add(AuditActionLog(actor_supporter_id=supporter_id,user_id=plan.user_id,
+                action='RECORD_PLAN_CONSENT',entity_type='DocumentConsentLog',entity_id=consent_log.id,
+                after_value=json.dumps({'support_plan_id':plan.id,'explained_by_id':supporter_id}),
+                reason='計画説明と本人同意の記録',ip_address=request.remote_addr,user_agent=request.user_agent.string))
         db.session.commit()
 
         return jsonify({
@@ -193,6 +233,9 @@ def record_consent(plan_id):
             "consent_log_id": consent_log.id
         }), 201
 
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         return jsonify({"msg": f"Failed to record consent: {e}"}), 500
@@ -560,6 +603,9 @@ def approve_plan(plan_id):
     except ValidationError as e:
         db.session.rollback()
         return jsonify({"msg": str(e)}), 400
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         import logging

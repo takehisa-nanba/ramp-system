@@ -116,6 +116,13 @@ def get_user_support_plans(user_id: int):
         }), 404
 
     config_id = request.args.get('office_service_configuration_id', type=int)
+    if 'office_service_configuration_id' in request.args:
+        from backend.app.api.job_retention import actor_id
+        from backend.app.services.job_retention_service import JobRetentionService
+        from backend.app.utils.errors import ValidationError
+        if config_id is None:
+            raise ValidationError('サービスを確認してください。')
+        JobRetentionService.authorize(actor_id(), 'VIEW', config_id)
     plans = user.support_plans.filter_by(office_service_configuration_id=config_id)
     active_plan = plans.filter_by(plan_status='ACTIVE').first()
     history_plans = plans.filter(

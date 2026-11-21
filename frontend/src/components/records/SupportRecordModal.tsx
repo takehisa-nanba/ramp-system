@@ -1,3 +1,5 @@
+import { CalendarDateInput } from '../common/CalendarDateInput';
+import { ClockTimeInput } from '../common/ClockTimeInput';
 import React, { useState } from 'react';
 import { X, Mic, Send, FileEdit, MapPin, Clock, Calendar } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -113,7 +115,7 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Calendar className="h-4 w-4 text-slate-400" />
               </div>
-              <input
+              <CalendarDateInput
                 type="date"
                 value={logDate}
                 onChange={(e) => setLogDate(e.target.value)}
@@ -124,7 +126,7 @@ export const SupportRecordModal: React.FC<Props> = ({ open, onClose }) => {
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Clock className="h-4 w-4 text-slate-400" />
               </div>
-              <input
+              <ClockTimeInput
                 type="time"
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}

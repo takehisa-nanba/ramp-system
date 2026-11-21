@@ -83,6 +83,8 @@ class SupportPlanService:
         proposed_end = parse_date(end_date, plan.plan_end_date)
         with db.session.no_autoflush:
             self.validate_retention_plan_period(plan, proposed_start, proposed_end)
+            from backend.app.services.job_retention_plan_service import JobRetentionPlanService
+            JobRetentionPlanService.validate_items_period(plan, proposed_start, proposed_end)
         plan.plan_start_date = proposed_start
         plan.plan_end_date = proposed_end
 
@@ -179,6 +181,9 @@ class SupportPlanService:
         if not plan or plan.plan_status != 'DRAFT':
             logger.warning(f"❌ Plan {plan_id} must be in DRAFT status for approval.")
             raise ValidationError("Plan is not in DRAFT status.")
+
+        from backend.app.services.job_retention_plan_service import JobRetentionPlanService
+        JobRetentionPlanService.validate_approval(plan, sabikan_id)
 
         # --- 🚨 哲学の実装: 不在時の厳格なチェック（関与の欠如防止） ---
         if not user_participated:

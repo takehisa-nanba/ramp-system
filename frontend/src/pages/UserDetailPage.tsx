@@ -19,11 +19,14 @@ const UserOverview: React.FC<{ userId: number }> = ({ userId }) => {
     const loadData = async () => {
       try {
         setLoading(true);
+        setError(null);
+        setUser(null);
         const data = await fetchUserPii(userId);
         setUser(data);
       } catch (err) {
         console.error(err);
-        setError('利用者情報の取得に失敗しました。');
+        setError(err instanceof Error && err.message === 'この利用者の個人情報は未登録です。'
+          ? err.message : '利用者情報の取得に失敗しました。');
       } finally {
         setLoading(false);
       }
