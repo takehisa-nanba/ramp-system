@@ -26,8 +26,10 @@ from .activities import activities_bp
 
 # すべてのブループリントをリストに集約し、外部に公開する。
 from .job_retention import job_retention_bp
+from .retention_plans import retention_plans_bp
 
 ALL_BLUEPRINTS = [
+    retention_plans_bp,
     job_retention_bp,
     auth_bp,
     users_bp,

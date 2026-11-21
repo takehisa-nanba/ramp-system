@@ -3,6 +3,7 @@
 import apiClient from './apiClient';
 
 export interface UserListItem {
+  user_code?: string;
   id: number;
   display_name: string;
   status_id?: number;
@@ -148,6 +149,11 @@ export const updateUserStatus = async (userId: number, data: UpdateUserStatusDat
  */
 export const fetchUserPii = async (userId: number): Promise<UserPiiResponse> => {
   const response = await apiClient.get<UserPiiResponse>(`/users/${userId}/pii`);
+  // The API omits pii when the user has no personal-information record.
+  // Do not pass this partial response to screens expecting a complete profile.
+  if (!response.data.pii) {
+    throw new Error('この利用者の個人情報は未登録です。');
+  }
   return response.data;
 };
 
@@ -191,6 +197,7 @@ export const updateUserDetails = async (userId: number, data: UpdateUserData): P
 };
 
 export interface CreateUserData {
+  initial_password?: string;
   display_name: string;
   pii?: {
     last_name?: string;
@@ -378,6 +385,7 @@ export interface ActiveSupportPlan {
   timeline_deviation_reason?: string | null;
 }
 export interface SupportPlanSummary {
+  can_approve?: boolean;
   id: number;
   plan_version: number;
   plan_status: string;
@@ -404,8 +412,8 @@ export interface UserSupportPlansResponse {
   plan_history: SupportPlanSummary[];
 }
 
-export const fetchUserSupportPlans = async (userId: number): Promise<UserSupportPlansResponse> => {
-  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`);
+export const fetchUserSupportPlans = async (userId: number, configId?: number): Promise<UserSupportPlansResponse> => {
+  const response = await apiClient.get<UserSupportPlansResponse>(`/users/${userId}/support-plans`, { params: { office_service_configuration_id: configId } });
   return response.data;
 };
 
@@ -444,6 +452,9 @@ export interface CreateSupportPlanResponse {
 }
 
 export interface CreateSupportPlanParams {
+  goals?: SaveGoalsData['long_term_goals'];
+  assessmentId?: number;
+  configId?: number;
   userId: number;
   holisticSupportPolicyId?: number;
   planStartDate?: string;
@@ -454,12 +465,15 @@ export interface CreateSupportPlanParams {
 
 export const createSupportPlanDraft = async (params: CreateSupportPlanParams): Promise<CreateSupportPlanResponse> => {
   const response = await apiClient.post<CreateSupportPlanResponse>('/plans', {
+    office_service_configuration_id: params.configId,
     user_id: params.userId,
     holistic_support_policy_id: params.holisticSupportPolicyId,
+    assessment_id: params.assessmentId,
     plan_start_date: params.planStartDate,
     plan_end_date: params.planEndDate,
     user_intention_content: params.userIntentionContent,
     support_policy_content: params.supportPolicyContent,
+    long_term_goals: params.goals,
   });
   return response.data;
 };
@@ -470,8 +484,8 @@ export interface CloneNextDraftResponse {
   status: string;
 }
 
-export const createNextSupportPlanDraft = async (planId: number): Promise<CloneNextDraftResponse> => {
-  const response = await apiClient.post<CloneNextDraftResponse>(`/plans/${planId}/create-next-draft`);
+export const createNextSupportPlanDraft = async (planId: number, assessmentId: number): Promise<CloneNextDraftResponse> => {
+  const response = await apiClient.post<CloneNextDraftResponse>(`/plans/${planId}/create-next-draft`, { assessment_id: assessmentId });
   return response.data;
 };
 
@@ -542,6 +556,7 @@ export const updateSupportPlanDraft = async (
     planEndDate?: string;
     userIntentionContent?: string;
     supportPolicyContent?: string;
+    goals?: SaveGoalsData['long_term_goals'];
   }
 ): Promise<{ msg: string }> => {
   const response = await apiClient.put<{ msg: string }>(`/plans/${planId}`, {
@@ -549,6 +564,7 @@ export const updateSupportPlanDraft = async (
     plan_end_date: params.planEndDate,
     user_intention_content: params.userIntentionContent,
     support_policy_content: params.supportPolicyContent,
+    long_term_goals: params.goals,
   });
   return response.data;
 };
@@ -602,8 +618,8 @@ export interface UserMonitoringResponse {
   history: MonitoringHistoryItem[];
 }
 
-export const fetchUserMonitoringReports = async (userId: number): Promise<UserMonitoringResponse> => {
-  const response = await apiClient.get<UserMonitoringResponse>(`/users/${userId}/monitoring-reports`);
+export const fetchUserMonitoringReports = async (userId: number, configId?: number): Promise<UserMonitoringResponse> => {
+  const response = await apiClient.get<UserMonitoringResponse>(`/users/${userId}/monitoring-reports`, { params: { office_service_configuration_id: configId } });
   return response.data;
 };
 
@@ -691,6 +707,7 @@ export const updateTimelineDeviationReason = async (planId: number, reason: stri
 
 // --- 管理確認事項 (Action Items) ---
 export interface ActionItem {
+  office_service_configuration_id?: number | null;
   type: 'daily_log' | 'monitoring' | 'approval' | 'case_conference' | 'support_plan_timeline' | 'unexcused_absence' | 'unscheduled_attendance' | 'support_record_missing' | 'schedule_request_pending';
   category_label: string;
   severity: 'high' | 'medium' | 'low';

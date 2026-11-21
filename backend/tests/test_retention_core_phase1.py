@@ -172,7 +172,7 @@ def test_plan_activation_does_not_archive_transition(retention):
     _,user,staff,config,*_ = retention
     transition=SupportPlan(user_id=user.id,plan_status='ACTIVE')
     contract = start(retention)
-    retention_plan=SupportPlan(user_id=user.id,plan_status='PENDING_CONSENT',office_service_configuration_id=config.id,
+    retention_plan=SupportPlan(user_id=user.id,sabikan_approved_by_id=staff.id,plan_status='PENDING_CONSENT',office_service_configuration_id=config.id,
         plan_start_date=contract.contract_start_date, plan_end_date=contract.contract_end_date)
     db.session.add_all([transition,retention_plan]);db.session.flush()
     consent=DocumentConsentLog(user_id=user.id,document_type='SUPPORT_PLAN',document_id=retention_plan.id,consent_proof='DIGITAL_SIGNATURE')
@@ -325,7 +325,7 @@ def test_employment_separation_date_matches_domain(retention, monkeypatch, separ
 def consented_retention_plan(retention, contract):
     from backend.app.models import DocumentConsentLog
     plan = SupportPlan(user_id=retention[1].id, office_service_configuration_id=retention[3].id,
-        plan_status='PENDING_CONSENT', plan_start_date=contract.contract_start_date,
+        sabikan_approved_by_id=retention[2].id, plan_status='PENDING_CONSENT', plan_start_date=contract.contract_start_date,
         plan_end_date=contract.contract_end_date)
     db.session.add(plan); db.session.flush()
     consent = DocumentConsentLog(user_id=plan.user_id, document_type='SUPPORT_PLAN',

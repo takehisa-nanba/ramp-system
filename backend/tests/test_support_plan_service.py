@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 # UTILITY FUNCTIONS / FIXTURES (テスト間の重複回避とDIの準備)
 # =======================================================================
 
+def add_test_assessment(plan_id, staff_id):
+    from backend.app.models import PlanAssessment
+    plan = db.session.get(SupportPlan, plan_id)
+    db.session.add(PlanAssessment(user_id=plan.user_id, plan_id=plan_id, supporter_id=staff_id,
+        interview_date=date(2025, 1, 1), method="IN_PERSON", summary="本人の希望を確認"))
+    db.session.flush()
+
+
 def setup_masters_and_user(session, display_name="TestUser", staff_code="S999"):
     """マスタデータと基本エンティティを作成し、セッションにフラッシュする"""
     
@@ -95,6 +103,7 @@ def test_plan_workflow_and_guardrail(app):
         db.session.commit() 
         draft_plan_id = draft_plan.id
         
+        add_test_assessment(draft_plan_id, sabikan.id)
         assert draft_plan.plan_status == 'DRAFT'
         logger.debug(f"   -> Plan ID: {draft_plan.id} Created. Status: {draft_plan.plan_status}")
 
@@ -194,6 +203,7 @@ def test_plan_approval_absence_guardrail_with_urac_hook(app):
         db.session.commit() # IDを確定させる
         draft_plan_id = draft_plan.id
         
+        add_test_assessment(draft_plan_id, sabikan.id)
         # AbsenceResponseLog のダミーを作成 (必須チェックをパスさせるため)
         absence_log = AbsenceResponseLog(
             user_id=user.id,

@@ -3,7 +3,9 @@ from backend.app.extensions import db
 from backend.app.models.support.daily_log import SupportRecord
 from backend.app.models.core.user import User
 from backend.app.models.core.supporter import Supporter
-from datetime import datetime
+from datetime import datetime, date
+from backend.app.utils.timezone import JST
+from backend.app.services.plan_assessment_service import assessment_scope
 
 bp = Blueprint('support_records', __name__, url_prefix='/api/records')
 
@@ -79,27 +81,34 @@ def create_record():
     if not data:
         return jsonify({'msg': 'No data provided'}), 400
 
+    from flask_jwt_extended import get_jwt_identity
+    from backend.app.services.core_service import parse_jwt_identity
+    from backend.app.services.support_record_service import create_service_support_record
+    from backend.app.utils.errors import ValidationError
+    _, actor = parse_jwt_identity(get_jwt_identity())
     if data.get('office_service_configuration_id') is not None:
-        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
-        from backend.app.services.core_service import parse_jwt_identity
-        from backend.app.services.support_record_service import create_service_support_record
-        from backend.app.utils.errors import PermissionDenied
-        verify_jwt_in_request()
-        identity = get_jwt_identity()
-        role, actor = parse_jwt_identity(identity)
-        if not isinstance(identity, str) or role != 'staff':
-            raise PermissionDenied()
         record = create_service_support_record(data, actor)
         return jsonify({'msg': 'Success', 'id': record.id}), 201
 
+    assessment_scope(data.get('user_id'), None, actor, 'CREATE')
+    duration = data.get('support_duration_seconds')
+    if data.get('support_record_type', 'DIRECT_SUPPORT') == 'DIRECT_SUPPORT' and (type(duration) is not int or duration < 0):
+        raise ValidationError('直接支援の時間を入力してください。')
+    def jst_stamp(value):
+        if not value:
+            return None
+        stamp = datetime.fromisoformat(value)
+        return stamp.astimezone(JST).replace(tzinfo=None) if stamp.tzinfo else stamp
+    try:
+        day = date.fromisoformat(data['log_date'])
+        start = jst_stamp(data.get('support_start_time'))
+        end = jst_stamp(data.get('support_end_time'))
+    except (ValueError, TypeError, KeyError) as exc:
+        raise ValidationError('支援日時を確認してください。') from exc
     try:
         new_record = SupportRecord(
-            user_id=data.get('user_id'),
-            log_date=data.get('log_date'),
-            supporter_id=data.get('supporter_id'),
-            support_start_time=datetime.fromisoformat(data['support_start_time']) if data.get('support_start_time') else None,
-            support_end_time=datetime.fromisoformat(data['support_end_time']) if data.get('support_end_time') else None,
-            support_duration_seconds=data.get('support_duration_seconds'),
+            user_id=data.get('user_id'), log_date=day, supporter_id=actor,
+            support_start_time=start, support_end_time=end, support_duration_seconds=duration,
             support_record_type=data.get('support_record_type', 'DIRECT_SUPPORT'),
             location_type=data.get('location_type'),
             location_detail=data.get('location_detail'),

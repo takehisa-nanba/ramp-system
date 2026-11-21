@@ -44,6 +44,61 @@ class SupportPlanService:
         self.compliance_service = compliance_service
 
     @staticmethod
+    def replace_draft_goals(plan, long_term_goals_data):
+        if plan.plan_status != "DRAFT" or not isinstance(long_term_goals_data, list):
+            raise ValidationError("原案と目標の入力内容を確認してください。")
+        for ltg in plan.long_term_goals:
+            db.session.delete(ltg)
+        db.session.flush()
+
+        for ltg_item in long_term_goals_data:
+            new_ltg = LongTermGoal(
+                plan_id=plan.id,
+                description=ltg_item.get('description', ''),
+                challenges=ltg_item.get('challenges'),
+                target_period_start=plan.plan_start_date,
+                target_period_end=plan.plan_end_date
+            )
+            db.session.add(new_ltg)
+            db.session.flush()
+
+            for stg_item in ltg_item.get('short_term_goals', []):
+                new_stg = ShortTermGoal(
+                    long_term_goal_id=new_ltg.id,
+                    description=stg_item.get('description', ''),
+                    target_period_start=plan.plan_start_date,
+                    target_period_end=plan.plan_end_date
+                )
+                db.session.add(new_stg)
+                db.session.flush()
+
+                for ig_item in stg_item.get('individual_goals', []):
+                    new_ig = IndividualSupportGoal(
+                        short_term_goal_id=new_stg.id,
+                        concrete_goal=ig_item.get('concrete_goal', ''),
+                        user_commitment=ig_item.get('user_commitment', '未記入'),
+                        support_actions=ig_item.get('support_actions', '未記入'),
+                        service_type=ig_item.get('service_type', 'TRAINING'),
+                        is_facility_in_deemed=ig_item.get('is_facility_in_deemed', False),
+                        is_work_preparation_positioning=ig_item.get('is_work_preparation_positioning', False)
+                    )
+                    db.session.add(new_ig)
+
+    @staticmethod
+    def can_approve_plan(supporter, plan):
+        from backend.app.utils.timezone import get_jst_today
+        today = get_jst_today()
+        if not supporter.is_active or supporter.hire_date > today or (supporter.retirement_date and supporter.retirement_date <= today):
+            return False
+        return any(
+            a.job_title and a.job_title.title_name == "サービス管理責任者"
+            and a.start_date <= today and (a.end_date is None or a.end_date >= today)
+            and (not a.is_deemed_assignment or (a.deemed_expiry_date and a.deemed_expiry_date >= today))
+            and (plan.office_service_configuration_id is None or a.office_service_configuration_id == plan.office_service_configuration_id)
+            for a in supporter.job_assignments
+        )
+
+    @staticmethod
     def validate_retention_plan_period(plan, start_date, end_date):
         """A retention plan must fit within one confirmed contract."""
         if plan.office_service_configuration_id is None:
@@ -83,6 +138,8 @@ class SupportPlanService:
         proposed_end = parse_date(end_date, plan.plan_end_date)
         with db.session.no_autoflush:
             self.validate_retention_plan_period(plan, proposed_start, proposed_end)
+            from backend.app.services.job_retention_plan_service import JobRetentionPlanService
+            JobRetentionPlanService.validate_items_period(plan, proposed_start, proposed_end)
         plan.plan_start_date = proposed_start
         plan.plan_end_date = proposed_end
 
@@ -180,6 +237,9 @@ class SupportPlanService:
             logger.warning(f"❌ Plan {plan_id} must be in DRAFT status for approval.")
             raise ValidationError("Plan is not in DRAFT status.")
 
+        from backend.app.services.job_retention_plan_service import JobRetentionPlanService
+        JobRetentionPlanService.validate_approval(plan, sabikan_id)
+
         # --- 🚨 哲学の実装: 不在時の厳格なチェック（関与の欠如防止） ---
         if not user_participated:
             
@@ -220,6 +280,12 @@ class SupportPlanService:
                 logger.error(f"❌ Plan {plan_id}: No AbsenceResponseLog linked to this plan found. Cannot approve.")
                 raise ValidationError("Missing mandatory AbsenceResponseLog evidence for absent user.")
             
+        from backend.app.models import PlanAssessment
+        assessment = PlanAssessment.query.filter_by(plan_id=plan.id).first()
+        meeting_day = conference_date.date() if isinstance(conference_date, datetime) else conference_date
+        if not assessment or assessment.interview_date > meeting_day:
+            raise ValidationError("この計画の会議日までに実施したアセスメントを登録してください。")
+
         # --- ログの作成（Step 3 会議の記録）---
         conference_log = SupportConferenceLog(
             plan_id=plan_id,
@@ -344,9 +410,13 @@ class SupportPlanService:
             logger.warning(f"❌ Plan {plan_id} must be in PENDING_CONSENT status for final activation.")
             raise ValidationError("Plan is not in 'PENDING_CONSENT' status.")
         
-        if not consent_log or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN':
+        if (not consent_log or consent_log.user_id != plan.user_id
+                or consent_log.document_id != plan_id or consent_log.document_type != 'SUPPORT_PLAN'):
             logger.warning(f"❌ Consent log {consent_log_id} mismatch with Plan {plan_id}.")
             raise ValidationError("Consent log mismatch.")
+
+        if not plan.sabikan_approved_by_id:
+            raise ValidationError("サービス管理責任者による承認が必要です。")
 
         # Serialize activation with contract finish using the same contract lock.
         self.validate_retention_plan_period(plan, plan.plan_start_date, plan.plan_end_date)

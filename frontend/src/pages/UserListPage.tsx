@@ -3,8 +3,21 @@ import { useNavigate } from 'react-router-dom';
 import { Users, Search, ChevronRight } from 'lucide-react';
 import { fetchUserList, type UserListItem } from '../services/userService';
 
+import { RegisterUserModal } from '../components/common/RegisterUserModal';
+import { StatusTransitionModal } from '../components/common/StatusTransitionModal';
+import { useStatusMaster } from '../hooks/useStatusMaster';
+import { useAuth } from '../context/AuthContext';
+
 const UserListPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const canEdit = user?.permissions?.includes('EDIT_PII');
+  const { statuses } = useStatusMaster();
+  const [query, setQuery] = useState('');
+  const [registering, setRegistering] = useState(false);
+  const [target, setTarget] = useState<UserListItem | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [tab, setTab] = useState('すべて');
   const [users, setUsers] = useState<UserListItem[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -23,7 +36,9 @@ const UserListPage: React.FC = () => {
       }
     };
     loadUsers();
-  }, []);
+  }, [revision]);
+  const filtered = users.filter(item => item.display_name.includes(query.trim()) &&
+    (tab === 'すべて' || item.status_name?.startsWith(tab)));
 
   return (
     <div className="p-6 md:p-8 animate-in fade-in duration-500 max-w-6xl mx-auto">
@@ -39,12 +54,25 @@ const UserListPage: React.FC = () => {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
           <input 
             type="text" 
-            placeholder="名前で検索..." 
+            value={query} onChange={event => setQuery(event.target.value)} placeholder="名前で検索..."
             className="pl-10 pr-4 py-2 border border-slate-200 rounded-full bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all w-64"
           />
         </div>
       </div>
 
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        {['すべて', '問い合わせ', '利用中', '利用終了'].map(name =>
+          <button key={name} aria-pressed={tab === name} className={tab === name ? 'font-bold text-indigo-700 underline' : 'text-slate-600'} onClick={() => setTab(name)}>{name}</button>)}
+        {canEdit && <button className="ml-auto rounded-lg bg-indigo-600 px-4 py-2 text-white" onClick={() => setRegistering(true)}>利用者を登録</button>}
+      </div>
+      {registering && <RegisterUserModal isOpen onClose={() => setRegistering(false)} onRegisterSuccess={() => {
+        setRegistering(false); setQuery(''); setTab('問い合わせ'); setRevision(value => value + 1);
+      }} />}
+      {target && <StatusTransitionModal isOpen userId={target.id} userName={target.display_name}
+        title={target.status_name === '問い合わせ' ? '利用開始' : '利用終了'} description="変更日を入力してください。"
+        targetStatuses={statuses.filter(s => target.status_name === '問い合わせ' ? s.name === '利用中' : s.name.startsWith('利用終了'))}
+        requireStartDate={target.status_name === '問い合わせ'} requireEndDate={target.status_name === '利用中'}
+        onClose={() => setTarget(null)} onSuccess={() => { setTab('すべて'); setRevision(value => value + 1); }} />}
       {error && (
         <div className="bg-rose-50 text-rose-600 p-4 rounded-xl mb-6 font-bold">
           {error}
@@ -56,9 +84,9 @@ const UserListPage: React.FC = () => {
           <div className="p-12 flex justify-center">
             <div className="w-8 h-8 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
           </div>
-        ) : users.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="p-12 text-center text-slate-500 font-bold">
-            利用者が登録されていません
+            該当する利用者はいません
           </div>
         ) : (
           <table className="w-full text-left border-collapse">
@@ -73,14 +101,14 @@ const UserListPage: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {users.map((user) => (
+              {filtered.map((user) => (
                 <tr 
                   key={user.id} 
                   onClick={() => navigate(`/users/${user.id}`)}
                   className="border-b border-slate-100 hover:bg-indigo-50/50 cursor-pointer transition-colors group"
                 >
                   <td className="py-4 px-6 font-black text-slate-800">
-                    {user.display_name}
+                    {user.display_name}<span className="block text-xs font-normal text-slate-500">{user.user_code}</span>
                   </td>
                   <td className="py-4 px-6">
                     <span className="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full text-xs font-bold">
@@ -105,7 +133,9 @@ const UserListPage: React.FC = () => {
                     {user.active_plan_end_date ? new Date(user.active_plan_end_date).toLocaleDateString() : '-'}
                   </td>
                   <td className="py-4 px-6 text-center">
-                    <button className="text-slate-400 group-hover:text-indigo-600 transition-colors p-2 rounded-full group-hover:bg-indigo-100">
+                    {canEdit && ['問い合わせ','利用中'].includes(user.status_name || '') && <button className="mr-3 text-indigo-700" onClick={event => { event.stopPropagation(); setTarget(user); }}>
+                      {user.status_name === '問い合わせ' ? '利用開始' : '利用終了'}</button>}
+                    <button aria-label={user.display_name + ' の詳細'} className="text-slate-400 group-hover:text-indigo-600 transition-colors p-2 rounded-full group-hover:bg-indigo-100">
                       <ChevronRight className="w-5 h-5" />
                     </button>
                   </td>

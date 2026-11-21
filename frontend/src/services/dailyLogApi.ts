@@ -16,7 +16,8 @@ export interface ActivityLogEntry {
   user_id?: number;
   start_time: string; // ISO
   end_time: string;   // ISO
-  duration_minutes: number;
+  duration_seconds: number;
+  activity_request_id: string;
   notes?: string;
 }
 
@@ -33,7 +34,7 @@ export interface TimelineEntry {
 export const dailyLogApi = {
   // 活動タグ一覧の取得
   getTags: async (): Promise<ActivityTag[]> => {
-    const response = await apiClient.get<ActivityTag[]>('/activities/tags');
+    const response = await apiClient.get<ActivityTag[]>('/daily-logs/tags');
     return response.data;
   },
 
@@ -45,13 +46,13 @@ export const dailyLogApi = {
 
   // 活動の記録（保存）
   logActivity: async (entry: ActivityLogEntry) => {
-    const response = await apiClient.post('/activities/log', entry);
+    const response = await apiClient.post('/daily-logs', entry);
     return response.data;
   },
 
   // 本日のタイムライン取得
   getTodayTimeline: async (): Promise<TimelineEntry[]> => {
-    const response = await apiClient.get<TimelineEntry[]>('/activities/today');
+    const response = await apiClient.get<TimelineEntry[]>('/daily-logs/today');
     return response.data;
   },
 };

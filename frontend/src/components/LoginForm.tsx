@@ -9,8 +9,8 @@ import { useAuth } from '../context/AuthContext';
 
 const LoginForm: React.FC = () => {
   const [userType, setUserType] = useState<'staff' | 'user'>('staff');
-  const [loginId, setLoginId] = useState('admin@example.com');
-  const [password, setPassword] = useState('password123');
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   
@@ -21,12 +21,8 @@ const LoginForm: React.FC = () => {
 
   const handleUserTypeChange = (type: 'staff' | 'user') => {
     setUserType(type);
-    if (type === 'staff') {
-      setLoginId('admin@example.com');
-    } else {
-      setLoginId('USR001');
-    }
-    setPassword('password123');
+    setLoginId('');
+    setPassword('');
     setError(null);
   };
 

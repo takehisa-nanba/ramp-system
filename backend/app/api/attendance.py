@@ -106,7 +106,7 @@ def get_shifts():
         emp_type = supporter.employment_type
         emp_type_ja = '常勤' if emp_type == 'FULL_TIME' else ('非常勤' if emp_type == 'PART_TIME' else emp_type)
 
-        ongoing_tcs = [tc for tc in tcs_list if tc.check_out is None]
+        ongoing_tcs = [tc for tc in tcs_list if tc.check_in and tc.check_out is None]
         rep_tc = None
         if len(ongoing_tcs) > 0:
             rep_tc = ongoing_tcs[-1]
@@ -137,7 +137,7 @@ def get_shifts():
             if not actual_check_in or (tc.check_in and tc.check_in < actual_check_in):
                 actual_check_in = tc.check_in
 
-            if tc.check_out is None:
+            if tc.check_in and tc.check_out is None:
                 has_ongoing = True
             elif not has_ongoing:
                 if not actual_check_out or tc.check_out > actual_check_out:
@@ -155,6 +155,8 @@ def get_shifts():
                 "location_type": tc.location_type,
                 "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
                 "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+                "absence_type": tc.absence_type,
+                "deemed_work_minutes": tc.deemed_work_minutes or 0,
                 "total_break_minutes": tc.total_break_minutes or 0
             })
 
@@ -306,17 +308,38 @@ def create_request():
     supporter_id = extract_staff_id(identity)
 
     data = request.get_json() or {}
-    req = AttendanceCorrectionRequest(
-        supporter_id=supporter_id,
-        target_date=date.fromisoformat(data['target_date']),
-        record_type=data.get('record_type', 'TIMECARD'),
-        requested_timestamp=datetime.now(),
-        request_reason=data.get('reason', ''),
-        request_status='PENDING'
-    )
-    db.session.add(req)
-    db.session.commit()
-    return jsonify({"msg": "Request created", "id": req.id}), 201
+    req = AttendanceService(db.session).request_attendance_change(supporter_id, data)
+    return jsonify(id=req.id, msg="申請を受け付けました。"), 201
+
+
+@attendance_bp.get('/requests')
+@jwt_required()
+@handle_attendance_errors
+def list_requests():
+    actor_id = extract_staff_id(get_jwt_identity())
+    scope = resolve_tenant_scope(actor_id, get_jwt().get('role_scopes', []))
+    query = AttendanceCorrectionRequest.query.join(Supporter, Supporter.id == AttendanceCorrectionRequest.supporter_id)
+    if scope['level'] == 'CORPORATE':
+        query = query.join(OfficeSetting, OfficeSetting.id == Supporter.office_id).filter(OfficeSetting.corporation_id == scope['corp_id'])
+    else:
+        query = query.filter(AttendanceCorrectionRequest.supporter_id == actor_id)
+    return jsonify([dict(id=r.id, supporter_id=r.supporter_id, name=r.supporter.last_name + ' ' + r.supporter.first_name,
+        target_date=r.target_date.isoformat(), record_type=r.record_type, request_reason=r.request_reason,
+        requested_time=r.requested_timestamp.strftime('%H:%M') if r.target_timecard_id else None,
+        request_status=r.request_status) for r in query.order_by(AttendanceCorrectionRequest.id.desc())])
+
+
+@attendance_bp.post('/requests/<int:request_id>/review')
+@jwt_required()
+@handle_attendance_errors
+def review_request(request_id):
+    decision = (request.get_json() or {}).get('decision')
+    if decision not in ('approve', 'reject'):
+        return jsonify(msg="承認または差戻しを選んでください。"), 400
+    result = AttendanceService(db.session).process_attendance_correction(request_id,
+        extract_staff_id(get_jwt_identity()), decision == 'approve')
+    return jsonify(request_status=result.request_status)
+
 
 @attendance_bp.route('/clock-in', methods=['POST'])
 @jwt_required()
@@ -337,7 +360,7 @@ def clock_in():
     location_detail = data.get('location_detail', '')
 
     svc = AttendanceService(db.session)
-    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+    timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail, data.get('office_service_configuration_id'))
     db.session.commit()
     return jsonify({
         "msg": "Clocked in successfully",
@@ -389,6 +412,9 @@ def get_timecards():
     query = SupporterTimecard.query.filter(SupporterTimecard.work_date == target_date)
     query, _, _ = filter_query_by_tenant_scope(scope, query_tcs=query, requester_id=staff_id)
 
+    selected_supporter = request.args.get('supporter_id', type=int)
+    if selected_supporter is not None:
+        query = query.filter(SupporterTimecard.supporter_id == selected_supporter)
     timecards = query.order_by(SupporterTimecard.sequence_no).all()
 
     result = []
@@ -400,6 +426,8 @@ def get_timecards():
             "location_type": tc.location_type,
             "check_in": tc.check_in.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_in else None,
             "check_out": tc.check_out.replace(tzinfo=ZoneInfo("Asia/Tokyo")).isoformat() if tc.check_out else None,
+            "absence_type": tc.absence_type,
+            "deemed_work_minutes": tc.deemed_work_minutes or 0,
             "total_break_minutes": tc.total_break_minutes or 0
         })
         

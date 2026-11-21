@@ -70,8 +70,8 @@ def test_decide_schedule_request_absence(app, setup_active_user):
         date=target_date,
         start_time="09:00",
         end_time="15:00",
-        is_scheduled=True,
-        schedule_status='NORMAL'
+        approval_status='APPROVED',
+        schedule_kind='NORMAL'
     )
     db.session.add(daily)
     db.session.commit()
@@ -125,8 +125,10 @@ def test_action_items_consistency_detection(app, setup_active_user, client):
     """Action Itemsの不整合検知の検証"""
     user, staff, manager = setup_active_user
     
+    user.primary_supporter_id = staff.id
     # テストデータをクリア
-    today = date.today()
+    from backend.app.utils.timezone import get_jst_today
+    today = get_jst_today() - timedelta(days=1)
     UserDailySchedule.query.filter_by(user_id=user.id, date=today).delete()
     UserScheduleRequest.query.filter_by(user_id=user.id, target_date=today).delete()
     SupportRecord.query.filter_by(user_id=user.id, log_date=today).delete()
@@ -147,8 +149,8 @@ def test_action_items_consistency_detection(app, setup_active_user, client):
         date=today,
         start_time="09:00",
         end_time="15:00",
-        is_scheduled=True,
-        schedule_status='NORMAL'
+        approval_status='APPROVED',
+        schedule_kind='NORMAL'
     )
     db.session.add(sched)
     db.session.commit()
@@ -188,8 +190,8 @@ def test_action_items_consistency_detection(app, setup_active_user, client):
         date=today,
         start_time="09:00",
         end_time="15:00",
-        is_scheduled=True,
-        schedule_status='NORMAL'
+        approval_status='APPROVED',
+        schedule_kind='NORMAL'
     )
     db.session.add(sched)
     db.session.commit()

@@ -32,6 +32,9 @@ def app():
 @pytest.fixture(scope='module')
 def setup_data(app):
     with app.app_context():
+        from backend.app.models import StatusMaster
+        if not StatusMaster.query.first():
+            db.session.add(StatusMaster(name="利用中"))
         corp = Corporation(corporation_name="Test Corp", corporation_type="KK")
         db.session.add(corp)
         db.session.flush()

@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { Search } from 'lucide-react';
+import { ClockTimeInput } from './ClockTimeInput';
+import { CalendarDateInput } from './CalendarDateInput';
 import { usePostalLookup } from '../../hooks/usePostalLookup';
 
 interface UXFieldProps extends React.InputHTMLAttributes<HTMLInputElement> {
@@ -20,10 +22,11 @@ export const UXField: React.FC<UXFieldProps> = ({
   type = 'text',
   ...props
 }) => {
+  const InputComponent = type === 'time' ? ClockTimeInput : type === 'date' || type === 'month' ? CalendarDateInput : 'input';
   return (
     <label className={`block ${className}`}>
       {label && <span className="block text-xs font-black text-slate-500 mb-1">{label}</span>}
-      <input
+      <InputComponent aria-label={label}
         type={type}
         className={`w-full h-10 px-3 rounded-xl border bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm transition-all ${
           error ? 'border-rose-300 focus:ring-rose-500' : 'border-slate-200'

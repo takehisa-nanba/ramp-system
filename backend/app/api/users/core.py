@@ -54,6 +54,7 @@ def list_users():
         user_list.append({
             "id": user.id,
             "display_name": user.display_name,
+            "user_code": user.user_code,
             "status_id": user.status_id,
             "status_name": user.status.name if user.status else None,
             "service_start_date": user.service_start_date.isoformat() if user.service_start_date else None,
@@ -106,8 +107,13 @@ def create_user():
         except ValueError:
             pass
 
+    password = data.get("initial_password")
+    if password is not None and (not isinstance(password, str) or len(password) < 8 or len(password.encode()) > 72):
+        return jsonify(msg="初期パスワードは8文字以上、UTF-8で72バイト以内にしてください。"), 400
     try:
+        _, creator_id = parse_jwt_identity(current_supporter_id)
         new_user = User(
+            primary_supporter_id=creator_id,
             display_name=display_name,
             user_code=user_code,
             status_id=status_id,
@@ -119,6 +125,8 @@ def create_user():
         from backend.app.models.core.user import UserPII
         pii_data = data.get('pii', {})
         new_pii = UserPII(user=new_user)
+        if password:
+            new_pii.set_password(password)
         db.session.add(new_pii)
 
         if 'last_name' in pii_data:

@@ -5,6 +5,7 @@ import apiClient from '../services/apiClient';
 import { Heading, Text } from '../components/common/Typography';
 import StaffStatusMonitor from '../components/dashboard/StaffStatusMonitor';
 import StaffTimecardWidget from '../components/dashboard/StaffTimecardWidget';
+import ActivityTracker from '../components/dashboard/ActivityTracker';
 import ActionLogWidget from '../components/dashboard/ActionLogWidget';
 import { useAuth } from '../context/AuthContext';
 
@@ -40,7 +41,7 @@ const DashboardPage: React.FC = () => {
       detail: '本日の来所実績（チェックイン）数',
       icon: <Users className="w-8 h-8 text-indigo-600" />,
       colorClass: 'bg-indigo-50 border-indigo-100',
-      path: '/today-users',
+      path: '/daily-schedules',
     },
     {
       id: 'incomplete-daily-logs',
@@ -97,6 +98,7 @@ const DashboardPage: React.FC = () => {
       </div>
 
       <StaffTimecardWidget />
+      {user && <ActivityTracker key={user.id} staffId={user.id} />}
 
       {loading ? (
         <div className="flex justify-center p-16">

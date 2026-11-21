@@ -3,7 +3,7 @@ from flask_jwt_extended import jwt_required, get_jwt_identity
 from datetime import date
 from backend.app.models import JobRetentionContract
 from backend.app.services.job_retention_service import JobRetentionService
-from backend.app.services.core_service import parse_jwt_identity
+from backend.app.services.core_service import parse_jwt_identity, check_permission
 from backend.app.utils.errors import PermissionDenied, ValidationError
 
 job_retention_bp = Blueprint('job_retention', __name__, url_prefix='/api/job-retention')
@@ -45,8 +45,14 @@ def list_users():
 @job_retention_bp.get('/users/<int:user_id>')
 @jwt_required()
 def user_contracts(user_id):
-    contracts = JobRetentionService.contracts_query(actor_id()).filter(JobRetentionContract.user_id == user_id).all()
-    return jsonify(items=[JobRetentionService.serialize(c) for c in contracts])
+    actor = actor_id()
+    contracts = (
+        JobRetentionService.contracts_query(actor).filter(JobRetentionContract.user_id == user_id)
+        .order_by(JobRetentionContract.contract_start_date.desc()).all()
+    )
+    return jsonify(items=[JobRetentionService.serialize(c) for c in contracts],
+                   grants=JobRetentionService.available_grants(actor, user_id),
+                   can_edit=check_permission(actor, 'EDIT'), can_create=check_permission(actor, 'CREATE'))
 
 
 @job_retention_bp.get('/contracts/<int:contract_id>')

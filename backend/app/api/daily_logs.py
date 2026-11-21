@@ -38,7 +38,7 @@ def log_activity():
     活動を記録する。直接支援ならDailyLogActivityへ、間接業務ならStaffActivityAllocationLogへ。
     """
     from backend.app.services.daily_log_service import DailyLogService
-    from backend.app.utils.errors import ValidationError
+    from backend.app.utils.errors import AppError, ValidationError
 
     data = request.get_json()
     supporter_id = get_current_supporter_id()
@@ -54,11 +54,17 @@ def log_activity():
     log_status = data.get('log_status', 'DRAFT')
     attendance_record_id = data.get('attendance_record_id') # 追加
     
-    start_time = datetime.fromisoformat(start_time_str) if start_time_str else datetime.now(JST)
-    end_time = datetime.fromisoformat(end_time_str) if end_time_str else datetime.now(JST)
-    log_date = start_time.date() # start_time から日付を決定
-    
+    from backend.app.domain.attendance.exceptions import AttendanceDomainError
     try:
+        def jst(value):
+            dt = datetime.fromisoformat(value) if value else datetime.now(JST)
+            return dt.astimezone(JST).replace(tzinfo=None) if dt.tzinfo else dt
+        start_time = jst(start_time_str)
+        end_time = jst(end_time_str)
+        log_date = start_time.date()
+        if data.get("activity_request_id") and user_id:
+            from backend.app.services.plan_assessment_service import assessment_scope
+            assessment_scope(user_id, None, supporter_id, "CREATE")
         service = DailyLogService()
         service.record_daily_log(
             supporter_id=supporter_id,
@@ -70,13 +76,20 @@ def log_activity():
             user_id=user_id,
             notes=notes,
             log_status=log_status,
-            attendance_record_id=attendance_record_id # 追加
+            attendance_record_id=attendance_record_id,
+            activity_request_id=data.get("activity_request_id")
         )
         db.session.commit()
         return jsonify({"msg": "Activity logged successfully"}), 201
-    except ValidationError as e:
+    except AttendanceDomainError as e:
+        db.session.rollback()
+        return jsonify(msg=str(e)), e.status_code
+    except (TypeError, ValueError, ValidationError) as e:
         db.session.rollback()
         return jsonify({"msg": str(e)}), 400
+    except AppError:
+        db.session.rollback()
+        raise
     except Exception as e:
         db.session.rollback()
         import logging

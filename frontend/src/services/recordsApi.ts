@@ -28,7 +28,6 @@ export interface GetRecordsParams {
 export interface CreateRecordPayload {
   user_id: number;
   log_date: string;
-  supporter_id: number;
   support_start_time?: string;
   support_end_time?: string;
   support_duration_seconds?: number;

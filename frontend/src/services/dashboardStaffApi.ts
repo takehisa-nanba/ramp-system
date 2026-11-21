@@ -29,7 +29,10 @@ export interface DailyReportResponse {
   content: string;
 }
 
+export interface ClockInService { id: number; office_id: number; label: string }
+
 export interface StaffStatusResponse {
+  clock_in_services: ClockInService[];
   current_staff_id: number;
   staff_list: StaffStatus[];
 }
@@ -50,13 +53,18 @@ export const dashboardStaffApi = {
     return res.data;
   },
   
+  getTodayReport: async (): Promise<{ content: string | null }> => {
+    const res = await apiClient.get(`${API_URL}/daily-report/today`);
+    return res.data;
+  },
+
   generateDailyReport: async (): Promise<DailyReportResponse> => {
     const res = await apiClient.post(`${API_URL}/daily-report/generate`);
     return res.data;
   },
 
-  clockIn: async (): Promise<{ msg: string }> => {
-    const res = await apiClient.post(`${API_URL}/clock-in`);
+  clockIn: async (service: ClockInService): Promise<{ msg: string }> => {
+    const res = await apiClient.post(`${API_URL}/clock-in`, { office_id: service.office_id, office_service_configuration_id: service.id });
     return res.data;
   },
 

@@ -22,6 +22,8 @@ class SystemLog(db.Model):
 class AuditActionLog(db.Model):
     """利用者や職員による重要な操作の事実を記録する監査証跡"""
     __tablename__ = 'audit_action_logs'
+    activity_request_id = db.Column(db.String(36))
+    __table_args__ = (db.UniqueConstraint("actor_supporter_id", "activity_request_id", name="uq_activity_request"),)
     
     id = Column(Integer, primary_key=True)
     

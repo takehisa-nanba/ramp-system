@@ -7,6 +7,7 @@ from backend.app.extensions import db
 from backend.app.models import Supporter, StaffActionLog, StaffDailyReport, SupporterTimecard, StaffDailyShift
 from datetime import datetime, date
 from zoneinfo import ZoneInfo
+from backend.app.utils.timezone import get_jst_today, get_jst_now
 from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope, filter_query_by_tenant_scope
 from backend.app.domain.attendance.exceptions import handle_attendance_errors
 
@@ -24,8 +25,7 @@ def get_staff_status():
     claims = get_jwt()
     scope = resolve_tenant_scope(staff_id, claims.get('role_scopes', []))
         
-    import pytz
-    tz = pytz.timezone('Asia/Tokyo')
+    tz = ZoneInfo('Asia/Tokyo')
     now = datetime.now(tz)
     today = now.date()
 
@@ -102,7 +102,18 @@ def get_staff_status():
             } if rep_timecard or completed_list else None
         })
         
+    from backend.app.models import OfficeServiceConfiguration, SupporterJobAssignment, ServiceTypeMaster
+    configs = (db.session.query(OfficeServiceConfiguration.id, OfficeSetting.id.label("office_id"),
+        OfficeSetting.office_name, ServiceTypeMaster.name)
+        .select_from(OfficeServiceConfiguration)
+        .join(OfficeSetting, OfficeSetting.id == OfficeServiceConfiguration.office_id)
+        .join(ServiceTypeMaster, ServiceTypeMaster.id == OfficeServiceConfiguration.service_type_master_id)
+        .join(SupporterJobAssignment, SupporterJobAssignment.office_service_configuration_id == OfficeServiceConfiguration.id)
+        .filter(SupporterJobAssignment.supporter_id == staff_id, SupporterJobAssignment.start_date <= today,
+            db.or_(SupporterJobAssignment.end_date.is_(None), SupporterJobAssignment.end_date >= today))
+        .distinct().order_by(OfficeServiceConfiguration.id).all())
     return jsonify({
+        "clock_in_services": [dict(id=c.id, office_id=c.office_id, label=f"{c.office_name}・{c.name}") for c in configs],
         "current_staff_id": int(identity.split(':')[1]),
         "staff_list": staff_data
     }), 200
@@ -124,7 +135,7 @@ def add_action_log():
     log = StaffActionLog(
         supporter_id=supporter_id,
         action_content=content,
-        action_timestamp=datetime.now()
+        action_timestamp=get_jst_now().replace(tzinfo=None)
     )
     db.session.add(log)
     db.session.commit()
@@ -139,7 +150,7 @@ def get_today_action_logs():
     identity = get_jwt_identity()
     staff_id = extract_staff_id(identity)
     supporter_id = staff_id
-    today = date.today()
+    today = get_jst_today()
 
     logs = StaffActionLog.query.filter(
         StaffActionLog.supporter_id == supporter_id,
@@ -153,27 +164,36 @@ def get_today_action_logs():
         "is_processed_by_ai": log.is_processed_by_ai
     } for log in logs]), 200
 
+@dashboard_staff_bp.get('/daily-report/today')
+@jwt_required()
+@handle_attendance_errors
+def get_daily_report():
+    staff_id = extract_staff_id(get_jwt_identity())
+    report = StaffDailyReport.query.filter_by(supporter_id=staff_id, target_date=get_jst_today()).first()
+    return jsonify(content=report.report_content if report else None)
+
+
 @dashboard_staff_bp.route('/daily-report/generate', methods=['POST'])
 @jwt_required()
 @handle_attendance_errors
 def generate_daily_report():
-    """AIを利用してアクションログから業務日報を下書きする（モック版）"""
+    """本日分の未反映の記録から職員の業務日報を作成する。"""
     identity = get_jwt_identity()
     staff_id = extract_staff_id(identity)
     supporter_id = staff_id
-    today = date.today()
+    today = get_jst_today()
 
+    Supporter.query.filter_by(id=staff_id).with_for_update().one()
     # 未処理のログを取得
     unprocessed_logs = StaffActionLog.query.filter(
         StaffActionLog.supporter_id == supporter_id,
         db.func.date(StaffActionLog.action_timestamp) == today,
         StaffActionLog.is_processed_by_ai == False
-    ).all()
+    ).order_by(StaffActionLog.action_timestamp, StaffActionLog.id).all()
 
     if not unprocessed_logs:
-        return jsonify({"msg": "No unprocessed logs available for today."}), 400
+        return jsonify({"msg": "本日分の未反映の記録はありません。"}), 400
         
-    # TODO: 実際のGemini APIを呼び出す。今回はモックテキストを生成
     aggregated_text = "【本日の業務ハイライト】\n"
     for log in unprocessed_logs:
         aggregated_text += f"- {log.action_timestamp.strftime('%H:%M')} : {log.action_content}\n"
@@ -183,14 +203,14 @@ def generate_daily_report():
     report = StaffDailyReport.query.filter_by(supporter_id=supporter_id, target_date=today).first()
     if report:
         report.report_content += "\n\n" + aggregated_text
-        report.is_ai_draft = True
+        report.is_ai_draft = False
         report.is_submitted = False
     else:
         report = StaffDailyReport(
             supporter_id=supporter_id,
             target_date=today,
             report_content=aggregated_text,
-            is_ai_draft=True,
+            is_ai_draft=False,
             is_submitted=False
         )
         db.session.add(report)
@@ -241,7 +261,7 @@ def clock_in():
     svc = AttendanceService(db.session)
 
     try:
-        timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail)
+        timecard = svc.clock_in(supporter_id, office_id, location_type, location_detail, data.get('office_service_configuration_id'))
         db.session.commit()
         return jsonify({
             "msg": "Clocked in successfully",
@@ -297,7 +317,7 @@ def seed_shifts():
     identity = get_jwt_identity()
     staff_id = extract_staff_id(identity)
         
-    today = date.today()
+    today = get_jst_today()
 
     # 既存のシフトを削除
     StaffDailyShift.query.filter_by(target_date=today).delete()

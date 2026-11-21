@@ -21,6 +21,8 @@ export interface TimecardRecord {
   check_in: string | null;
   check_out: string | null;
   total_break_minutes: number;
+  absence_type?: string | null;
+  deemed_work_minutes?: number;
 }
 
 export interface ShiftRecord {

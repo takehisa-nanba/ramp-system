@@ -7,7 +7,7 @@ from backend.app.models import Supporter, EmploymentShiftPattern, StaffDailyShif
 from backend.app.domain.attendance.fte_calculation import FteCalculationDomain
 from backend.app.domain.attendance.decision_rules import AttendanceDecisionDomain
 from backend.app.domain.attendance.exceptions import (
-    AttendanceDomainError,
+    AttendanceDomainError, AttendanceForbiddenError,
     AttendanceValidationError,
     AttendanceNotFoundError,
     AttendanceConflictError
@@ -337,7 +337,7 @@ class AttendanceService:
             raise AttendanceValidationError("Multiple ongoing timecards found")
         return None
 
-    def clock_in(self, supporter_id: int, office_id: int, location_type: str, location_detail: str) -> SupporterTimecard:
+    def clock_in(self, supporter_id: int, office_id: int, location_type: str, location_detail: str, config_id=None) -> SupporterTimecard:
         from sqlalchemy.exc import IntegrityError
         from zoneinfo import ZoneInfo
         from backend.app.domain.attendance.exceptions import AttendanceForbiddenError
@@ -353,6 +353,9 @@ class AttendanceService:
 
         now = datetime.now(ZoneInfo("Asia/Tokyo")).replace(tzinfo=None)
         today = now.date()
+
+        if self.db.query(SupporterTimecard).filter_by(supporter_id=supporter_id, work_date=today, is_absent=True).first():
+            raise AttendanceConflictError("対象日は休暇として記録されています。")
 
         ongoing = self.get_ongoing_timecard(supporter_id)
         if ongoing:
@@ -378,9 +381,11 @@ class AttendanceService:
             (SupporterJobAssignment.end_date >= today) | (SupporterJobAssignment.end_date == None)
         ).all()
         
+        if config_id is not None:
+            assignments = [a for a in assignments if a.office_service_configuration_id == config_id]
         if len(assignments) == 0:
             raise AttendanceForbiddenError("Not assigned to this office")
-        elif len(assignments) > 1:
+        elif len({a.office_service_configuration_id for a in assignments}) > 1:
             raise AttendanceValidationError("Multiple active assignments in this office")
             
         osc_id = assignments[0].office_service_configuration_id
@@ -419,7 +424,7 @@ class AttendanceService:
                 raise AttendanceNotFoundError("Timecard not found")
             timecard_id = timecard.id
             
-        timecard = self.db.get(SupporterTimecard, timecard_id)
+        timecard = self.db.query(SupporterTimecard).filter_by(id=timecard_id).with_for_update().populate_existing().first()
         if not timecard or timecard.supporter_id != supporter_id:
             raise AttendanceNotFoundError("Timecard not found")
 
@@ -456,35 +461,99 @@ class AttendanceService:
 
         return timecard
 
-    def process_attendance_correction(self, request_id: int, approver_id: int, is_approved: bool):
-        """
-        勤怠修正申請を処理し、Decision（意思決定）を下す。
-        """
-        self._check_admin_authorization(approver_id)
-        
-        req = self.db.query(AttendanceCorrectionRequest).get(request_id)
-        if not req or req.request_status != 'PENDING':
-            raise ValueError("Invalid request or already processed")
-            
-        req.approver_id = approver_id
-        req.processed_at = datetime.now()
-        req.request_status = 'APPROVED' if is_approved else 'REJECTED'
-        
+    def request_attendance_change(self, actor_id, data):
+        from datetime import time
+        from backend.app.utils.timezone import get_jst_now
+        try:
+            day = date.fromisoformat(data.get('target_date'))
+        except (TypeError, ValueError):
+            raise AttendanceValidationError("対象日を入力してください。")
+        kind = data.get('record_type', 'TIMECARD')
+        reason = data.get('reason')
+        if not isinstance(reason, str) or not reason.strip():
+            raise AttendanceValidationError("申請理由を入力してください。")
+        stamp = get_jst_now().replace(tzinfo=None)
+        card_id = None
+        if kind in ('CHECK_IN', 'CHECK_OUT'):
+            card = self.db.get(SupporterTimecard, data.get('timecard_id')) if type(data.get('timecard_id')) is int else None
+            if not card or card.supporter_id != actor_id or card.work_date != day:
+                raise AttendanceValidationError("対象日のご自身の勤務区間を選んでください。")
+            try:
+                stamp = datetime.combine(day, time.fromisoformat(data['time']))
+            except (KeyError, TypeError, ValueError):
+                raise AttendanceValidationError("希望する打刻時刻を指定してください。")
+            if stamp.tzinfo is not None or stamp > get_jst_now().replace(tzinfo=None):
+                raise AttendanceValidationError("実際の勤務時刻を入力してください。")
+            card_id = card.id
+        elif kind not in ('PAID_LEAVE', 'TIMECARD', 'LEAVE'):
+            raise AttendanceValidationError("申請種別を確認してください。")
+        req = AttendanceCorrectionRequest(supporter_id=actor_id, target_date=day, record_type=kind,
+            target_timecard_id=card_id, requested_timestamp=stamp, request_reason=reason.strip(), request_status='PENDING')
+        self.db.add(req)
+        self.db.commit()
+        return req
+
+    def process_attendance_correction(self, request_id, approver_id, is_approved):
+        from backend.app.models import AuditActionLog
+        from backend.app.utils.tenant import resolve_tenant_scope, validate_target_supporter_tenant
+        from backend.app.utils.timezone import get_jst_now
+        approver = self.db.get(Supporter, approver_id)
+        if not approver or not approver.is_active:
+            raise AttendanceForbiddenError("有効な管理者で確認してください。")
+        scope = resolve_tenant_scope(approver_id, [r.role_scope for r in approver.roles if r.is_admin])
+        if scope['level'] != 'CORPORATE':
+            raise AttendanceForbiddenError("法人管理者の承認が必要です。")
+        req = self.db.query(AttendanceCorrectionRequest).filter_by(id=request_id).with_for_update().first()
+        if not req:
+            raise AttendanceNotFoundError("申請が見つかりません。")
+        validate_target_supporter_tenant(scope, approver_id, req.supporter_id)
+        if req.supporter_id == approver_id:
+            raise AttendanceForbiddenError("別の管理者に確認を依頼してください。")
+        if req.request_status != 'PENDING':
+            raise AttendanceConflictError("この申請は処理済みです。")
         if is_approved:
-            # TODO: 申請内容(JSON等)に基づいて編集データを組み立てる処理を実装
-            # ここではダミーデータを使用 (実際には req から取得する)
-            edit_data = {} 
-            
-            # 対象のタイムカードを取得
-            timecard = self.db.query(SupporterTimecard).filter_by(
-                supporter_id=req.supporter_id,
-                work_date=req.target_date
-            ).first()
-            
-            if timecard:
-                # 申請承認によるみなし時間の再計算とDecision適用を統一メソッドで実行
-                self._apply_attendance_changes(timecard, approver_id, edit_data, reason=f"Approved correction request {request_id}")
-            
+            self.db.query(Supporter).filter_by(id=req.supporter_id).with_for_update().one()
+            if req.record_type == 'PAID_LEAVE':
+                cards = self.db.query(SupporterTimecard).filter_by(supporter_id=req.supporter_id, work_date=req.target_date)
+                shift = self.db.query(StaffDailyShift).filter_by(supporter_id=req.supporter_id, target_date=req.target_date).first()
+                if cards.first() or not shift:
+                    raise AttendanceConflictError("休暇の対象は勤務予定があり、打刻実績のない日です。")
+                card = SupporterTimecard(supporter_id=req.supporter_id, work_date=req.target_date,
+                    office_service_configuration_id=shift.office_service_configuration_id,
+                    office_id=shift.service_config.office_id, sequence_no=1)
+                self.db.add(card)
+                self.db.flush()
+                changes = dict(is_absent=True, absence_type='PAID_LEAVE')
+            elif req.record_type in ('CHECK_IN', 'CHECK_OUT') and req.target_timecard_id:
+                card = self.db.query(SupporterTimecard).filter_by(id=req.target_timecard_id,
+                    supporter_id=req.supporter_id, work_date=req.target_date).with_for_update().one_or_none()
+                if not card or card.is_absent:
+                    raise AttendanceConflictError("勤務区間を再確認してください。")
+                start = req.requested_timestamp if req.record_type == 'CHECK_IN' else card.check_in
+                end = req.requested_timestamp if req.record_type == 'CHECK_OUT' else card.check_out
+                if not start or (end and (end <= start or (end-start).total_seconds() < 60 * card.total_break_minutes)):
+                    raise AttendanceValidationError("出退勤の順序と休憩時間を確認してください。")
+                if self.check_overlap(req.supporter_id, start, end, card.id):
+                    raise AttendanceConflictError("別の勤務区間と重なっています。")
+                from backend.app.models import StaffActivityAllocationLog
+                allocations = self.db.query(StaffActivityAllocationLog).filter_by(supporter_timecard_id=card.id).all()
+                if any((a.allocation_start_time and a.allocation_start_time < start)
+                       or (end and a.allocation_end_time and a.allocation_end_time > end) for a in allocations):
+                    raise AttendanceConflictError("記録済みの活動が修正後の勤務区間から外れます。")
+                if end and sum(a.allocated_duration_seconds for a in allocations) > (end-start).total_seconds() - card.total_break_minutes * 60:
+                    raise AttendanceConflictError("記録済みの活動時間が実働時間を超えます。")
+                changes = {req.record_type.lower(): req.requested_timestamp}
+                if end:
+                    card.scheduled_work_minutes = int((end-start).total_seconds() // 60) - card.total_break_minutes
+            else:
+                raise AttendanceValidationError("旧申請の実績変更には勤務区間または休暇を指定した再申請が必要です。")
+            self._apply_attendance_changes(card, approver_id, changes, req.request_reason)
+        req.approver_id = approver_id
+        req.processed_at = get_jst_now().replace(tzinfo=None)
+        req.request_status = 'APPROVED' if is_approved else 'REJECTED'
+        self.db.add(AuditActionLog(actor_supporter_id=approver_id, action='REVIEW_ATTENDANCE_REQUEST',
+            entity_type='AttendanceCorrectionRequest', entity_id=req.id, before_value='PENDING',
+            after_value=req.request_status, reason=req.request_reason))
         self.db.commit()
         return req
 

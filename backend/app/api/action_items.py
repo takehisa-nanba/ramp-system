@@ -1,6 +1,6 @@
 # backend/app/api/action_items.py
 from flask import Blueprint, jsonify
-from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt, get_jwt_identity, jwt_required
 from datetime import date, datetime
 from backend.app import db
 from backend.app.models import (
@@ -8,7 +8,9 @@ from backend.app.models import (
     UserScheduleTemplate, UserDailySchedule, UserScheduleRequest, SupportRecord
 )
 from backend.app.utils.timezone import get_jst_today
-from sqlalchemy import func
+from sqlalchemy import func, select
+from backend.app.utils.tenant import extract_staff_id, resolve_tenant_scope, get_accessible_users_subquery
+from dateutil.relativedelta import relativedelta
 
 action_items_bp = Blueprint('action_items', __name__, url_prefix='/api/action-items')
 
@@ -19,6 +21,12 @@ def get_action_items():
     today_start = datetime.combine(today, datetime.min.time())
     today_end = datetime.combine(today, datetime.max.time())
     
+    staff_id = extract_staff_id(get_jwt_identity())
+    scope = resolve_tenant_scope(staff_id, get_jwt().get("role_scopes", []))
+    assigned_users = get_accessible_users_subquery(scope, today, staff_id)
+    visible_users = select(User.id).where(User.deleted_at.is_(None),
+        (User.primary_supporter_id == staff_id) | User.id.in_(select(assigned_users.c.user_id)))
+
     items = []
     
     # 1. 未完了日報の検出 (利用実績起点)
@@ -28,7 +36,7 @@ def get_action_items():
     from datetime import timedelta
     start_date_limit = today - timedelta(days=30)
     attendances = AttendanceRecord.query.filter_by(record_type='CHECK_IN').filter(
-        func.date(AttendanceRecord.timestamp) >= start_date_limit
+        AttendanceRecord.user_id.in_(visible_users), func.date(AttendanceRecord.timestamp) >= start_date_limit
     ).all()
     
     # user_id + date (att_date) でユニーク化する
@@ -94,13 +102,14 @@ def get_action_items():
             })
         
     # 2. 同意待ち計画 (PENDING_CONSENT)
-    pending_plans = SupportPlan.query.filter_by(plan_status='PENDING_CONSENT').all()
+    pending_plans = SupportPlan.query.filter(SupportPlan.user_id.in_(visible_users)).filter_by(plan_status='PENDING_CONSENT').all()
     for plan in pending_plans:
         user_name = plan.user.display_name if plan.user else "不明"
         items.append({
             "type": "approval",
             "category_label": "承認待ち",
             "severity": "high",
+            "office_service_configuration_id": plan.office_service_configuration_id,
             "user_id": plan.user_id,
             "user_name": user_name,
             "title": f"{user_name}さんの個別支援計画が同意待ちです",
@@ -113,7 +122,7 @@ def get_action_items():
     active_status = StatusMaster.query.filter_by(name='利用中').first()
     active_status_id = active_status.id if active_status else 2
     
-    users = User.query.filter(User.status_id == active_status_id, User.deleted_at.is_(None)).all()
+    users = User.query.filter(User.status_id == active_status_id, User.id.in_(visible_users)).all()
     for user in users:
         active_plan = SupportPlan.query.filter_by(user_id=user.id, plan_status='ACTIVE').first()
         if not active_plan:
@@ -128,7 +137,7 @@ def get_action_items():
             })
             
     # 4. モニタリング期限超過 / 間近
-    active_plans = SupportPlan.query.filter_by(plan_status='ACTIVE').all()
+    active_plans = SupportPlan.query.filter(SupportPlan.user_id.in_(visible_users)).filter_by(plan_status='ACTIVE').all()
     for plan in active_plans:
         user_name = plan.user.display_name if plan.user else "不明"
         if plan.plan_end_date:
@@ -138,6 +147,7 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【期限超過】{user_name}さんの個別支援計画期限が超過しています",
@@ -149,6 +159,7 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【残り7日以内】{user_name}さんの個別支援計画の期限が迫っています",
@@ -160,26 +171,29 @@ def get_action_items():
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "medium",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【残り14日以内】{user_name}さんの個別支援計画の更新時期です",
                     "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。ケース会議および説明・同意の準備を始めてください。",
                     "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
-            elif days_left <= 30:
+            elif today >= plan.plan_end_date - relativedelta(months=1):
                 items.append({
                     "type": "monitoring",
                     "category_label": "支援計画期限",
                     "severity": "low",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
-                    "title": f"【残り30日以内】{user_name}さんの個別支援計画のモニタリング時期です",
-                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。モニタリングの評価を実施してください。",
+                    "title": f"【残り1か月以内】{user_name}さんの個別支援計画の見直し時期です",
+                    "description": f"計画終了日（{plan.plan_end_date}）まで残り {days_left} 日です。モニタリングと次の計画に向けた本人との面談を進めてください。",
                     "target_date": plan.plan_end_date.strftime('%Y-%m-%d')
                 })
                 
     # 5. 本日のケース会議
     conferences = CaseConferenceLog.query.filter(
+        CaseConferenceLog.user_id.in_(visible_users),
         CaseConferenceLog.conference_datetime >= today_start,
         CaseConferenceLog.conference_datetime <= today_end,
         CaseConferenceLog.deleted_at.is_(None)
@@ -198,6 +212,7 @@ def get_action_items():
         
     # 6. 個別支援計画の日付整合性警告（遡及警告）
     invalid_timeline_plans = SupportPlan.query.filter(
+        SupportPlan.user_id.in_(visible_users),
         SupportPlan.plan_status.in_(['DRAFT', 'PENDING_CONSENT', 'ACTIVE'])
     ).all()
     for plan in invalid_timeline_plans:
@@ -221,6 +236,7 @@ def get_action_items():
                     "type": "support_plan_timeline",
                     "category_label": "日付整合性",
                     "severity": "high",
+                    "office_service_configuration_id": plan.office_service_configuration_id,
                     "user_id": plan.user_id,
                     "user_name": user_name,
                     "title": f"【日付警告】{user_name}さんの個別支援計画の日付整合性に確認が必要です",
@@ -232,6 +248,7 @@ def get_action_items():
     from datetime import timedelta
     start_date_limit = today - timedelta(days=30)
     scheduled_days = UserDailySchedule.query.filter(
+        UserDailySchedule.user_id.in_(visible_users),
         UserDailySchedule.date >= start_date_limit,
         UserDailySchedule.date <= today,
         UserDailySchedule.start_time.isnot(None),
@@ -331,7 +348,7 @@ def get_action_items():
             })
 
     # 10. 予定申請の確認待ち
-    pending_requests = UserScheduleRequest.query.filter_by(request_status='PENDING').all()
+    pending_requests = UserScheduleRequest.query.filter(UserScheduleRequest.user_id.in_(visible_users)).filter_by(request_status='PENDING').all()
     for req in pending_requests:
         user_name = req.user.display_name if req.user else "不明"
         items.append({
